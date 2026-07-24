@@ -1,0 +1,78 @@
+name: Sage
+options:
+  bundleIdPrefix: ai.sage
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "18"
+
+packages:
+  Supabase:
+    url: https://github.com/supabase-community/supabase-swift
+    from: "2.0.0"
+  MarkdownUI:
+    url: https://github.com/gonzalezreal/swift-markdown-ui
+    from: "2.4.0"
+
+targets:
+  Sage:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sage
+        excludes:
+          # xcconfig 模板只是给开发者看的文档，不应该被打包进 app bundle
+          - "Config/Secrets.xcconfig.example"
+    # Secrets.xcconfig 提供 SUPABASE_URL / SUPABASE_ANON_KEY，被 Info.plist 引用
+    # 真实文件 .gitignore，模板见 Secrets.xcconfig.example
+    configFiles:
+      Debug: Sage/Config/Secrets.xcconfig
+      Release: Sage/Config/Secrets.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.sage.app
+        INFOPLIST_FILE: Sage/Info.plist
+        DEVELOPMENT_TEAM: QB576QUT2S
+        CODE_SIGN_STYLE: Automatic
+    dependencies:
+      - package: Supabase
+        product: Supabase
+      - package: MarkdownUI
+    info:
+      path: Sage/Info.plist
+      properties:
+        CFBundleDisplayName: Sage
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "18"
+        CFBundleIconName: AppIcon
+        # 从 Secrets.xcconfig 注入到 Info.plist；SupabaseConfig.swift 在运行时从 Bundle 读
+        SUPABASE_URL: $(SUPABASE_URL)
+        SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
+        # 本地化：声明 zh-Hans 为主开发语言，让 UIImagePickerController 等系统组件用中文
+        CFBundleDevelopmentRegion: zh-Hans
+        CFBundleLocalizations:
+          - zh-Hans
+          - en
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - ai.sage.app
+            CFBundleURLName: ai.sage.app
+        NSCameraUsageDescription: Sage 需要使用相机拍摄你想要分析的图表、研报或票据。
+        NSPhotoLibraryUsageDescription: Sage 需要访问相册以读取你想要分析的图片素材。
+        NSPhotoLibraryAddUsageDescription: Sage 需要在你导出对话或图表时把图片保存到相册。

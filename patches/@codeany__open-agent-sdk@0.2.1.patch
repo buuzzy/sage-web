@@ -1,0 +1,318 @@
+diff --git a/dist/engine.js b/dist/engine.js
+index 51cf771ca01412f9f71159a46d436e1c011438b0..ffc023d72da62b430aeebfcb4562e8bd99af669a 100644
+--- a/dist/engine.js
++++ b/dist/engine.js
+@@ -447,12 +447,17 @@ export class QueryEngine {
+         try {
+             const result = await tool.call(block.input, context);
+             // Hook: PostToolUse
+-            await this.executeHooks('PostToolUse', {
++            const postHookResults = await this.executeHooks('PostToolUse', {
+                 toolName: block.name,
+                 toolInput: block.input,
+                 toolOutput: typeof result.content === 'string' ? result.content : JSON.stringify(result.content),
+                 toolUseId: block.id,
+             });
++            // Apply modifiedOutput from hook (if any)
++            const modifiedOutput = postHookResults.find((r) => r.modifiedOutput)?.modifiedOutput;
++            if (modifiedOutput !== undefined) {
++                result.content = modifiedOutput;
++            }
+             return { ...result, tool_use_id: block.id, tool_name: block.name };
+         }
+         catch (err) {
+diff --git a/dist/hooks.d.ts b/dist/hooks.d.ts
+index 6c414d9a71617916410d5ae7a3e019202bda4e3f..e7dfc0a3b2ae299bc74fdf94ca5d035c7db0d935 100644
+--- a/dist/hooks.d.ts
++++ b/dist/hooks.d.ts
+@@ -73,6 +73,8 @@ export interface HookOutput {
+         body: string;
+         level?: 'info' | 'warning' | 'error';
+     };
++    /** Replace the tool output content before it re-enters the LLM conversation */
++    modifiedOutput?: string;
+ }
+ /**
+  * Hook configuration (from settings).
+diff --git a/dist/providers/openai.js b/dist/providers/openai.js
+index a137c3813dd97d09941742c68ac61d58a0593127..5bed7443ee602b636113f13e79f09a3e65d33389 100644
+--- a/dist/providers/openai.js
++++ b/dist/providers/openai.js
+@@ -104,9 +104,10 @@ export class OpenAIProvider {
+             result.push({ role: 'assistant', content: msg.content });
+             return;
+         }
+-        // Extract text and tool_use blocks
++        // Extract text, tool_use, and thinking blocks
+         const textParts = [];
+         const toolCalls = [];
++        let reasoningContent = null;
+         for (const block of msg.content) {
+             if (block.type === 'text') {
+                 textParts.push(block.text);
+@@ -123,6 +124,10 @@ export class OpenAIProvider {
+                     },
+                 });
+             }
++            else if (block.type === 'thinking') {
++                // Preserve reasoning/thinking content for models that require it
++                reasoningContent = block.thinking || null;
++            }
+         }
+         const assistantMsg = {
+             role: 'assistant',
+@@ -131,6 +136,10 @@ export class OpenAIProvider {
+         if (toolCalls.length > 0) {
+             assistantMsg.tool_calls = toolCalls;
+         }
++        // Pass back reasoning_content for thinking-enabled models (DeepSeek, OpenAI-o, etc.)
++        if (reasoningContent) {
++            assistantMsg.reasoning_content = reasoningContent;
++        }
+         result.push(assistantMsg);
+     }
+     // --------------------------------------------------------------------------
+@@ -149,6 +158,51 @@ export class OpenAIProvider {
+     // --------------------------------------------------------------------------
+     // Response Conversion: OpenAI → Internal
+     // --------------------------------------------------------------------------
++    /**
++     * Parse MiniMax proprietary XML tool-call blocks embedded in the text content.
++     *
++     * MiniMax M2 series does not emit standard OpenAI `tool_calls` JSON; instead
++     * it inlines tool invocations directly in `message.content` using a custom
++     * XML dialect:
++     *
++     *   <minimax:tool_call>
++     *     <invoke name="Skill">
++     *       <parameter name="skill">westock-quote</parameter>
++     *       <parameter name="args">snapshot sz300750</parameter>
++     *     </invoke>
++     *   </minimax:tool_call>
++     *
++     * This method extracts all such blocks, converts each to a `tool_use` content
++     * block (compatible with the rest of the SDK pipeline), and returns the
++     * remaining text (with the XML stripped out) plus the tool-use blocks.
++     */
++    parseMinimaxXmlToolCalls(text) {
++        const toolUseBlocks = [];
++        // Match one or more <minimax:tool_call> ... </minimax:tool_call> sections
++        const toolCallRegex = /<minimax:tool_call>([\s\S]*?)<\/minimax:tool_call>/g;
++        let remainingText = text;
++        let match;
++        while ((match = toolCallRegex.exec(text)) !== null) {
++            const xmlBody = match[1];
++            // Remove the matched XML from the remaining text
++            remainingText = remainingText.replace(match[0], '');
++            // Extract <invoke name="ToolName"> ... </invoke>
++            const invokeMatch = xmlBody.match(/<invoke\s+name="([^"]+)">([\s\S]*?)<\/invoke>/);
++            if (!invokeMatch) continue;
++            const toolName = invokeMatch[1];
++            const paramsXml = invokeMatch[2];
++            // Extract all <parameter name="key">value</parameter> pairs
++            const paramRegex = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/g;
++            const input = {};
++            let paramMatch;
++            while ((paramMatch = paramRegex.exec(paramsXml)) !== null) {
++                input[paramMatch[1]] = paramMatch[2].trim();
++            }
++            const id = `minimax_tool_${Date.now()}_${toolUseBlocks.length}`;
++            toolUseBlocks.push({ type: 'tool_use', id, name: toolName, input });
++        }
++        return { remainingText: remainingText.trim(), toolUseBlocks };
++    }
+     convertResponse(data) {
+         const choice = data.choices[0];
+         if (!choice) {
+@@ -159,11 +213,26 @@ export class OpenAIProvider {
+             };
+         }
+         const content = [];
+-        // Add text content
++        // Capture reasoning_content from thinking-enabled models (DeepSeek, OpenAI-o, etc.)
++        // This MUST be preserved and passed back in subsequent assistant messages.
++        if (choice.message.reasoning_content) {
++            content.push({ type: 'thinking', thinking: choice.message.reasoning_content });
++        }
++        // Add text content — but first check for MiniMax inline XML tool calls
+         if (choice.message.content) {
+-            content.push({ type: 'text', text: choice.message.content });
++            const rawText = choice.message.content;
++            if (rawText.includes('<minimax:tool_call>')) {
++                // Parse out XML tool calls embedded in the text
++                const { remainingText, toolUseBlocks } = this.parseMinimaxXmlToolCalls(rawText);
++                if (remainingText) {
++                    content.push({ type: 'text', text: remainingText });
++                }
++                content.push(...toolUseBlocks);
++            } else {
++                content.push({ type: 'text', text: rawText });
++            }
+         }
+-        // Add tool calls
++        // Add standard OpenAI-format tool calls (JSON)
+         if (choice.message.tool_calls) {
+             for (const tc of choice.message.tool_calls) {
+                 let input;
+@@ -185,8 +254,15 @@ export class OpenAIProvider {
+         if (content.length === 0) {
+             content.push({ type: 'text', text: '' });
+         }
+-        // Map finish_reason to our normalized stop reasons
+-        const stopReason = this.mapFinishReason(choice.finish_reason);
++        // Map finish_reason to our normalized stop reasons.
++        // MiniMax returns 'tool_calls' finish_reason only for standard JSON tool
++        // calls; for XML-embedded tool calls it returns 'stop'.  If we detected
++        // tool_use blocks in the content we override the stop reason so the engine
++        // keeps the agentic loop running.
++        let stopReason = this.mapFinishReason(choice.finish_reason);
++        if (stopReason !== 'tool_use' && content.some(b => b.type === 'tool_use')) {
++            stopReason = 'tool_use';
++        }
+         return {
+             content,
+             stopReason,
+diff --git a/dist/tools/web-search.js b/dist/tools/web-search.js
+index 73644b8deac296b5553c44d6736e93478dba4365..cddaaf57d364b38d92a58649a8abd27d3cfb298b 100644
+--- a/dist/tools/web-search.js
++++ b/dist/tools/web-search.js
+@@ -44,8 +44,19 @@ export const WebSearchTool = defineTool({
+             let match;
+             const links = [];
+             while ((match = resultRegex.exec(html)) !== null) {
+-                const href = match[1];
++                let href = match[1];
+                 const title = match[2].replace(/<[^>]+>/g, '').trim();
++                // DuckDuckGo wraps links via //duckduckgo.com/l/?uddg=<real_url>
++                // Extract the real URL from the uddg parameter
++                if (href.includes('uddg=')) {
++                    try {
++                        const uddgMatch = href.match(/uddg=([^&]*)/);
++                        if (uddgMatch) {
++                            href = decodeURIComponent(uddgMatch[1]);
++                        }
++                    }
++                    catch (e) { /* keep original href */ }
++                }
+                 if (href && title && !href.includes('duckduckgo.com')) {
+                     links.push({ title, url: href });
+                 }
+diff --git a/src/engine.ts b/src/engine.ts
+index 00f186a98049c69742dd89c4f44ddbd435763d64..2202b25d8586a4d1ce8c9a6921dcdaac0fe6a6cd 100644
+--- a/src/engine.ts
++++ b/src/engine.ts
+@@ -580,13 +580,19 @@ export class QueryEngine {
+       const result = await tool.call(block.input, context)
+ 
+       // Hook: PostToolUse
+-      await this.executeHooks('PostToolUse', {
++      const postHookResults = await this.executeHooks('PostToolUse', {
+         toolName: block.name,
+         toolInput: block.input,
+         toolOutput: typeof result.content === 'string' ? result.content : JSON.stringify(result.content),
+         toolUseId: block.id,
+       })
+ 
++      // Apply modifiedOutput from hook (if any) — replaces what the LLM sees
++      const modifiedOutput = postHookResults.find((r) => r.modifiedOutput)?.modifiedOutput
++      if (modifiedOutput !== undefined) {
++        result.content = modifiedOutput
++      }
++
+       return { ...result, tool_use_id: block.id, tool_name: block.name }
+     } catch (err: any) {
+       // Hook: PostToolUseFailure
+diff --git a/src/hooks.ts b/src/hooks.ts
+index f7b95d0a325a2fce068b83ce54586bb87388d23a..1c0a3b23f6458aab7b80b8d3c924f1f376ebcf44 100644
+--- a/src/hooks.ts
++++ b/src/hooks.ts
+@@ -101,6 +101,8 @@ export interface HookOutput {
+     body: string
+     level?: 'info' | 'warning' | 'error'
+   }
++  /** Replace the tool output content before it re-enters the LLM conversation */
++  modifiedOutput?: string
+ }
+ 
+ /**
+diff --git a/src/providers/openai.ts b/src/providers/openai.ts
+index 81aa68bb3b3b8a0262c4a4c254310bb7b3b6e854..f4c4e9cb7ec99fd7eaea2ab45fb7f326e51ee61f 100644
+--- a/src/providers/openai.ts
++++ b/src/providers/openai.ts
+@@ -26,6 +26,8 @@ interface OpenAIChatMessage {
+   content?: string | null
+   tool_calls?: OpenAIToolCall[]
+   tool_call_id?: string
++  /** DeepSeek / OpenAI-o reasoning output — must be echoed back for thinking models */
++  reasoning_content?: string | null
+ }
+ 
+ interface OpenAIToolCall {
+@@ -54,6 +56,8 @@ interface OpenAIChatResponse {
+       role: 'assistant'
+       content: string | null
+       tool_calls?: OpenAIToolCall[]
++      /** Reasoning/thinking content from thinking-enabled models (DeepSeek, OpenAI-o, etc.) */
++      reasoning_content?: string | null
+     }
+     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | string
+   }>
+@@ -192,9 +196,10 @@ export class OpenAIProvider implements LLMProvider {
+       return
+     }
+ 
+-    // Extract text and tool_use blocks
++    // Extract text, tool_use, and thinking blocks
+     const textParts: string[] = []
+     const toolCalls: OpenAIToolCall[] = []
++    let reasoningContent: string | null = null
+ 
+     for (const block of msg.content) {
+       if (block.type === 'text') {
+@@ -210,6 +215,9 @@ export class OpenAIProvider implements LLMProvider {
+               : JSON.stringify(block.input),
+           },
+         })
++      } else if (block.type === 'thinking') {
++        // Preserve reasoning/thinking content for models that require it
++        reasoningContent = (block as any).thinking || null
+       }
+     }
+ 
+@@ -222,6 +230,11 @@ export class OpenAIProvider implements LLMProvider {
+       assistantMsg.tool_calls = toolCalls
+     }
+ 
++    // Pass back reasoning_content for thinking-enabled models (DeepSeek, OpenAI-o, etc.)
++    if (reasoningContent) {
++      assistantMsg.reasoning_content = reasoningContent
++    }
++
+     result.push(assistantMsg)
+   }
+ 
+@@ -256,6 +269,12 @@ export class OpenAIProvider implements LLMProvider {
+ 
+     const content: NormalizedResponseBlock[] = []
+ 
++    // Capture reasoning_content from thinking-enabled models (DeepSeek, OpenAI-o, etc.)
++    // This MUST be preserved and passed back in subsequent assistant messages.
++    if (choice.message.reasoning_content) {
++      content.push({ type: 'thinking', thinking: choice.message.reasoning_content } as any)
++    }
++
+     // Add text content
+     if (choice.message.content) {
+       content.push({ type: 'text', text: choice.message.content })
+diff --git a/src/providers/types.ts b/src/providers/types.ts
+index d71eae56b0ee6da2f4c2e7b7605102d33d67b388..99219cb49def18553c287c8739526ad443ce84dd 100644
+--- a/src/providers/types.ts
++++ b/src/providers/types.ts
+@@ -71,6 +71,7 @@ export interface CreateMessageResponse {
+ export type NormalizedResponseBlock =
+   | { type: 'text'; text: string }
+   | { type: 'tool_use'; id: string; name: string; input: any }
++  | { type: 'thinking'; thinking: string }
+ 
+ // --------------------------------------------------------------------------
+ // Provider Interface

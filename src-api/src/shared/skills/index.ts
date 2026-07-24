@@ -1,0 +1,26 @@
+/**
+ * Skills Module
+ *
+ * Provides skill loading and management functionality.
+ * Skills are loaded from ~/.claude/skills/ (user directory)
+ */
+
+export {
+  loadSkills,
+  loadAllSkills,
+  installBuiltinSkills,
+  getSkillsPath,
+  getSkillNames,
+  findSkill,
+  type LoadedSkill,
+  type SkillMetadata,
+  type SkillsConfig,
+} from './loader';
+
+export { registerFilesystemSkills } from './register';
+
+export {
+  loadAndCacheSkills,
+  refreshSkillsForPrompt,
+  getCachedSkillCount,
+} from './predictor';

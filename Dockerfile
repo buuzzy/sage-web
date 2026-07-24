@@ -1,0 +1,46 @@
+# Sage API — Railway Deployment
+# Build context: project root (needs pnpm workspace files)
+
+# ── Stage 1: Build bundle.cjs ─────────────────────────────────────────────────
+# Node 22 because pnpm 11+ requires Node ≥ 22.13 (uses node:sqlite builtin).
+# pnpm version pinned to keep cloud build identical to local dev.
+FROM node:22-alpine AS builder
+
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+
+WORKDIR /build
+
+# Copy workspace root files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches/ patches/
+
+# Copy sage-api package
+COPY src-api/package.json src-api/package.json
+COPY src-api/stubs/ src-api/stubs/
+COPY src-api/scripts/ src-api/scripts/
+COPY src-api/src/ src-api/src/
+COPY src-api/tsconfig.json src-api/tsconfig.json
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile --filter sage-api...
+
+# Build bundle
+RUN cd src-api && pnpm bundle
+
+# ── Stage 2: Production image ────────────────────────────────────────────────
+FROM node:22-alpine
+
+WORKDIR /app
+
+# The Agent's skills use Bash plus small Python/curl snippets for API calls.
+RUN apk add --no-cache bash python3 curl
+
+COPY --from=builder /build/src-api/dist/bundle.cjs dist/bundle.cjs
+COPY src-api/resources/ resources/
+
+ENV NODE_ENV=production
+
+# Railway injects PORT automatically
+EXPOSE 2026
+
+CMD ["node", "dist/bundle.cjs"]
