@@ -46,6 +46,18 @@ export function LoginPage() {
   const [loadingProvider, setLoadingProvider] = useState<
     'github' | 'google' | null
   >(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  if (status === 'loading') {
+    return (
+      <div className="bg-background flex min-h-svh items-center justify-center px-4">
+        <div className="border-border/60 bg-card flex w-full max-w-xs flex-col items-center rounded-2xl border p-8 shadow-lg">
+          <div className="border-border/20 border-t-primary mb-4 size-6 animate-spin rounded-full border-2" />
+          <p className="text-muted-foreground text-sm">正在检查登录状态…</p>
+        </div>
+      </div>
+    );
+  }
 
   // 如果已经登录（例如 OAuth 回调完成后），自动跳转到主页
   if (status === 'authenticated') {
@@ -54,8 +66,13 @@ export function LoginPage() {
 
   const handleGitHub = async () => {
     setLoadingProvider('github');
+    setErrorMessage(null);
     try {
       await signInWithGitHub();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'GitHub 登录失败'
+      );
     } finally {
       setLoadingProvider(null);
     }
@@ -63,8 +80,13 @@ export function LoginPage() {
 
   const handleGoogle = async () => {
     setLoadingProvider('google');
+    setErrorMessage(null);
     try {
       await signInWithGoogle();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Google 登录失败'
+      );
     } finally {
       setLoadingProvider(null);
     }
@@ -90,6 +112,12 @@ export function LoginPage() {
             <p className="text-muted-foreground mt-1.5 text-sm">智能金融助手</p>
           </div>
         </div>
+
+        {errorMessage && (
+          <div className="border-destructive/30 bg-destructive/5 text-destructive mb-4 rounded-lg border px-3 py-2 text-xs">
+            {errorMessage}
+          </div>
+        )}
 
         {/* OAuth Buttons */}
         <div className="flex flex-col gap-3">
