@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/shared/lib/utils';
-import { readFile } from '@tauri-apps/plugin-fs';
+import type { Artifact } from './types';
 import { Loader2, Music, Pause, Play } from 'lucide-react';
 
 import type { PreviewComponentProps } from './types';
@@ -46,18 +46,8 @@ export function AudioPreview({ artifact }: PreviewComponentProps) {
             : artifact.path;
           setAudioUrl(url);
         } else {
-          // Local file - read as blob using Tauri fs plugin
-          console.log('[Audio Preview] Reading local audio file...');
-
-          const ext = artifact.path.split('.').pop()?.toLowerCase() || '';
-          const mimeType = getAudioMimeType(ext);
-
-          const data = await readFile(artifact.path);
-          const blob = new Blob([data], { type: mimeType });
-          console.log('[Audio Preview] Loaded', blob.size, 'bytes');
-
-          blobUrl = URL.createObjectURL(blob);
-          setAudioUrl(blobUrl);
+          // Web mode: no local file system access. Use remote URLs or data URIs.
+          throw new Error('Local file access not available in web mode');
         }
         setError(null);
       } catch (err) {

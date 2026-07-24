@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { cn } from '@/shared/lib/utils';
-import { readFile, stat } from '@tauri-apps/plugin-fs';
+import type { Artifact } from './types';
 import JSZip from 'jszip';
 import { ExternalLink, FileSpreadsheet, Loader2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -35,13 +35,11 @@ export function ExcelPreview({ artifact }: PreviewComponentProps) {
       try {
         // Check file size first for local files
         if (!isRemoteUrl(artifact.path)) {
-          const fileInfo = await stat(artifact.path);
-          if (fileInfo.size > MAX_PREVIEW_SIZE) {
-            console.log('[Excel Preview] File too large:', fileInfo.size);
-            setFileTooLarge(fileInfo.size);
-            setLoading(false);
-            return;
-          }
+          // Web mode: local file stat not available. Skip size check.
+          // Artifacts in web will come from remote URLs or data URIs.
+          throw new Error('Local file stat not available in web mode');
+          // Web: remote URLs / data URIs only. No local file size check.
+          // Web: skip local file size check (removed for web build)
         }
 
         let arrayBuffer: ArrayBuffer;
@@ -60,10 +58,8 @@ export function ExcelPreview({ artifact }: PreviewComponentProps) {
           }
           arrayBuffer = await response.arrayBuffer();
         } else {
-          // Local file - use Tauri fs plugin
-          console.log('[Excel Preview] Reading local Excel file...');
-          const data = await readFile(artifact.path);
-          arrayBuffer = data.buffer;
+          // Web mode: no local file system access. Use remote URLs or data URIs.
+          throw new Error('Local file access not available in web mode');
         }
 
         console.log('[Excel Preview] Loaded', arrayBuffer.byteLength, 'bytes');

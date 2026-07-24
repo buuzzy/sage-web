@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { readFile, stat } from '@tauri-apps/plugin-fs';
+import type { Artifact } from './types';
 import { FileText, Loader2 } from 'lucide-react';
 
 import { FileTooLarge } from './FileTooLarge';
@@ -33,13 +33,11 @@ export function PdfPreview({ artifact }: PreviewComponentProps) {
       try {
         // Check file size first for local files
         if (!isRemoteUrl(artifact.path)) {
-          const fileInfo = await stat(artifact.path);
-          if (fileInfo.size > MAX_PREVIEW_SIZE) {
-            console.log('[PDF Preview] File too large:', fileInfo.size);
-            setFileTooLarge(fileInfo.size);
-            setLoading(false);
-            return;
-          }
+          // Web mode: local file stat not available. Skip size check.
+          // Artifacts in web will come from remote URLs or data URIs.
+          throw new Error('Local file stat not available in web mode');
+          // Web: remote URLs / data URIs only. No local file size check.
+          // Web: skip local file size check (removed for web build)
         }
 
         let blob: Blob;
@@ -58,10 +56,8 @@ export function PdfPreview({ artifact }: PreviewComponentProps) {
           }
           blob = await response.blob();
         } else {
-          // Local file - use Tauri fs plugin
-          console.log('[PDF Preview] Reading local PDF file...');
-          const data = await readFile(artifact.path);
-          blob = new Blob([data], { type: 'application/pdf' });
+          // Web mode: no local file system access. Use remote URLs or data URIs.
+          throw new Error('Local file access not available in web mode');
         }
 
         console.log('[PDF Preview] Loaded', blob.size, 'bytes');

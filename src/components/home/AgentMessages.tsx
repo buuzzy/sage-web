@@ -421,17 +421,9 @@ export function AgentMessages({ messages, isRunning }: AgentMessagesProps) {
                       a: ({ children, href }: any) => (
                         <a
                           href={href}
-                          onClick={async (e) => {
+                          onClick={(e) => {
                             e.preventDefault();
-                            if (href) {
-                              try {
-                                const { openUrl } =
-                                  await import('@tauri-apps/plugin-opener');
-                                await openUrl(href);
-                              } catch {
-                                window.open(href, '_blank');
-                              }
-                            }
+                            if (href) window.open(href, '_blank', 'noopener,noreferrer');
                           }}
                           className="text-primary cursor-pointer hover:underline"
                         >

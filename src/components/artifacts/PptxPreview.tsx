@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { cn } from '@/shared/lib/utils';
-import { readFile, stat } from '@tauri-apps/plugin-fs';
+// @ts-ignore @tauri-apps/plugin-fs removed for web build
 import JSZip from 'jszip';
 import {
   ChevronLeft,
@@ -42,7 +42,7 @@ export function PptxPreview({ artifact }: PreviewComponentProps) {
       try {
         // Check file size first
         if (!isRemoteUrl(artifact.path)) {
-          const fileInfo = await stat(artifact.path);
+          const { stat } = await import('@tauri-apps/plugin-fs'); const fileInfo = await stat(artifact.path);
           if (fileInfo.size > MAX_PREVIEW_SIZE) {
             console.log('[PPTX Preview] File too large:', fileInfo.size);
             setFileTooLarge(fileInfo.size);
@@ -65,7 +65,7 @@ export function PptxPreview({ artifact }: PreviewComponentProps) {
           }
           arrayBuffer = await response.arrayBuffer();
         } else {
-          const data = await readFile(artifact.path);
+          const { readFile } = await import('@tauri-apps/plugin-fs'); const data = await readFile(artifact.path);
           arrayBuffer = data.buffer;
         }
 

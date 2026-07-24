@@ -31,6 +31,9 @@ export default defineConfig(async () => ({
 
   build: {
     rollupOptions: {
+      // Tauri deps are removed from web build; dynamic imports guarded by isTauri()
+      // should be treated as external to prevent Rollup resolution errors.
+      external: (id: string) => id.startsWith('@tauri-apps/'),
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],

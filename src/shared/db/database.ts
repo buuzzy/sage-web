@@ -452,7 +452,7 @@ export async function bindUserId(uid: string): Promise<void> {
     }
 
     // 4. 打开新连接 + 幂等建表
-    const Database = (await import('@tauri-apps/plugin-sql')).default;
+    const { default: Database } = await import('@tauri-apps/plugin-sql');
     const db = await Database.load(connStr);
     await ensureSchema(db);
 

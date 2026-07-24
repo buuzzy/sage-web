@@ -187,23 +187,8 @@ export function DataSettings({ settings, defaultPaths }: DataSettingsProps) {
 
   // Clear workspace files (sessions directory for the CURRENT user only).
   const clearWorkspaceFiles = async () => {
-    if (!isTauri()) return;
-
-    try {
-      const uid = getCurrentBoundUid();
-      const sessionsDir = uid
-        ? await getUserSessionsDir(uid)
-        : await getSessionsDir();
-      const { remove, exists } = await import('@tauri-apps/plugin-fs');
-
-      const dirExists = await exists(sessionsDir);
-      if (dirExists) {
-        await remove(sessionsDir, { recursive: true });
-        console.log('[DataSettings] Cleared workspace files:', sessionsDir);
-      }
-    } catch (error) {
-      console.warn('[DataSettings] Failed to clear workspace files:', error);
-    }
+    // Web: no local filesystem access. Cloud clear is sufficient.
+    console.log('[DataSettings] Web: skip local workspace file cleanup');
   };
 
   // Clear data

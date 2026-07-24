@@ -133,18 +133,11 @@ function AgentActionBar({
       const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
       const fileName = `sage-${ts}.png`;
 
-      try {
-        const { downloadDir } = await import('@tauri-apps/api/path');
-        const { writeFile } = await import('@tauri-apps/plugin-fs');
-        const dir = await downloadDir();
-        await writeFile(`${dir}/${fileName}`, bytes);
-      } catch {
-        // Fallback: browser download
+      // Browser download
         const a = document.createElement('a');
         a.download = fileName;
         a.href = dataUrl;
         a.click();
-      }
     } catch (err) {
       console.error('[ExportImage] failed:', err);
     } finally {
@@ -170,30 +163,8 @@ function AgentActionBar({
       };
       const line = JSON.stringify(report) + '\n';
 
-      // Write to ~/.sage/feedback/bug-reports.jsonl via Tauri fs (本地备份)
-      const { appDataDir } = await import('@tauri-apps/api/path');
-      const { writeTextFile, mkdir } = await import('@tauri-apps/plugin-fs');
-
-      const dataDir = await appDataDir();
-      const feedbackDir = `${dataDir}/feedback`;
-
-      // Ensure directory exists
-      try {
-        await mkdir(feedbackDir, { recursive: true });
-      } catch {
-        /* already exists */
-      }
-
-      // Append to JSONL file
-      const filePath = `${feedbackDir}/bug-reports.jsonl`;
-      try {
-        const { readTextFile } = await import('@tauri-apps/plugin-fs');
-        const existing = await readTextFile(filePath);
-        await writeTextFile(filePath, existing + line);
-      } catch {
-        // File doesn't exist yet — create it
-        await writeTextFile(filePath, line);
-      }
+      // Web: skip local file backup. Bug reports are sent to cloud endpoint.
+      console.warn('[Bug Report] Web mode: skipping local backup');
 
       // ── 构造排查上下文 ──────────────────────────────────────────
       // 默认上报：轻量摘要（最近 3 条 user / 2 条 text，各截 240 字）+ 当前 provider/model
