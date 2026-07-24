@@ -6,7 +6,6 @@ import { RouterProvider } from 'react-router-dom';
 
 import { router } from './app/router';
 import { ErrorBoundary } from './components/error-boundary';
-import { API_BASE_URL } from './config';
 import { initializeSettings } from './shared/db/settings';
 import { installFetchInterceptor } from './shared/lib/api/fetch-interceptor';
 import { AntdThemeProvider } from './shared/providers/antd-theme-provider';
@@ -29,47 +28,7 @@ import '@/config/style/global.css';
 // Must run before any component renders / fetches.
 installFetchInterceptor();
 
-/**
- * 桌面端 sidecar 后台就绪探测。
- *
- * 不阻塞 UI：App 立即渲染主界面，sidecar 未就绪时头像红绿点反映状态，
- * 用户尝试发消息时才感知连接问题。
- */
-function useSidecarReadiness() {
-  const isDesktop =
-    typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-
-  useEffect(() => {
-    if (!isDesktop) return;
-
-    let cancelled = false;
-    const endpoint = `${API_BASE_URL}/health`;
-
-    const poll = async () => {
-      while (!cancelled) {
-        try {
-          const res = await fetch(endpoint, { cache: 'no-store' });
-          if (res.ok) {
-            console.log('[startup] sidecar ready');
-            return;
-          }
-        } catch {
-          // sidecar not up yet
-        }
-        await new Promise((r) => setTimeout(r, 900));
-      }
-    };
-
-    void poll();
-    return () => {
-      cancelled = true;
-    };
-  }, [isDesktop]);
-}
-
 function AppProviders() {
-  useSidecarReadiness();
-
   return (
     <LanguageProvider>
       <ThemeProvider>

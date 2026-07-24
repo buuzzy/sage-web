@@ -5,7 +5,6 @@ import { useLanguage } from '@/shared/providers/language-provider';
 import { useCloudProviders } from '@/shared/hooks/useCloudProviders';
 import { BUILTIN_PROVIDER_TEMPLATES, type ProviderTemplate } from '@/shared/sync/providers-sync';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { openUrl } from '@tauri-apps/plugin-opener';
 import {
   Check,
   ExternalLink,
@@ -28,11 +27,7 @@ import type { AIProvider, SettingsTabProps } from '../types';
 
 // Helper function to open external URLs
 const openExternalUrl = async (url: string) => {
-  try {
-    await openUrl(url);
-  } catch {
-    window.open(url, '_blank');
-  }
+  window.open(url, '_blank', 'noopener,noreferrer');
 };
 
 type MainTab = 'providers' | 'settings';

@@ -12,17 +12,9 @@ import {
   type AccentColor,
   type BackgroundStyle,
 } from '@/shared/db/settings';
-import { isTauri } from '@tauri-apps/api/core';
 
-async function syncTauriTheme(theme: 'light' | 'dark' | 'system') {
-  if (!isTauri()) return;
-  try {
-    const { getCurrentWindow } = await import('@tauri-apps/api/window');
-    // Pass null to follow system theme
-    await getCurrentWindow().setTheme(theme === 'system' ? null : theme);
-  } catch (e) {
-    console.warn('[Theme] Failed to sync Tauri window theme:', e);
-  }
+async function syncTauriTheme(_theme: 'light' | 'dark' | 'system') {
+  // Web-first build: no native window theme synchronization needed.
 }
 
 type Theme = 'light' | 'dark' | 'system';

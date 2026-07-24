@@ -135,22 +135,17 @@ export function DataSettings({ settings, defaultPaths }: DataSettingsProps) {
       const filename = `sage-backup-${new Date().toISOString().split('T')[0]}.json`;
 
       // Use Tauri native dialog
-      const { save } = await import('@tauri-apps/plugin-dialog');
-      const { writeTextFile } = await import('@tauri-apps/plugin-fs');
-
-      const filePath = await save({
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-        defaultPath: filename,
-      });
-
-      if (filePath) {
-        await writeTextFile(filePath, jsonString);
-        setExportStatus('success');
-        setTimeout(() => setExportStatus('idle'), 2000);
-      } else {
-        // User cancelled
-        setExportStatus('idle');
-      }
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setExportStatus('success');
+      setTimeout(() => setExportStatus('idle'), 2000);
     } catch (error) {
       console.error('[DataSettings] Export failed:', error);
       setErrorMessage(error instanceof Error ? error.message : 'Export failed');

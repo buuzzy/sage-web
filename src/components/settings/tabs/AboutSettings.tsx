@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import ImageLogo from '@/assets/logo.png';
 import { supabaseMeta } from '@/shared/lib/supabase';
 import { useLanguage } from '@/shared/providers/language-provider';
 import { useUpdate } from '@/shared/providers/update-provider';
-import { getVersion } from '@tauri-apps/api/app';
 import {
   CheckCircle,
   Download,
@@ -26,7 +25,7 @@ const noop = () => {};
  */
 export function AboutSettings() {
   const { t } = useLanguage();
-  const [version, setVersion] = useState('0.0.0');
+  const version = __APP_VERSION__;
   const {
     status,
     latestVersion,
@@ -36,17 +35,11 @@ export function AboutSettings() {
     downloadAndInstall,
   } = useUpdate();
 
-  useEffect(() => {
-    getVersion()
-      .then(setVersion)
-      .catch(() => setVersion('0.0.0'));
-  }, []);
-
   // ─── "检查更新"按钮的动态 UI ──────────────────────────────────────────────
   // 状态 → (Icon, label, onClick, variant)
   type ButtonVariant = 'primary' | 'neutral' | 'danger';
   const btn: {
-    icon: React.ReactNode;
+    icon: ReactNode;
     label: string;
     onClick: () => void;
     variant: ButtonVariant;
