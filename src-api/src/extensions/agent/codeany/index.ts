@@ -878,9 +878,13 @@ export class CodeAnyAgent extends BaseAgent {
     const errorPatterns = [
       'error:', 'exception:', 'traceback', 'econnrefused',
       'etimedout', 'enotfound', 'status_code', 'failed to',
-      'permission denied', '401', '403', '500', '502', '503',
+      'permission denied', 'unauthorized', 'forbidden',
+      'command not found', 'no such file or directory',
     ];
-    return errorPatterns.some(p => lower.includes(p)) && output.length < 500;
+    // Only flag as error for SHORT outputs (< 300 chars). Long outputs are
+    // almost always real data (financial tables, JSON payloads) that happen
+    // to contain numbers like 401/500/503 which are valid stock codes/prices.
+    return errorPatterns.some(p => lower.includes(p)) && output.length < 300;
   }
 
   /**

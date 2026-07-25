@@ -7,11 +7,8 @@
  * frontend. Users log in and start using the product immediately.
  */
 
-import { API_BASE_URL } from '@/config';
 import { translations, type Language } from '@/config/locale';
 import { getSettings } from '@/shared/db/settings';
-
-const AGENT_SERVER_URL = API_BASE_URL;
 
 // Helper to get current language translations
 function getErrorMessages() {
@@ -39,39 +36,12 @@ function getModelConfig():
 function getSandboxConfig():
   | { enabled: boolean; provider?: string; apiEndpoint?: string }
   | undefined {
-  try {
-    const settings = getSettings();
-
-    // More detailed logging for debugging production issues
-    console.log('[useAgent] getSandboxConfig - Full settings check:', {
-      sandboxEnabled: settings.sandboxEnabled,
-      sandboxEnabledType: typeof settings.sandboxEnabled,
-      defaultSandboxProvider: settings.defaultSandboxProvider,
-      hasSettings: !!settings,
-      settingsKeys: Object.keys(settings),
-    });
-
-    // Only return if sandbox is enabled
-    if (!settings.sandboxEnabled) {
-      console.warn(
-        '[useAgent] ⚠️ Sandbox is DISABLED in settings - sandboxEnabled:',
-        settings.sandboxEnabled
-      );
-      return undefined;
-    }
-
-    const config = {
-      enabled: true,
-      provider: settings.defaultSandboxProvider, // Use selected sandbox provider
-      apiEndpoint: AGENT_SERVER_URL, // Use the same server
-    };
-
-    console.log('[useAgent] ✅ Sandbox ENABLED, returning config:', config);
-    return config;
-  } catch (error) {
-    console.error('[useAgent] ❌ Error getting sandbox config:', error);
-    return undefined;
-  }
+  // Web product: sandbox is NOT supported. The codex CLI binary is not
+  // available on the server, and the Railway container already provides
+  // isolation. Returning undefined prevents the workspace prompt from
+  // injecting sandbox_run_script instructions (which point to a tool that
+  // doesn't exist in ALLOWED_TOOLS) and avoids tool call failures.
+  return undefined;
 }
 
 // Helper to get skills configuration from settings
