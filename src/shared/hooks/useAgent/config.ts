@@ -1,6 +1,10 @@
 /**
  * Configuration readers for agent settings.
  * Read user preferences from local settings store.
+ *
+ * NOTE: getModelConfig() always returns undefined on web. The backend uses
+ * a built-in default model (MiniMax-M3), so no API key is sent from the
+ * frontend. Users log in and start using the product immediately.
  */
 
 import { API_BASE_URL } from '@/config';
@@ -23,54 +27,13 @@ function getPreferredLanguage(): string | undefined {
   return lang && lang.trim() !== '' ? lang : undefined;
 }
 
+// Web product: model config is resolved server-side. Always undefined.
 function getModelConfig():
   | { apiKey?: string; baseUrl?: string; model?: string; apiType?: string }
   | undefined {
-  try {
-    const settings = getSettings();
-
-    // No provider configured — user needs to set one up
-    if (!settings.defaultProvider || settings.defaultProvider === 'default') {
-      return undefined;
-    }
-
-    const provider = settings.providers.find(
-      (p) => p.id === settings.defaultProvider
-    );
-
-    if (!provider) return undefined;
-
-    const config: {
-      apiKey?: string;
-      baseUrl?: string;
-      model?: string;
-      apiType?: string;
-    } = {};
-
-    if (provider.apiKey) {
-      config.apiKey = provider.apiKey;
-    }
-    if (provider.baseUrl) {
-      config.baseUrl = provider.baseUrl;
-    }
-    if (settings.defaultModel) {
-      config.model = settings.defaultModel;
-    }
-    if (provider.apiType) {
-      config.apiType = provider.apiType;
-    }
-
-    // Return undefined if no API key configured
-    if (!config.apiKey) {
-      return undefined;
-    }
-
-    return config;
-  } catch (error) {
-    console.error('[useAgent] getModelConfig error:', error);
-    return undefined;
-  }
+  return undefined;
 }
+
 
 // Helper to get sandbox configuration from settings
 function getSandboxConfig():

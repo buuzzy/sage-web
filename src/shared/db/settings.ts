@@ -531,7 +531,7 @@ export async function getSettingsAsync(): Promise<Settings> {
 
   if (database) {
     try {
-      const result = await database.select<{ key: string; value: string }[]>(
+      const result = await database.select<{ key: string; value: string }>(
         'SELECT key, value FROM settings'
       );
 
@@ -910,37 +910,9 @@ export function getDefaultAIProvider(): AIProvider | undefined {
  * Auto-fixes: if defaultProvider is unset but a valid provider exists, selects it.
  */
 export function isModelConfigured(): boolean {
-  const settings = getSettings();
-
-  if (!settings.defaultProvider || settings.defaultProvider === 'default') {
-    const validProvider = settings.providers.find((p) => p.enabled && p.apiKey);
-    if (validProvider) {
-      settings.defaultProvider = validProvider.id;
-      settings.defaultModel =
-        validProvider.defaultModel || validProvider.models?.[0] || '';
-      saveSettings(settings);
-      return true;
-    }
-    return false;
-  }
-
-  const provider = settings.providers.find(
-    (p) => p.id === settings.defaultProvider
-  );
-  if (provider && provider.apiKey) return true;
-
-  // Fallback: defaultProvider is set but its apiKey is missing (e.g. user configured a
-  // different provider without updating the default selection). Auto-find any enabled
-  // provider that has an apiKey and promote it to defaultProvider.
-  const validProvider = settings.providers.find((p) => p.enabled && p.apiKey);
-  if (validProvider) {
-    settings.defaultProvider = validProvider.id;
-    settings.defaultModel =
-      validProvider.defaultModel || validProvider.models?.[0] || '';
-    saveSettings(settings);
-    return true;
-  }
-  return false;
+  // Web product: the backend always has a built-in default model.
+  // Users never need to configure an API key — login and start using.
+  return true;
 }
 
 /**
@@ -1063,7 +1035,7 @@ export async function getSettingItem(key: string): Promise<string | null> {
 
   if (database) {
     try {
-      const result = await database.select<{ value: string }[]>(
+      const result = await database.select<{ value: string }>(
         'SELECT value FROM settings WHERE key = $1',
         [key]
       );

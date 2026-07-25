@@ -13,6 +13,7 @@ import type { AgentMessage, ConversationMessage } from '@/core/agent/types';
 
 import { createLogger } from '@/shared/utils/logger';
 import { buildEndpointUrl, stripHashSuffix } from '@/shared/utils/url';
+import { getBuiltInModelConfig } from '@/shared/builtin-model';
 
 const logger = createLogger('ChatService');
 
@@ -36,10 +37,18 @@ function shouldUseAnthropicSDK(model: string, apiType?: string): boolean {
 }
 
 function resolveConfig(modelConfig?: { apiKey?: string; baseUrl?: string; model?: string }) {
-  // Use explicit modelConfig from user settings only — no environment variable fallback
+  // Use explicit modelConfig from user settings; fall back to built-in model
   const apiKey = modelConfig?.apiKey || '';
   const baseURL = modelConfig?.baseUrl || undefined;
   const model = modelConfig?.model || DEFAULT_MODEL;
+
+  // No user key configured — use the platform's built-in default model
+  if (!apiKey) {
+    const builtIn = getBuiltInModelConfig();
+    if (builtIn) {
+      return { apiKey: builtIn.apiKey, baseURL: builtIn.baseUrl, model: builtIn.model };
+    }
+  }
 
   return { apiKey, baseURL, model };
 }

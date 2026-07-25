@@ -84,7 +84,7 @@ export async function getFilesByTaskId(taskId: string): Promise<LibraryFile[]> {
   const database = await getSQLiteDatabase();
 
   if (database) {
-    return database.select<LibraryFile[]>(
+    return database.select<LibraryFile>(
       'SELECT * FROM files WHERE task_id = $1 ORDER BY created_at ASC',
       [taskId]
     );
@@ -105,7 +105,7 @@ export async function getAllFiles(): Promise<LibraryFile[]> {
   const database = await getSQLiteDatabase();
 
   if (database) {
-    return database.select<LibraryFile[]>(
+    return database.select<LibraryFile>(
       'SELECT * FROM files ORDER BY created_at DESC'
     );
   } else {
@@ -130,7 +130,7 @@ export async function toggleFileFavorite(
       "UPDATE files SET is_favorite = NOT is_favorite, updated_at = datetime('now') WHERE id = $1",
       [fileId]
     );
-    const files = await database.select<LibraryFile[]>(
+    const files = await database.select<LibraryFile>(
       'SELECT * FROM files WHERE id = $1',
       [fileId]
     );
@@ -157,7 +157,7 @@ export async function deleteFile(fileId: string): Promise<boolean> {
   let taskId: string | null = null;
   try {
     if (database) {
-      const rows = await database.select<{ task_id: string }[]>(
+      const rows = await database.select<{ task_id: string }>(
         'SELECT task_id FROM files WHERE id = $1',
         [fileId]
       );

@@ -25,7 +25,6 @@ import { CronSettings } from './tabs/CronSettings';
 import { DataSettings } from './tabs/DataSettings';
 import { GeneralSettings } from './tabs/GeneralSettings';
 import { MCPSettings } from './tabs/MCPSettings';
-import { ModelSettings } from './tabs/ModelSettings';
 import { PersonaSettings } from './tabs/PersonaSettings';
 import { SkillsSettings } from './tabs/SkillsSettings';
 import type { SettingsCategory } from './types';
@@ -78,7 +77,6 @@ export function SettingsModal({
   const categories: SettingsCategory[] = [
     'account',
     'general',
-    'model',
     'mcp',
     'skills',
     'cron',
@@ -189,13 +187,6 @@ export function SettingsModal({
 
               {activeCategory === 'general' && (
                 <GeneralSettings
-                  settings={settings}
-                  onSettingsChange={handleSettingsChange}
-                />
-              )}
-
-              {activeCategory === 'model' && (
-                <ModelSettings
                   settings={settings}
                   onSettingsChange={handleSettingsChange}
                 />

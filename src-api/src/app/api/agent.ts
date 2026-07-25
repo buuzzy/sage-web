@@ -15,6 +15,7 @@ import { appendEvent, getEvents, getTaskStatus, initTaskBuffer, markTaskComplete
 import type { AgentRequest } from '@/shared/types/agent';
 import { matchSlashCommand, executeSlashCommand } from '@/core/channel/slash-commands';
 import { getDefaultProvider } from '@/shared/provider/user-store';
+import { getBuiltInModelConfig } from '@/shared/builtin-model';
 
 const agent = new Hono();
 
@@ -45,7 +46,18 @@ async function resolveModelConfig(
     }
   }
 
-  // fallback: 返回原始 modelConfig（可能无 apiKey）
+ // fallback: 返回原始 modelConfig（可能无 apiKey）
+  // 内置默认模型：web 端用户登录即可用，无需自配 key
+  const builtIn = getBuiltInModelConfig();
+  if (builtIn) {
+    return {
+      apiKey: builtIn.apiKey,
+      baseUrl: builtIn.baseUrl,
+      model: builtIn.model,
+      apiType: builtIn.apiType,
+    };
+  }
+
   return modelConfig as any;
 }
 

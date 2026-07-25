@@ -243,7 +243,7 @@ async function columnHasType(
   expectedType: string
 ): Promise<boolean> {
   try {
-    const rows = await db.select<{ name: string; type: string }[]>(
+    const rows = await db.select<{ name: string; type: string }>(
       `PRAGMA table_info(${table})`
     );
     const col = rows.find((r) => r.name === column);

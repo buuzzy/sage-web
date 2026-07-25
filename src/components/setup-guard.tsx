@@ -69,7 +69,7 @@ export function SetupGuard({ children }: SetupGuardProps) {
             setDismissed(true);
           }
         }}
-        initialCategory="model"
+        initialCategory="account"
       />
     </>
   );

@@ -77,7 +77,7 @@ export async function getTask(id: string): Promise<Task | null> {
   const database = await getSQLiteDatabase();
 
   if (database) {
-    const result = await database.select<Task[]>(
+    const result = await database.select<Task>(
       'SELECT * FROM tasks WHERE id = $1',
       [id]
     );
@@ -100,7 +100,7 @@ export async function getAllTasks(): Promise<Task[]> {
   const database = await getSQLiteDatabase();
 
   if (database) {
-    const tasks = await database.select<Task[]>(
+    const tasks = await database.select<Task>(
       'SELECT * FROM tasks ORDER BY created_at DESC'
     );
     // Convert favorite from 0/1 to boolean for all tasks

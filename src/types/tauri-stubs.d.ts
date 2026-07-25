@@ -3,6 +3,7 @@
 // guarded by isTauri() checks and never reached in web mode.
 declare module '@tauri-apps/api/path' {
   export function appConfigDir(): Promise<string>;
+  export function appDataDir(): Promise<string>;
   export function downloadDir(): Promise<string>;
   export function homeDir(): Promise<string>;
   export function sep(): string;
@@ -28,9 +29,9 @@ declare module '@tauri-apps/plugin-shell' {
 declare module '@tauri-apps/plugin-sql' {
   export default class Sqlite {
     static load(connStr: string): Promise<Sqlite>;
-    close(): Promise<void>;
-    execute(sql: string, params?: unknown[]): Promise<void>;
-    select<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>;
+  close(): Promise<void>;
+    execute(sql: string, params?: unknown[]): Promise<{ rowsAffected: number }>;
+  select<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>;
   }
 }
 declare module '@tauri-apps/api/webview' {

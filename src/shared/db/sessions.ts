@@ -63,7 +63,7 @@ export async function getSession(id: string): Promise<Session | null> {
 
   if (database) {
     try {
-      const result = await database.select<Session[]>(
+      const result = await database.select<Session>(
         'SELECT * FROM sessions WHERE id = $1',
         [id]
       );
@@ -85,7 +85,7 @@ export async function getAllSessions(): Promise<Session[]> {
 
   if (database) {
     try {
-      const sessions = await database.select<Session[]>(
+      const sessions = await database.select<Session>(
         'SELECT * FROM sessions ORDER BY created_at DESC'
       );
       return sessions;
@@ -141,7 +141,7 @@ export async function getTasksBySessionId(sessionId: string): Promise<Task[]> {
 
   if (database) {
     try {
-      const tasks = await database.select<Task[]>(
+      const tasks = await database.select<Task>(
         'SELECT * FROM tasks WHERE session_id = $1 ORDER BY task_index ASC',
         [sessionId]
       );

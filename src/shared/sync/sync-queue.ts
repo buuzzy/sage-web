@@ -134,7 +134,7 @@ export async function drainBatch(limit = 10): Promise<SyncQueueRow[]> {
 
   const db = await getSQLiteDatabase();
   if (db) {
-    return db.select<SyncQueueRow[]>(
+    return db.select<SyncQueueRow>(
       `SELECT * FROM sync_queue
        WHERE user_id = $1 AND next_retry_at <= $2
        ORDER BY created_at ASC
@@ -174,7 +174,7 @@ export async function markDone(id: string): Promise<void> {
 export async function markFailed(id: string, errorMsg: string): Promise<void> {
   const db = await getSQLiteDatabase();
   if (db) {
-    const rows = await db.select<{ retry_count: number }[]>(
+    const rows = await db.select<{ retry_count: number }>(
       `SELECT retry_count FROM sync_queue WHERE id = $1`,
       [id]
     );
@@ -229,11 +229,11 @@ export async function getQueueStats(): Promise<{
 
   const db = await getSQLiteDatabase();
   if (db) {
-    const [{ total }] = await db.select<{ total: number }[]>(
+    const [{ total }] = await db.select<{ total: number }>(
       `SELECT COUNT(*) AS total FROM sync_queue WHERE user_id = $1`,
       [userId]
     );
-    const [{ retrying }] = await db.select<{ retrying: number }[]>(
+    const [{ retrying }] = await db.select<{ retrying: number }>(
       `SELECT COUNT(*) AS retrying FROM sync_queue WHERE user_id = $1 AND retry_count > 0`,
       [userId]
     );

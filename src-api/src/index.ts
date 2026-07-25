@@ -1,3 +1,16 @@
+// Load .env from project root for local dev (Railway injects env directly).
+// Must run before any module that reads process.env.
+try {
+  process.loadEnvFile();
+} catch {
+  // .env not found in CWD — try project root (monorepo)
+  try {
+    process.loadEnvFile('../.env');
+  } catch {
+    // No .env — rely on process.env (production / Railway)
+  }
+}
+
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import { Hono } from 'hono';

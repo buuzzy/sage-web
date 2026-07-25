@@ -332,7 +332,7 @@ export async function getMessagesByTaskId(taskId: string): Promise<Message[]> {
   const database = await getSQLiteDatabase();
 
   if (database) {
-    return database.select<Message[]>(
+    return database.select<Message>(
       'SELECT * FROM messages WHERE task_id = $1 ORDER BY created_at ASC',
       [taskId]
     );

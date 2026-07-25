@@ -153,7 +153,7 @@ function ErrorMessage({ message }: { message: string }) {
         <SettingsModal
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
-          initialCategory="model"
+          initialCategory="account"
         />
       </>
     );
@@ -181,7 +181,7 @@ function ErrorMessage({ message }: { message: string }) {
         <SettingsModal
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
-          initialCategory="model"
+          initialCategory="account"
         />
       </>
     );
@@ -209,7 +209,7 @@ function ErrorMessage({ message }: { message: string }) {
         <SettingsModal
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
-          initialCategory="model"
+          initialCategory="account"
         />
       </>
     );
@@ -237,7 +237,7 @@ function ErrorMessage({ message }: { message: string }) {
         <SettingsModal
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
-          initialCategory="model"
+          initialCategory="account"
         />
       </>
     );
@@ -268,7 +268,7 @@ function ErrorMessage({ message }: { message: string }) {
         <SettingsModal
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
-          initialCategory="model"
+          initialCategory="account"
         />
       </>
     );

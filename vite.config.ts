@@ -14,26 +14,30 @@ const pkg = JSON.parse(
   readFileSync(path.resolve(__dirname, "./package.json"), "utf-8")
 );
 
-// https://vite.dev/config/
-export default defineConfig(async () => ({
-  plugins: [react(), tailwindcss()],
+  // https://vite.dev/config/
+  export default defineConfig(async () => ({
+    plugins: [react(), tailwindcss()],
 
-  define: {
+    // Load .env files from configs/env/ (matches .env.development / .env.production)
+    envDir: path.resolve(__dirname, "./configs/env"),
+
+    define: {
     __BUILD_DATE__: JSON.stringify(buildDate),
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
 
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
+    alias: [
+      { find: "@", replacement: path.resolve(__dirname, "./src") },
+      {
+        find: /^@tauri-apps\/.+/,
+        replacement: path.resolve(__dirname, "./src/shared/lib/tauri-stub.ts"),
+      },
+    ],
   },
 
   build: {
     rollupOptions: {
-      // Tauri deps are removed from web build; dynamic imports guarded by isTauri()
-      // should be treated as external to prevent Rollup resolution errors.
-      external: (id: string) => id.startsWith('@tauri-apps/'),
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
@@ -48,25 +52,16 @@ export default defineConfig(async () => ({
     },
   },
 
-  // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
-  //
-  // 1. prevent Vite from obscuring rust errors
   clearScreen: false,
-  // 2. tauri expects a fixed port, fail if that port is not available
   server: {
     port: 1420,
     strictPort: true,
-    host: host || false,
-    hmr: host
-      ? {
-          protocol: "ws",
-          host,
-          port: 1421,
-        }
-      : undefined,
+    // Allow connections from both IPv4 and IPv6 localhost — some browsers
+    // resolve localhost to ::1 first, and a strict bind to 127.0.0.1 causes
+    // ERR_CONNECTION_REFUSED on OAuth callbacks.
+    host: host || true,
     watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      ignored: ["**/node_modules/**", "**/src-tauri/**"],
     },
   },
 }));
