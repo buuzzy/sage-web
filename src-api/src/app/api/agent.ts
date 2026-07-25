@@ -20,34 +20,14 @@ import { getBuiltInModelConfig } from '@/shared/builtin-model';
 const agent = new Hono();
 
 /**
- * 云端模式下，前端不传 apiKey，后端自动从 user_providers 拉取默认 provider 的配置。
+ * Web product: always use the built-in default model (MiniMax-M3).
+ * User self-configured providers are no longer supported on web.
  */
 async function resolveModelConfig(
   modelConfig?: { apiKey?: string; baseUrl?: string; model?: string; apiType?: string },
   userId?: string
 ): Promise<{ apiKey?: string; baseUrl?: string; model?: string; apiType?: 'anthropic-messages' | 'openai-completions' | undefined } | undefined> {
-  // 如果前端已传 apiKey，直接用
-  if (modelConfig?.apiKey) return modelConfig as any;
-
-  // 如果有 userId，尝试从云端 user_providers 拉取
-  if (userId) {
-    try {
-      const provider = await getDefaultProvider(userId);
-      if (provider && provider.api_key) {
-        return {
-          apiKey: provider.api_key,
-          baseUrl: provider.base_url + provider.endpoint_path,
-          model: modelConfig?.model || provider.default_model || undefined,
-          apiType: provider.api_type as 'anthropic-messages' | 'openai-completions',
-        };
-      }
-    } catch (err) {
-      console.warn('[AgentAPI] Failed to resolve cloud provider:', err);
-    }
-  }
-
- // fallback: 返回原始 modelConfig（可能无 apiKey）
-  // 内置默认模型：web 端用户登录即可用，无需自配 key
+  // Built-in model takes top priority — platform provides the default model
   const builtIn = getBuiltInModelConfig();
   if (builtIn) {
     return {
@@ -58,7 +38,27 @@ async function resolveModelConfig(
     };
   }
 
-  return modelConfig as any;
+  // Fallback: frontend-supplied config (should not happen in production)
+  if (modelConfig?.apiKey) return modelConfig as any;
+
+  // Last resort: check user_providers (legacy compat for channels/cron)
+  if (userId) {
+    try {
+      const provider = await getDefaultProvider(userId);
+      if (provider && provider.api_key) {
+        return {
+          apiKey: provider.api_key,
+          baseUrl: provider.base_url + provider.endpoint_path,
+          model: provider.default_model || undefined,
+          apiType: provider.api_type as 'anthropic-messages' | 'openai-completions',
+        };
+      }
+    } catch (err) {
+      console.warn('[AgentAPI] Failed to resolve cloud provider:', err);
+    }
+  }
+
+  return undefined;
 }
 
 /**
@@ -415,6 +415,7 @@ agent.post('/title', async (c) => {
     prompt: string;
     modelConfig?: { apiKey?: string; baseUrl?: string; model?: string };
     language?: string;
+    userId?: string;
   }>();
 
   console.log('[AgentAPI] POST /title received:', {
@@ -428,7 +429,8 @@ agent.post('/title', async (c) => {
     return c.json({ error: 'prompt is required' }, 400);
   }
 
-  const title = await generateTitle(body.prompt, body.modelConfig, body.language);
+  const resolvedConfig = await resolveModelConfig(body.modelConfig, body.userId);
+  const title = await generateTitle(body.prompt, resolvedConfig, body.language);
   console.log('[AgentAPI] POST /title result:', { title });
   return c.json({ title });
 });
