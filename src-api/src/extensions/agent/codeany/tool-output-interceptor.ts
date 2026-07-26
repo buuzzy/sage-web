@@ -18,12 +18,10 @@ export interface ToolOutputMetadata {
 
 export interface ToolOutputInterceptResult {
   metadata: ToolOutputMetadata;
-  artifactBlock: string;
   summary: string;
 }
 
 export interface ToolOutputInterceptorOptions {
-  queueArtifact: (artifactBlock: string) => void;
   intercept: (
     command: string,
     output: string
@@ -40,7 +38,6 @@ function extractCommand(toolInput: unknown): string {
 }
 
 export function createToolOutputInterceptorHook({
-  queueArtifact,
   intercept,
 }: ToolOutputInterceptorOptions) {
   return {
@@ -56,10 +53,8 @@ export function createToolOutputInterceptorHook({
         const result = intercept(command, toolOutput);
         if (!result) return undefined;
 
-        queueArtifact(result.artifactBlock);
-
         logger.info(
-          `[PostToolUse] Intercepted → ${result.metadata.skill}/${result.metadata.action}, artifact queued, summary ${result.summary.length} chars`
+          `[PostToolUse] Intercepted → ${result.metadata.skill}/${result.metadata.action}, summary ${result.summary.length} chars`
         );
 
         return { modifiedOutput: result.summary };

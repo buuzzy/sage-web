@@ -6,7 +6,6 @@ import preview from './preview';
 import settings from './settings';
 import setup from './setup';
 import task from './task';
-import update from './update';
 
 export default {
   common,
@@ -17,5 +16,4 @@ export default {
   settings,
   library,
   setup,
-  update,
 };

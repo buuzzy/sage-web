@@ -9,9 +9,7 @@ import {
   Brain,
   Clock,
   Cpu,
-  Database,
   Info,
-  Server,
   Settings,
   Sparkles,
   User,
@@ -27,11 +25,9 @@ export const categoryIcons: Record<
   account: User,
   general: Settings,
   model: Cpu,
-  mcp: Server,
   skills: Sparkles,
   cron: Clock,
   persona: Brain,
-  data: Database,
   about: Info,
 };
 

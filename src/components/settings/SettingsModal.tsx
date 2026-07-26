@@ -6,25 +6,15 @@ import {
   syncSettingsWithBackend,
   type Settings as SettingsType,
 } from '@/shared/db/settings';
-import {
-  getAppDataDir,
-  getDisplayPath,
-  getMcpConfigPath,
-  getSkillsDir,
-} from '@/shared/lib/paths';
 import { cn } from '@/shared/lib/utils';
 import { useLanguage } from '@/shared/providers/language-provider';
-import { useUpdate } from '@/shared/providers/update-provider';
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
 import { categoryIcons } from './constants';
 import { AboutSettings } from './tabs/AboutSettings';
 import { AccountSettings } from './tabs/AccountSettings';
-import { CronSettings } from './tabs/CronSettings';
-import { DataSettings } from './tabs/DataSettings';
 import { GeneralSettings } from './tabs/GeneralSettings';
-import { MCPSettings } from './tabs/MCPSettings';
 import { PersonaSettings } from './tabs/PersonaSettings';
 import { SkillsSettings } from './tabs/SkillsSettings';
 import type { SettingsCategory } from './types';
@@ -51,57 +41,21 @@ export function SettingsModal({
       setActiveCategory(initialCategory);
     }
   }, [initialCategory, open]);
-  const [defaultPaths, setDefaultPaths] = useState({
-    workDir: '',
-    mcpConfigPath: '',
-    skillsPath: '',
-  });
   const { t } = useLanguage();
 
-  // 更新提示：在侧栏"关于" tab 项上显示红点，用户点到该 tab 时消失
-  const update = useUpdate();
-  const showAboutDot =
-    update.status === 'available' &&
-    update.latestVersion !== null &&
-    update.latestVersion !== update.dismissedVersion &&
-    update.latestVersion !== update.aboutSeenVersion;
-
-  // 切到关于 tab → 通知 provider 更新 aboutSeenVersion（sidebar 外层红点也消失）
-  useEffect(() => {
-    if (activeCategory === 'about' && showAboutDot) {
-      update.markAboutSeen();
-    }
-  }, [activeCategory, showAboutDot, update]);
 
   // Category list
   const categories: SettingsCategory[] = [
     'account',
     'general',
-    'mcp',
     'skills',
-    'cron',
     'persona',
-    'data',
     'about',
   ];
 
   const getCategoryLabel = (id: SettingsCategory): string => {
     return t.settings[id];
   };
-
-  // Load default paths on mount
-  useEffect(() => {
-    async function loadDefaultPaths() {
-      const [workDir, mcpConfigPath, skillsPath] = await Promise.all([
-        getAppDataDir().then(getDisplayPath),
-        getMcpConfigPath().then(getDisplayPath),
-        getSkillsDir().then(getDisplayPath),
-      ]);
-      setDefaultPaths({ workDir, mcpConfigPath, skillsPath });
-    }
-    loadDefaultPaths();
-  }, []);
-
   // Load settings on mount
   useEffect(() => {
     if (open) {
@@ -139,7 +93,6 @@ export function SettingsModal({
             <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
               {categories.map((id) => {
                 const Icon = categoryIcons[id];
-                const showDot = id === 'about' && showAboutDot;
                 return (
                   <button
                     key={id}
@@ -155,12 +108,6 @@ export function SettingsModal({
                     <span className="flex-1 text-left">
                       {getCategoryLabel(id)}
                     </span>
-                    {showDot && (
-                      <span
-                        aria-label="new update available"
-                        className="size-1.5 shrink-0 rounded-full bg-red-500"
-                      />
-                    )}
                   </button>
                 );
               })}
@@ -192,31 +139,11 @@ export function SettingsModal({
                 />
               )}
 
-              {activeCategory === 'mcp' && (
-                <MCPSettings
-                  settings={settings}
-                  onSettingsChange={handleSettingsChange}
-                />
-              )}
-
               {activeCategory === 'skills' && (
-                <SkillsSettings
-                  settings={settings}
-                  onSettingsChange={handleSettingsChange}
-                />
+                <SkillsSettings />
               )}
-
-              {activeCategory === 'cron' && <CronSettings />}
 
               {activeCategory === 'persona' && <PersonaSettings />}
-
-              {activeCategory === 'data' && (
-                <DataSettings
-                  settings={settings}
-                  onSettingsChange={handleSettingsChange}
-                  defaultPaths={defaultPaths}
-                />
-              )}
 
               {activeCategory === 'about' && <AboutSettings />}
             </div>

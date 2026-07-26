@@ -5,12 +5,11 @@
 
 import { useRef } from 'react';
 import type { AgentMessage } from '@/shared/hooks/useAgent';
-import { extractArtifacts } from '@/shared/lib/artifactParser';
+import { stripCanvasBlocks } from '@/shared/lib/canvasExtract';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { Logo } from '@/components/common/logo';
-import { ArtifactRenderer } from '@/components/htui/ArtifactRenderer';
 
 import { AgentActionBar } from './AgentActionBar';
 
@@ -24,9 +23,7 @@ function TextMessageItem({
   taskId?: string;
 }) {
   const msgContainerRef = useRef<HTMLDivElement>(null);
-  const { cleanText, artifacts: extractedArtifacts } = extractArtifacts(
-    message.content || ''
-  );
+  const cleanText = stripCanvasBlocks(message.content || '');
 
   return (
     <div
@@ -34,7 +31,6 @@ function TextMessageItem({
       className="group/msgitem flex min-w-0 flex-col gap-3"
     >
       <Logo />
-      <ArtifactRenderer artifacts={extractedArtifacts} />
       {cleanText.trim() && (
         <div className="prose prose-sm text-foreground max-w-none min-w-0 flex-1 overflow-hidden">
           <ReactMarkdown
@@ -107,7 +103,7 @@ function TextMessageItem({
           </ReactMarkdown>
         </div>
       )}
-      {(cleanText.trim() || extractedArtifacts.length > 0) && (
+      {cleanText.trim() && (
         <AgentActionBar
           cleanText={cleanText}
           allMessages={allMessages ?? [message]}

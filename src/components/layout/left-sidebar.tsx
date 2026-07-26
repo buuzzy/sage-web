@@ -6,7 +6,6 @@ import { isMobile } from '@/shared/lib/platform';
 import { cn } from '@/shared/lib/utils';
 import { useAuth } from '@/shared/providers/auth-provider';
 import { useLanguage } from '@/shared/providers/language-provider';
-import { useUpdate } from '@/shared/providers/update-provider';
 import { useDisplayIdentity } from '@/shared/sync';
 import {
   Calendar,
@@ -148,15 +147,6 @@ export function LeftSidebar({
   // 用户必须已登录才能看到 sidebar（AuthGuard 保证），直接读云端 profile
   const { displayName, avatarUrl } = useDisplayIdentity();
   const profile = { nickname: displayName, avatar: avatarUrl };
-
-  // 更新提示：sidebar 外层红点（user avatar trigger），用户打开设置 > 关于
-  // 后由 AboutSettings 内部调用 markAboutSeen 使其消失
-  const update = useUpdate();
-  const showUpdateDot =
-    update.status === 'available' &&
-    update.latestVersion !== null &&
-    update.latestVersion !== update.dismissedVersion &&
-    update.latestVersion !== update.aboutSeenVersion;
 
   // Delete confirmation dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -447,13 +437,6 @@ export function LeftSidebar({
                       </p>
                     </div>
                     <ChevronsUpDown className="text-sidebar-foreground/40 group-hover:text-sidebar-foreground/60 size-4" />
-                    {showUpdateDot && (
-                      // 绝对定位在头像右上角（avatar div 的 top-right）
-                      <span
-                        aria-label="new update available"
-                        className="ring-sidebar absolute top-1.5 left-[38px] size-2 rounded-full bg-red-500 ring-2"
-                      />
-                    )}
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -487,12 +470,6 @@ export function LeftSidebar({
                     >
                       <Settings className="size-4" />
                       <span>{t.nav.settings}</span>
-                      {showUpdateDot && (
-                        <span
-                          aria-label="new update available"
-                          className="ml-auto size-1.5 rounded-full bg-red-500"
-                        />
-                      )}
                     </DropdownMenuItem>
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator />
@@ -724,15 +701,9 @@ export function LeftSidebar({
                         className="size-full object-cover"
                         iconClassName="text-sidebar-foreground/70 size-4"
                       />
-                    </AvatarStatusBadge>
-                    {showUpdateDot && (
-                      <span
-                        aria-label="new update available"
-                        className="ring-sidebar absolute -top-0.5 -right-0.5 size-2 rounded-full bg-red-500 ring-2"
-                      />
-                    )}
-                  </button>
-                </DropdownMenuTrigger>
+                      </AvatarStatusBadge>
+                    </button>
+                  </DropdownMenuTrigger>
                 <DropdownMenuContent
                   className="min-w-56 rounded-lg"
                   side="right"
@@ -765,12 +736,6 @@ export function LeftSidebar({
                     >
                       <Settings className="size-4" />
                       <span>{t.nav.settings}</span>
-                      {showUpdateDot && (
-                        <span
-                          aria-label="new update available"
-                          className="ml-auto size-1.5 rounded-full bg-red-500"
-                        />
-                      )}
                     </DropdownMenuItem>
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator />

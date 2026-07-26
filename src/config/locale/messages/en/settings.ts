@@ -269,67 +269,12 @@ export default {
   mcpCommandPlaceholder: 'e.g., python, node, ./script.sh',
   mcpSave: 'Save',
 
-  // Data
-  data: 'Data',
-  dataDescription:
-    'Manage storage paths, export backups, restore from cloud, or clear data.',
-  dataStorageSection: 'Storage',
-  dataBackupSection: 'Backup & Restore',
-  dataDangerSection: 'Danger Zone',
-  dataExport: 'Export Data',
-  dataExportDescription:
-    'Export all sessions, messages, and settings to a local JSON file.',
-  dataExportButton: 'Export',
-  dataExporting: 'Exporting...',
-  dataCloudRestore: 'Restore Cloud History',
-  dataCloudRestoreDescription:
-    'Pull all sessions and messages from the cloud into this device. Useful when signing in on a new device or recovering from local data loss. Existing records with matching IDs will be updated.',
-  dataCloudRestoreButton: 'Restore',
-  dataCloudRestoring: 'Restoring...',
-  dataCloudRestoreConfirm:
-    'Restore cloud sessions, tasks, messages, and files into this device? Existing records with the same IDs will be updated.',
-  dataClear: 'Clear Data',
-  dataClearDescription:
-    'Permanently delete data. This action cannot be undone.',
-  dataClearButton: 'Clear',
-  dataClearing: 'Clearing...',
-  dataSuccess: 'Success',
-  dataClearConfirmTitle: 'Clear Data',
-  dataClearConfirmDescription: 'Choose what data you want to clear:',
-  dataClearTasksOnly: 'Clear Conversation History',
-  dataClearTasksOnlyDescription:
-    'Delete all conversations and messages, both local and cloud (affects all signed-in devices). Keeps: login, preferences, persona.',
-  dataClearSettingsOnly: 'Clear Settings Only',
-  dataClearSettingsOnlyDescription:
-    'Reset all local settings (theme, model, MCP, etc.) to defaults. Keeps: conversations, login, persona.',
-  dataClearAll: 'Clear All Data',
-  dataClearAllDescription:
-    'Delete all conversations and messages (local + cloud) and reset settings to defaults. Keeps: login, persona.',
-  dataClearTasksConfirm:
-    'You are about to permanently delete all conversations and messages, including the cloud backup (this propagates to every device you are signed in on).\n\nKept: login session, preferences, persona.\n\nThis cannot be undone. Continue?',
-  dataClearSettingsConfirm:
-    'Are you sure you want to reset all settings to defaults? This action cannot be undone.',
-  dataClearAllConfirm:
-    'Delete all conversations and messages (local + cloud), and reset all settings?\n\nKept: login session, persona.\n\nThis cannot be undone.',
-  dataConfirmTitle: 'Confirm',
-  dataConfirmClear: 'Yes, Clear',
-  dataCancel: 'Cancel',
-
   // About
-  aiPlatform: 'Desktop Universal Agent',
+  tagline: 'Your AI Assistant',
   version: 'Version',
   build: 'Build',
-  author: 'Author',
   copyright: 'Copyright',
   license: 'License',
-  website: 'Website',
-  viewSource: 'View Source',
-  joinCommunity: 'Join Community',
-  followUs: 'Follow Us',
-  reportIssue: 'Report Issue',
-  builtWith: 'Some components built with',
-  built: '',
-  downloadNewVersion: 'Upgrade',
 
   // Cron
   cronDescription: 'Manage scheduled Agent tasks that run automatically',

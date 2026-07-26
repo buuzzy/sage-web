@@ -14,7 +14,7 @@ import type {
   ProviderMetadata,
   ProvidersConfig,
 } from '@/shared/provider/types';
-import { DEFAULT_AGENT_PROVIDER } from '@/config/constants';
+import { DEFAULT_AGENT_PROVIDER, DEFAULT_SANDBOX_PROVIDER } from '@/config/constants';
 
 // ============================================================================
 // Provider Manager
@@ -397,10 +397,10 @@ class ProviderManagerImpl {
     // Load default configuration from environment if not set
     // Default to codex for isolated execution
     // Network packages will auto-switch to native provider for proxy support
-    if (!this.config.sandbox) {
-      const sandboxType = process.env.SANDBOX_PROVIDER || 'codex';
-      this.config.sandbox = { category: 'sandbox', type: sandboxType };
-    }
+   if (!this.config.sandbox) {
+     const sandboxType = process.env.SANDBOX_PROVIDER || DEFAULT_SANDBOX_PROVIDER;
+     this.config.sandbox = { category: 'sandbox', type: sandboxType };
+   }
 
     if (!this.config.agent) {
       const agentType = process.env.AGENT_PROVIDER || DEFAULT_AGENT_PROVIDER;

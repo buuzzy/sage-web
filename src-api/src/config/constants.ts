@@ -74,7 +74,7 @@ export const CONFIG_SEARCH_PATHS = [
 // ============================================================================
 
 /** Default sandbox provider type */
-export const DEFAULT_SANDBOX_PROVIDER = 'codex';
+export const DEFAULT_SANDBOX_PROVIDER = 'native';
 
 /** Default agent provider type */
 export const DEFAULT_AGENT_PROVIDER = 'codeany';

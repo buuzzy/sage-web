@@ -126,14 +126,14 @@ export default {
   connectionError: '连接失败: {error}',
 
   // Skills
-  skills: 'Skills',
+  skills: '技能',
   skillsInstalled: '已安装',
   skillsSettings: 'Skill 设置',
   skillsDescription: '管理智能体的能力和工具',
   skillsEnabled: '启用 Skills',
   skillsEnabledDescription: '在智能体对话时加载 Skills',
   skillsList: '技能',
-  skillsEmpty: '暂无 Skills',
+  skillsEmpty: '暂无技能',
   skillsAdd: '添加 Skill',
   skillsDelete: '删除',
   skillsName: 'Skill 名称',
@@ -259,64 +259,12 @@ export default {
   mcpAddEnvVariable: '添加环境变量',
   mcpCommandPlaceholder: '例如: python, node, ./script.sh',
   mcpSave: '保存',
-
-  // Data
-  data: '数据',
-  dataDescription: '管理本地存储路径、导出备份、恢复云端数据或清空数据。',
-  dataStorageSection: '存储',
-  dataBackupSection: '备份与恢复',
-  dataDangerSection: '危险区域',
-  dataExport: '导出数据',
-  dataExportDescription: '将所有会话、消息和设置导出为 JSON 文件，保存到本地。',
-  dataExportButton: '导出',
-  dataExporting: '导出中...',
-  dataCloudRestore: '恢复云端历史',
-  dataCloudRestoreDescription:
-    '从云端拉取所有会话记录到当前设备。适用于新设备登录或本地数据丢失后恢复。已有相同记录会被更新。',
-  dataCloudRestoreButton: '恢复',
-  dataCloudRestoring: '恢复中...',
-  dataCloudRestoreConfirm:
-    '将从云端恢复所有会话、任务、消息和文件到当前设备，已有相同 ID 的记录会被覆盖更新。确定继续吗？',
-  dataClear: '清空数据',
-  dataClearDescription: '永久删除数据，此操作无法撤销。',
-  dataClearButton: '清空',
-  dataClearing: '清空中...',
-  dataSuccess: '成功',
-  dataClearConfirmTitle: '清空数据',
-  dataClearConfirmDescription: '选择您要清空的数据：',
-  dataClearTasksOnly: '清空会话历史',
-  dataClearTasksOnlyDescription:
-    '删除本地和云端的所有对话与消息（影响所有已登录设备）。保留：登录态、设置偏好、用户画像。',
-  dataClearSettingsOnly: '仅清空配置',
-  dataClearSettingsOnlyDescription:
-    '重置所有本地设置（主题、模型、MCP 等）为默认值。保留：会话历史、登录态、用户画像。',
-  dataClearAll: '清空所有数据',
-  dataClearAllDescription:
-    '删除本地和云端的所有会话与消息，并重置设置为默认值。保留：登录态、用户画像。',
-  dataClearTasksConfirm:
-    '即将删除所有对话与消息，包括云端备份（影响所有已登录设备）。\n\n保留：登录态、设置偏好、用户画像。\n\n此操作无法撤销，确定继续吗？',
-  dataClearSettingsConfirm: '确定要将所有配置重置为默认值吗？此操作无法撤销。',
-  dataClearAllConfirm:
-    '确定要删除所有会话与消息（含云端），并重置设置为默认值吗？\n\n保留：登录态、用户画像。\n\n此操作无法撤销。',
-  dataConfirmTitle: '确认',
-  dataConfirmClear: '确定清空',
-  dataCancel: '取消',
-
   // About
-  aiPlatform: '桌面通用 Agent',
+  tagline: '智能 AI 助手',
   version: '版本',
   build: '构建',
-  author: '作者',
   copyright: '版权',
   license: '许可证',
-  website: '官网',
-  viewSource: '查看源码',
-  joinCommunity: '加入社区',
-  followUs: '关注我们',
-  reportIssue: '反馈问题',
-  builtWith: '部分组件使用',
-  built: '构建',
-  downloadNewVersion: '下载新版本',
 
   // Cron
   cronDescription: '管理定时自动执行的 Agent 任务',

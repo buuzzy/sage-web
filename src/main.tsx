@@ -12,7 +12,6 @@ import { AntdThemeProvider } from './shared/providers/antd-theme-provider';
 import { AuthProvider } from './shared/providers/auth-provider';
 import { LanguageProvider } from './shared/providers/language-provider';
 import { ThemeProvider } from './shared/providers/theme-provider';
-import { UpdateProvider } from './shared/providers/update-provider';
 import {
   flushErrorQueue,
   ProfileProvider,
@@ -36,11 +35,9 @@ function AppProviders() {
           <AuthProvider>
             <ProfileProvider>
               <SettingsSyncProvider>
-                <SessionSyncProvider>
-                  <UpdateProvider>
-                    <RouterProvider router={router} />
-                  </UpdateProvider>
-                </SessionSyncProvider>
+              <SessionSyncProvider>
+                <RouterProvider router={router} />
+              </SessionSyncProvider>
               </SettingsSyncProvider>
             </ProfileProvider>
           </AuthProvider>

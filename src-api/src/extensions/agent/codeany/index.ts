@@ -76,33 +76,6 @@ const logger = createLogger('CodeAnyAgent');
 //   • Token savings: ~5K tokens per intercepted query
 // ============================================================================
 
-/** (skill, action) → artifact component type */
-const ARTIFACT_TYPE_MAP: Record<string, Record<string, string>> = {
-  'westock-quote': {
-    'stock_quote_snapshot': 'quote-card',
-    'stock_quote_history': 'kline-chart',
-  },
-  'westock-market': {
-    'stock_search': 'text',
-    'hot_stock': 'data-table',
-    'hot_board': 'data-table',
-    'ipo_calendar': 'data-table',
-    'finance_calendar': 'data-table',
-    'watchlist_rank': 'data-table',
-  },
-  'westock-research': {
-    'stock_report': 'data-table',
-    'research_report_curated': 'data-table',
-    'announcement_list': 'data-table',
-    'announcement_content': 'text',
-    'market_news': 'news-list',
-  },
-  'westock-screener': {
-    'stock_filter_query': 'data-table',
-    'query_list_data_by_date': 'data-table',
-  },
-};
-
 /**
  * URL path → (skill, action) mapping for GET endpoints.
  * Order matters: first match wins. Patterns are tested with String.includes().
@@ -274,280 +247,6 @@ function detectFromResponseStructure(parsed: any): ToolOutputMetadata | null {
 
 // ---- Data transformation: API response → Component data format ------------
 
-/**
- * Transform raw API response data into the format expected by frontend components.
- *
- * Each artifact type has a specific data interface (QuoteCardData, KLineChartData, etc.)
- * that differs from the raw westock API response structure.
- * Returns null if the data cannot be transformed (caller should skip interception).
- */
-function transformForComponent(artifactType: string, meta: ToolOutputMetadata, parsed: any): any {
-  const data = parsed.data;
-  if (!data) return null;
-
-  try {
-    switch (artifactType) {
-      case 'quote-card': {
-        // API: { data: { stocks: [{ code, name, data: { ClosePrice, Change, ... } }] } }
-        // Component: { code, name, price, chgVal, chgPct, prevClose, open, high, low, vol, turnover, mktCap, currency, mkt }
-        const stocks = data.stocks;
-        if (!Array.isArray(stocks) || stocks.length === 0) return null;
-        const s = stocks[0];
-        const d = s.data || {};
-        const code: string = s.code || '';
-        // 按 westock 代码前缀推断市场和货币：us → 美股 USD，hk → 港股 HKD，
-        // 其余（sh/sz）默认 A 股 CNY。v1.4.0 用例 L 暴露：原写死 CN/CNY，
-        // 美股英伟达渲染出 currency=CNY/mkt=CN 的错误数据。
-        let mkt: string = 'CN';
-        let currency: string = 'CNY';
-        if (code.startsWith('us')) {
-          mkt = 'US';
-          currency = 'USD';
-        } else if (code.startsWith('hk')) {
-          mkt = 'HK';
-          currency = 'HKD';
-        }
-        return {
-          code,
-          name: s.name || '',
-          price: parseFloat(d.ClosePrice || d.LastestTradedPrice || '0'),
-          chgVal: parseFloat(d.Change || '0'),
-          chgPct: parseFloat(d.ChangeRatio || '0'),
-          prevClose: parseFloat(d.PrevClosePrice || '0'),
-          open: parseFloat(d.OpenPrice || '0'),
-          high: parseFloat(d.HighPrice || '0'),
-          low: parseFloat(d.LowPrice || '0'),
-          vol: parseInt(d.TurnoverVolume || '0', 10),
-          turnover: parseFloat(d.TurnoverAmount || '0'),
-          mktCap: parseFloat(d.TotalMV || '0'),
-          currency,
-          mkt,
-        };
-      }
-
-      case 'kline-chart': {
-        // API: { data: { code, name, series: [{ date, data: { OpenPrice, ClosePrice, ... } }] } }
-        // Component: { code, name, ktype, data: [{ time, open, close, high, low, vol }] }
-        if (!data.series || !Array.isArray(data.series)) return null;
-        return {
-          code: data.code || '',
-          name: data.name || '',
-          ktype: 'day',
-          data: data.series.map((point: any) => ({
-            time: point.date || '',
-            open: parseFloat(point.data?.OpenPrice || point.data?.FwdOpenPrice || '0'),
-            close: parseFloat(point.data?.ClosePrice || point.data?.FwdClosePrice || '0'),
-            high: parseFloat(point.data?.HighPrice || point.data?.FwdHighPrice || '0'),
-            low: parseFloat(point.data?.LowPrice || point.data?.FwdLowPrice || '0'),
-            vol: parseInt(point.data?.TurnoverVolume || '0', 10),
-            turnover: parseFloat(point.data?.TurnoverAmount || '0'),
-          })),
-        };
-      }
-
-      case 'data-table': {
-        // Various actions produce different structures. Try common patterns.
-        // Component: { title, columns: [{ key, label }], rows: [{ key: value }] }
-
-        // hot_stock: { data: { stocks: [{ code, name, zdf, zxj }] } }
-        if (meta.action === 'hot_stock' && data.stocks) {
-          return {
-            title: '热搜股票',
-            columns: [
-              { key: 'code', label: '代码' },
-              { key: 'name', label: '名称' },
-              { key: 'zxj', label: '最新价' },
-              { key: 'zdf', label: '涨跌幅' },
-            ],
-            rows: data.stocks.map((s: any) => ({
-              code: s.code || '',
-              name: s.name || '',
-              zxj: s.zxj || '',
-              zdf: s.zdf || '',
-            })),
-          };
-        }
-
-        // hot_board: { data: { rank: { plate: [...] } } }
-        if (meta.action === 'hot_board' && data.rank?.plate) {
-          return {
-            title: '板块排行',
-            columns: [
-              { key: 'name', label: '板块' },
-              { key: 'zdf', label: '涨跌幅' },
-              { key: 'leader', label: '领涨股' },
-              { key: 'leaderZdf', label: '领涨幅' },
-            ],
-            rows: data.rank.plate.map((b: any) => ({
-              name: b.bd_name || '',
-              zdf: b.bd_zdf ? `${b.bd_zdf}%` : '',
-              leader: b.nzg_name || '',
-              leaderZdf: b.nzg_zdf ? `${b.nzg_zdf}%` : '',
-            })),
-          };
-        }
-
-        // stock_filter_query: { data: { component_data: { data: { columns, stocks } } } }
-        if (meta.action === 'stock_filter_query' && data.component_data) {
-          const cd = data.component_data;
-          const cols = cd.data?.columns || [];
-          const stocks = cd.data?.stocks || [];
-          return {
-            title: cd.selection_desc || '筛选结果',
-            columns: [
-              { key: 'code', label: '代码' },
-              { key: 'name', label: '名称' },
-              ...cols.map((c: any, i: number) => ({ key: `col_${i}`, label: c.display_name || '' })),
-            ],
-            rows: stocks.map((s: any) => {
-              const row: Record<string, string> = { code: s.code || '', name: s.name || '' };
-              (s.condition_values || []).forEach((v: any, i: number) => {
-                row[`col_${i}`] = v.disp || '';
-              });
-              return row;
-            }),
-          };
-        }
-
-        // ipo_calendar: { data: { ipoList: [...] } }
-        if (meta.action === 'ipo_calendar' && data.ipoList) {
-          return {
-            title: '新股日历',
-            columns: [
-              { key: 'name', label: '名称' },
-              { key: 'symbol', label: '代码' },
-              { key: 'price', label: '发行价' },
-              { key: 'ssrq', label: '上市日期' },
-            ],
-            rows: data.ipoList.map((item: any) => ({
-              name: item.name || '',
-              symbol: item.symbol || '',
-              price: item.price || '',
-              ssrq: item.ssrq || '',
-            })),
-          };
-        }
-
-        // stock_report: { data: { reports: [...] } }
-        if (meta.action === 'stock_report' && data.reports) {
-          return {
-            title: '个股研报',
-            columns: [
-              { key: 'title', label: '标题' },
-              { key: 'src', label: '机构' },
-              { key: 'tzpj', label: '评级' },
-              { key: 'time', label: '日期' },
-            ],
-            rows: data.reports.map((r: any) => ({
-              title: r.title || '',
-              src: r.src || '',
-              tzpj: r.tzpj || '',
-              time: r.time || '',
-            })),
-          };
-        }
-
-        // research_report_curated: { data: { items: [...] } }
-        if (meta.action === 'research_report_curated' && data.items) {
-          return {
-            title: '精选研报',
-            columns: [
-              { key: 'title', label: '标题' },
-              { key: 'preview', label: '摘要' },
-            ],
-            rows: data.items.map((item: any) => ({
-              title: item.title || '',
-              preview: (item.preview || '').slice(0, 100),
-            })),
-          };
-        }
-
-        // announcement_list: { data: { data: [...] } } or { data: { notices: [...] } }
-        if (meta.action === 'announcement_list') {
-          const list = data.data || data.notices || [];
-          return {
-            title: '公告列表',
-            columns: [
-              { key: 'title', label: '标题' },
-              { key: 'time', label: '日期' },
-            ],
-            rows: (Array.isArray(list) ? list : []).map((item: any) => ({
-              title: item.title || '',
-              time: item.time || '',
-            })),
-          };
-        }
-
-        // finance_calendar: { data: [{ list: [...] }] }
-        if (meta.action === 'finance_calendar' && Array.isArray(data)) {
-          const items = data.flatMap((d: any) => d.list || []);
-          return {
-            title: '投资日历',
-            columns: [
-              { key: 'time', label: '时间' },
-              { key: 'event', label: '事件' },
-              { key: 'country', label: '国家' },
-              { key: 'prev', label: '前值' },
-              { key: 'predict', label: '预期' },
-              { key: 'actual', label: '实际' },
-            ],
-            rows: items.map((item: any) => ({
-              time: item.time || '',
-              event: item.FinancialEvent || '',
-              country: item.CountryName || '',
-              prev: item.Previous || '',
-              predict: item.Predict || '',
-              actual: item.CurrentValue || '',
-            })),
-          };
-        }
-
-        // query_list_data_by_date: { data: { data: { <code>: { list_data: "json string" } } } }
-        if (meta.action === 'query_list_data_by_date' && data.data) {
-          const keys = Object.keys(data.data);
-          if (keys.length === 0) return null;
-          const firstKey = keys[0];
-          const listDataStr = data.data[firstKey]?.list_data;
-          if (!listDataStr) return null;
-          try {
-            const rows = JSON.parse(listDataStr);
-            if (!Array.isArray(rows) || rows.length === 0) return null;
-            const columns = Object.keys(rows[0]).map(k => ({ key: k, label: k }));
-            return { title: firstKey, columns, rows };
-          } catch { return null; }
-        }
-
-        // Generic fallback: pass through (may not render correctly)
-        return data;
-      }
-
-      case 'news-list': {
-        // market_news: { data: { total_num, data: [{ title, src, time, summary }] } }
-        // Component: { items: [{ newId, title, summary, tags, publishTime }], total, hasMore }
-        const newsList = data.data || [];
-        if (!Array.isArray(newsList)) return null;
-        return {
-          items: newsList.map((item: any, i: number) => ({
-            newId: item.id || `news_${i}`,
-            title: item.title || '',
-            summary: item.summary || '',
-            tags: item.title_mention ? item.title_mention.split(',') : [],
-            publishTime: item.time || '',
-          })),
-          total: data.total_num || newsList.length,
-          hasMore: (data.total_num || 0) > newsList.length,
-        };
-      }
-
-      default:
-        // Unknown artifact type — pass data through as-is
-        return data;
-    }
-  } catch (err) {
-    logger.warn(`[transformForComponent] Failed to transform ${artifactType}/${meta.action}:`, err);
-    return null;
-  }
-}
 
 // ---- Main interception function -------------------------------------------
 
@@ -583,8 +282,42 @@ function interceptToolOutput(
   // Skip error responses — only intercept successful API calls
   if (parsed.code !== undefined && parsed.code !== 0 && !parsed.data) return null;
 
+  // Unwrap cli.py output wrapper
+  if (parsed.success !== undefined && parsed.data && typeof parsed.data === 'object') {
+    parsed = parsed.data;
+  }
+
   // Layer 1: Detect from Bash command URL/route patterns
   let meta = detectFromCommand(command);
+
+  // Layer 1c: Detect from cli.py invocations
+  if (!meta) {
+    const cliSkillMatch = command.match(/skills\/([^/]+)\/scripts\/cli\.py/);
+    const cliRouteMatch = command.match(/--route\s+(\S+)/);
+    if (cliSkillMatch && cliRouteMatch) {
+      const skillName = cliSkillMatch[1];
+      const routeName = cliRouteMatch[1];
+      const cliRouteMap: Record<string, string> = {
+        'snapshot': 'stock_quote_snapshot',
+        'history': 'stock_quote_history',
+        'minute': 'minute_quote',
+        'hot-stocks': 'hot_stock',
+        'hot-boards': 'hot_board',
+        'ipo': 'ipo_calendar',
+        'calendar': 'finance_calendar',
+        'search': 'stock_search',
+        'watchlist': 'watchlist_rank',
+        'reports': 'stock_report',
+        'report-list': 'research_report_curated',
+        'notices': 'announcement_list',
+        'notice-content': 'announcement_content',
+        'news': 'market_news',
+        'filter': 'stock_filter_query',
+        'list': 'query_list_data_by_date',
+      };
+      meta = { skill: skillName, action: cliRouteMap[routeName] || routeName };
+    }
+  }
 
   // Layer 2: Fallback to response structure detection
   if (!meta) {
@@ -601,28 +334,12 @@ function interceptToolOutput(
   }
 
   if (!meta) return null;
-
-  // Look up artifact type
-  const skillMap = ARTIFACT_TYPE_MAP[meta.skill];
-  if (!skillMap) return null;
-  const artifactType = skillMap[meta.action];
-  if (!artifactType || artifactType === 'text') return null;
-
-  // Transform API response into the format expected by frontend components.
-  // Each component type has its own data interface (QuoteCardData, KLineChartData, etc.)
-  // that differs from the raw API response structure.
-  const componentData = transformForComponent(artifactType, meta, parsed);
-  if (!componentData) return null;
-
-  // Build the artifact block in the same format the LLM would output
-  const artifactBlock = '```artifact:' + artifactType + '\n' + JSON.stringify(componentData, null, 2) + '\n```';
-
   // Generate a concise summary for the LLM
   const summary = generateSummary(meta, parsed);
 
-  logger.info(`[interceptToolOutput] Intercepted ${meta.skill}/${meta.action} → ${artifactType} (summary: ${summary.length} chars, original: ${output.length} chars, detection: ${detectFromCommand(command) ? 'url' : 'structure'})`);
+  logger.info(`[interceptToolOutput] Intercepted ${meta.skill}/${meta.action} (summary: ${summary.length} chars, original: ${output.length} chars, detection: ${detectFromCommand(command) ? 'url' : 'structure'})`);
 
-  return { metadata: meta, artifactBlock, summary };
+  return { metadata: meta, summary };
 }
 
 // ---- Summary generation ---------------------------------------------------
@@ -638,33 +355,38 @@ function generateSummary(meta: ToolOutputMetadata, parsed: any): string {
       if (meta.action === 'stock_quote_snapshot' && data?.stocks?.length > 0) {
         const s = data.stocks[0];
         const d = s.data || {};
-        return `[数据已获取] ${s.name || ''}(${s.code || ''}) 最新价${d.ClosePrice || d.LastestTradedPrice || '—'} 涨跌${d.Change || '—'}(${d.ChangeRatio || '—'}%) 昨收${d.PrevClosePrice || '—'} 开${d.OpenPrice || '—'} 高${d.HighPrice || '—'} 低${d.LowPrice || '—'}。报价卡片已自动渲染，请基于上述数据撰写分析，不要输出artifact块。`;
+        return `[数据已获取] ${s.name || ''}(${s.code || ''}) 最新价${d.ClosePrice || d.LastestTradedPrice || '—'} 涨跌${d.Change || '—'}(${d.ChangeRatio || '—'}%) 昨收${d.PrevClosePrice || '—'} 开${d.OpenPrice || '—'} 高${d.HighPrice || '—'} 低${d.LowPrice || '—'}。请基于上述数据用 canvas:html 输出可视化画布（使用 echarts 绘制图表），并撰写分析。`;
       }
-      if (meta.action === 'stock_quote_history' && data?.series?.length > 0) {
-        const series = data.series;
-        const first = series[0];
-        const last = series[series.length - 1];
-        return `[数据已获取] ${data.name || ''}(${data.code || ''}) K线${series.length}天 ${first.date}~${last.date} 首日收${first.data?.ClosePrice || '—'} 末日收${last.data?.ClosePrice || '—'}。K线图已自动渲染，请基于上述数据撰写分析，不要输出artifact块。`;
-      }
+     if (meta.action === 'stock_quote_history' && data?.series?.length > 0) {
+       const series = data.series;
+       const first = series[0];
+       const last = series[series.length - 1];
+        // Include compact OHLCV data so the LLM can render a proper chart.
+        const ohlcv = series.slice(-60).map((s: any) => {
+          const d = s.data || {};
+          return `${s.date},${d.OpenPrice ?? ''},${d.HighPrice ?? ''},${d.LowPrice ?? ''},${d.ClosePrice ?? ''},${d.Volume ?? ''}`;
+        }).join('\n');
+        return `[数据已获取] ${data.name || ''}(${data.code || ''}) K线${series.length}天 ${first.date}~${last.date} 首日收${first.data?.ClosePrice || '—'} 末日收${last.data?.ClosePrice || '—'}。\nOHLCV数据(日期,开盘,最高,最低,收盘,成交量):\n${ohlcv}\n请基于上述数据用 canvas:html 输出 K线图（使用 echarts candlestick 系列），并撰写分析。`;
+     }
     }
 
     if (meta.skill === 'westock-market') {
       if (meta.action === 'hot_stock') {
         const stocks = data?.stocks || [];
         const top3 = Array.isArray(stocks) ? stocks.slice(0, 3).map((s: any) => `${s.name}(${s.zdf})`).join('、') : '';
-        return `[数据已获取] 热搜股票${Array.isArray(stocks) ? stocks.length : 0}只${top3 ? '，前3：' + top3 : ''}。数据表已自动渲染，请基于数据撰写分析，不要输出artifact块。`;
+        return `[数据已获取] 热搜股票${Array.isArray(stocks) ? stocks.length : 0}只${top3 ? '，前3：' + top3 : ''}。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
       }
       if (meta.action === 'hot_board') {
-        return `[数据已获取] 板块排行数据已获取。数据表已自动渲染，请基于数据撰写分析，不要输出artifact块。`;
+        return `[数据已获取] 板块排行数据已获取。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
       }
       if (meta.action === 'ipo_calendar') {
         const list = data?.ipoList || [];
-        return `[数据已获取] 新股日历${Array.isArray(list) ? list.length : 0}条。数据表已自动渲染，请撰写分析，不要输出artifact块。`;
+        return `[数据已获取] 新股日历${Array.isArray(list) ? list.length : 0}条。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
       }
       if (meta.action === 'finance_calendar') {
-        return `[数据已获取] 投资日历数据已获取。数据表已自动渲染，请撰写分析，不要输出artifact块。`;
+        return `[数据已获取] 投资日历数据已获取。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
       }
-      return `[数据已获取] 市场数据已获取。数据表已自动渲染，请撰写分析，不要输出artifact块。`;
+      return `[数据已获取] 市场数据已获取。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
     }
 
     if (meta.skill === 'westock-research') {
@@ -672,41 +394,41 @@ function generateSummary(meta: ToolOutputMetadata, parsed: any): string {
         const news = data?.data || [];
         const count = Array.isArray(news) ? news.length : 0;
         const top = Array.isArray(news) && news.length > 0 ? `，最新：${news[0].title?.slice(0, 30)}` : '';
-        return `[数据已获取] ${count}条新闻${top}。新闻列表已自动渲染，请撰写分析，不要输出artifact块。`;
+        return `[数据已获取] ${count}条新闻${top}。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
       }
       if (meta.action === 'stock_report') {
         const reports = data?.reports || [];
-        return `[数据已获取] ${Array.isArray(reports) ? reports.length : 0}条研报。数据表已自动渲染，请撰写分析，不要输出artifact块。`;
+        return `[数据已获取] ${Array.isArray(reports) ? reports.length : 0}条研报。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
       }
       if (meta.action === 'research_report_curated') {
         const items = data?.items || [];
-        return `[数据已获取] ${Array.isArray(items) ? items.length : 0}条精选研报。数据表已自动渲染，请撰写分析，不要输出artifact块。`;
+        return `[数据已获取] ${Array.isArray(items) ? items.length : 0}条精选研报。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
       }
       if (meta.action === 'announcement_list') {
         const list = data?.data || [];
-        return `[数据已获取] ${Array.isArray(list) ? list.length : 0}条公告。数据表已自动渲染，请撰写分析，不要输出artifact块。`;
+        return `[数据已获取] ${Array.isArray(list) ? list.length : 0}条公告。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
       }
-      return `[数据已获取] 研报/公告数据已获取。组件已自动渲染，请撰写分析，不要输出artifact块。`;
+      return `[数据已获取] 研报/公告数据已获取。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
     }
 
     if (meta.skill === 'westock-screener') {
       if (meta.action === 'stock_filter_query') {
         const total = data?.component_data?.total_stocks || 0;
         const desc = data?.component_data?.selection_desc || '';
-        return `[数据已获取] 筛选结果${total}只股票${desc ? '。' + desc : ''}。数据表已自动渲染，请撰写分析，不要输出artifact块。`;
+        return `[数据已获取] 筛选结果${total}只股票${desc ? '。' + desc : ''}。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
       }
       if (meta.action === 'query_list_data_by_date') {
         const keys = data?.data ? Object.keys(data.data) : [];
-        return `[数据已获取] 列表数据(${keys.join(', ')})已获取。组件已自动渲染，请撰写分析，不要输出artifact块。`;
+        return `[数据已获取] 列表数据(${keys.join(', ')})已获取。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
       }
-      return `[数据已获取] 列表数据已获取。组件已自动渲染，请撰写分析，不要输出artifact块。`;
+      return `[数据已获取] 列表数据已获取。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
     }
   } catch {
     // Fall through to generic summary
   }
 
   // Generic fallback
-  return `[数据已获取] ${meta.skill}/${meta.action} 数据已获取。组件已自动渲染，请撰写分析，不要输出artifact块。`;
+  return `[数据已获取] ${meta.skill}/${meta.action} 数据已获取。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
 }
 
 // Sandbox API URL
@@ -750,7 +472,7 @@ function generateFallbackSlug(prompt: string, taskId: string): string {
 }
 
 function isArtifactBlock(text: string): boolean {
-  return text.trim().startsWith('```artifact:');
+  return text.trim().startsWith('```artifact:') || text.trim().startsWith('```canvas:html');
 }
 
 function getSessionWorkDir(
@@ -851,12 +573,6 @@ const ALLOWED_TOOLS = [
 
 export class CodeAnyAgent extends BaseAgent {
   readonly provider: AgentProvider = 'codeany';
-
-  /**
-   * Queue of artifact blocks intercepted from tool outputs.
-   * Drained in processMessage() and yielded as text messages to the frontend.
-   */
-  private pendingArtifacts: string[] = [];
 
   constructor(config: AgentConfig) {
     super(config);
@@ -979,8 +695,6 @@ export class CodeAnyAgent extends BaseAgent {
       ...((sdkOpts as any).hooks || {}),
       PostToolUse: [
         createToolOutputInterceptorHook({
-          queueArtifact: (artifactBlock) =>
-            this.pendingArtifacts.push(artifactBlock),
           intercept: interceptToolOutput,
         }),
       ],
@@ -1109,9 +823,9 @@ export class CodeAnyAgent extends BaseAgent {
         if ('text' in block) {
           const sanitizedText = this.sanitizeText(block.text as string);
           const textHash = sanitizedText.slice(0, 100);
-          if (sanitizedText.trim() && !sentTextHashes.has(textHash)) {
-            sentTextHashes.add(textHash);
-            yield { type: 'text', content: sanitizedText };
+         if (sanitizedText.trim() && !sentTextHashes.has(textHash)) {
+           sentTextHashes.add(textHash);
+           yield { type: 'text', content: sanitizedText };
           }
         } else if ('name' in block && 'id' in block) {
           const toolId = block.id as string;
@@ -1133,14 +847,6 @@ export class CodeAnyAgent extends BaseAgent {
         output,
         isError,
       };
-
-      // Flush any artifact blocks queued by the PostToolUse hook.
-      // These are yielded as text messages so the frontend's artifactParser
-      // extracts and renders them — identical to LLM-generated artifact blocks.
-      while (this.pendingArtifacts.length > 0) {
-        const artifactBlock = this.pendingArtifacts.shift()!;
-        yield { type: 'text', content: artifactBlock };
-      }
     }
 
     if (msg.type === 'result') {

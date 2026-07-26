@@ -14,7 +14,6 @@ import { useLanguage } from '@/shared/providers/language-provider';
 import { useTheme } from '@/shared/providers/theme-provider';
 import {
   Brain,
-  CalendarClock,
   ChevronLeft,
   ChevronRight,
   Eye,
@@ -27,8 +26,6 @@ import {
   X,
 } from 'lucide-react';
 
-import { CronSettings } from '@/components/settings/tabs/CronSettings';
-import { MCPSettings } from '@/components/settings/tabs/MCPSettings';
 import { PersonaSettings } from '@/components/settings/tabs/PersonaSettings';
 import { SkillsSettings } from '@/components/settings/tabs/SkillsSettings';
 
@@ -36,7 +33,7 @@ interface MobileSettingsProps {
   onClose: () => void;
 }
 
-type MobileSettingsPanel = 'skills' | 'mcp' | 'cron' | 'persona';
+type MobileSettingsPanel = 'skills' | 'persona';
 
 export function MobileSettings({ onClose }: MobileSettingsProps) {
   const [settings, setSettings] = useState(getSettings());
@@ -253,24 +250,12 @@ export function MobileSettings({ onClose }: MobileSettingsProps) {
           </h2>
           <div className="border-border divide-border divide-y rounded-xl border">
             <SettingsNavItem
-              icon={<Layers className="size-4" />}
-              title="Skills"
-              subtitle="官方默认技能与用户启用状态"
-              onClick={() => setActivePanel('skills')}
-            />
-            <SettingsNavItem
-              icon={<Network className="size-4" />}
-              title="MCP"
-              subtitle="内置记忆 MCP 与用户服务器"
-              onClick={() => setActivePanel('mcp')}
-            />
-            <SettingsNavItem
-              icon={<CalendarClock className="size-4" />}
-              title="Cron Job"
-              subtitle="云端定时任务"
-              onClick={() => setActivePanel('cron')}
-            />
-            <SettingsNavItem
+             icon={<Layers className="size-4" />}
+             title="Skills"
+             subtitle="官方默认技能与用户启用状态"
+            onClick={() => setActivePanel('skills')}
+          />
+          <SettingsNavItem
               icon={<Brain className="size-4" />}
               title="画像"
               subtitle="跨设备共享的用户画像"
@@ -356,11 +341,7 @@ function MobileSettingsPanelView({
   const title =
     panel === 'skills'
       ? 'Skills'
-      : panel === 'mcp'
-        ? 'MCP'
-        : panel === 'cron'
-          ? 'Cron Job'
-          : '画像';
+      : '画像';
 
   return (
     <div className="bg-background flex h-full flex-col">
@@ -376,19 +357,9 @@ function MobileSettingsPanelView({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-(--safe-area-bottom)">
-        {panel === 'skills' && (
-          <SkillsSettings
-            settings={settings}
-            onSettingsChange={onSettingsChange}
-          />
-        )}
-        {panel === 'mcp' && (
-          <MCPSettings
-            settings={settings}
-            onSettingsChange={onSettingsChange}
-          />
-        )}
-        {panel === 'cron' && <CronSettings />}
+      {panel === 'skills' && (
+         <SkillsSettings />
+       )}
         {panel === 'persona' && <PersonaSettings />}
       </div>
     </div>

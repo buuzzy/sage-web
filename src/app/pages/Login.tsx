@@ -99,11 +99,11 @@ export function LoginPage() {
         {/* Logo + Brand */}
         <div className="mb-10 flex flex-col items-center gap-4">
           <div className="rounded-2xl bg-gradient-to-b from-white to-gray-50 p-3 shadow-sm ring-1 ring-black/5 dark:from-gray-800 dark:to-gray-900 dark:ring-white/10">
-            <img
+           <img
               src="/logo.png"
-              alt="Sage"
-              className="size-20 rounded-xl object-contain"
-            />
+             alt="Sage"
+             className="size-20 rounded-xl object-contain"
+           />
           </div>
           <div className="text-center">
             <h1 className="text-foreground font-serif text-3xl font-normal tracking-tight">

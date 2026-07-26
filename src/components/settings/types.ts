@@ -10,11 +10,9 @@ export type SettingsCategory =
   | 'account'
   | 'general'
   | 'model'
-  | 'mcp'
   | 'skills'
   | 'cron'
   | 'persona'
-  | 'data'
   | 'about';
 
 // Common props for settings tabs

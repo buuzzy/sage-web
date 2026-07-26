@@ -1062,36 +1062,3 @@ export async function isSetupCompleted(): Promise<boolean> {
   const value = await getSettingItem('setupCompleted');
   return value === 'true';
 }
-
-/**
- * Clear all settings and reset to defaults
- */
-export async function clearAllSettings(): Promise<void> {
-  const database = await getDatabase();
-
-  if (database) {
-    try {
-      await database.execute('DELETE FROM settings');
-    } catch (error) {
-      console.error(
-        '[Settings] Failed to clear settings from database:',
-        error
-      );
-    }
-  }
-
-  // Clear localStorage
-  try {
-    const keys = Object.keys(localStorage);
-    for (const key of keys) {
-      if (key.startsWith('sage') || key.startsWith('workany')) {
-        localStorage.removeItem(key);
-      }
-    }
-  } catch (error) {
-    console.error('[Settings] Failed to clear localStorage:', error);
-  }
-
-  // Reset cache
-  settingsCache = null;
-}

@@ -11,29 +11,22 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   deleteTask,
   getAllTasks,
-  getFilesByTaskId,
   getSettings,
   updateTask,
-  type LibraryFile,
   type Task,
 } from '@/shared/db';
 import { useAgent, type MessageAttachment } from '@/shared/hooks/useAgent';
-import { useVitePreview } from '@/shared/hooks/useVitePreview';
+import { extractAllCanvases } from '@/shared/lib/canvasExtract';
 import { estimateConversationContextTokens } from '@/shared/lib/context-usage';
 import { isMobile } from '@/shared/lib/platform';
 import { cn } from '@/shared/lib/utils';
 import { useLanguage } from '@/shared/providers/language-provider';
 import { ArrowDown, PanelLeft, Pencil } from 'lucide-react';
 
-import {
-  ArtifactPreview,
-  hasValidSearchResults,
-  type Artifact,
-} from '@/components/artifacts';
+import { CanvasPanel } from '@/components/canvas/CanvasPanel';
 import { LeftSidebar, SidebarProvider, useSidebar } from '@/components/layout';
 import { ChatInput, type ChatMode } from '@/components/shared/ChatInput';
 import { QuestionInput } from '@/components/task/QuestionInput';
-import { RightSidebar } from '@/components/task/RightSidebar';
 import {
   Dialog,
   DialogContent,
@@ -107,10 +100,8 @@ function TaskDetailContent() {
     plan: _plan,
     approvePlan,
     rejectPlan,
-    pendingQuestion,
-    respondToQuestion,
-    sessionFolder,
-    filesVersion,
+   pendingQuestion,
+   respondToQuestion,
     backgroundTasks,
     generatedTitle,
   } = useAgent();
@@ -174,7 +165,7 @@ function TaskDetailContent() {
     const model = settings?.defaultModel;
     return estimateContextWindow(model);
   }
-  const { toggleLeft, setLeftOpen } = useSidebar();
+  const { toggleLeft } = useSidebar();
   const [hasStarted, setHasStarted] = useState(false);
   const isInitializingRef = useRef(false); // Prevent double initialization in Strict Mode
   const [task, setTask] = useState<Task | null>(null);
@@ -182,137 +173,58 @@ function TaskDetailContent() {
   const [isLoading, setIsLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const prevTaskIdRef = useRef<string | undefined>(undefined);
+ const prevTaskIdRef = useRef<string | undefined>(undefined);
 
-  // Panel visibility state - default to collapsed, auto-expand when content is available
-  const [isRightSidebarVisible, setIsRightSidebarVisible] = useState(false);
-  const [isPreviewVisible, setIsPreviewVisible] = useState(false);
+  // Canvas panel state
+  const [isCanvasVisible, setIsCanvasVisible] = useState(false);
+  const [canvasWidth, setCanvasWidth] = useState(() => {
+    const saved = localStorage.getItem('canvasWidth');
+    return saved ? parseInt(saved, 10) : 460;
+  });
+
+  // Extract all canvases (typed artifacts + free HTML) from messages
+  const canvases = useMemo(() => extractAllCanvases(messages), [messages]);
 
   // Scroll to bottom button state
   const [showScrollButton, setShowScrollButton] = useState(false);
-  // Track if user has manually scrolled up (to disable auto-scroll)
   const userScrolledUpRef = useRef(false);
-  // Track last scroll position to detect scroll direction
   const lastScrollTopRef = useRef(0);
-
-  // Auto-collapse left sidebar only when preview panel opens
-  useEffect(() => {
-    if (isPreviewVisible) {
-      setLeftOpen(false);
-    }
-  }, [isPreviewVisible, setLeftOpen]);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Artifact state
-  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(
-    null
-  );
-
-  // Working directory state - use sessionFolder (show full session directory tree)
-  // Only depend on sessionFolder and artifacts, not messages (to avoid frequent recalculations)
-  const workingDir = useMemo(() => {
-    // Use sessionFolder from useAgent if available
-    if (sessionFolder) {
-      return sessionFolder;
-    }
-
-    // Try to extract session directory from artifact paths
-    for (const artifact of artifacts) {
-      if (artifact.path && artifact.path.includes('/sessions/')) {
-        const sessionMatch = artifact.path.match(/^(.+\/sessions\/[^/]+)/);
-        if (sessionMatch) {
-          return sessionMatch[1];
-        }
-      }
-    }
-
-    return '';
-  }, [sessionFolder, artifacts]);
-
-  // Track if sidebar has been auto-expanded (to avoid re-opening after manual close)
   const hasAutoExpandedRef = useRef(false);
 
-  // Reset right sidebar state when switching tasks
+  // Reset canvas state when switching tasks
   useEffect(() => {
     if (taskId !== prevTaskIdRef.current) {
-      // Reset auto-expand flag for new task
       hasAutoExpandedRef.current = false;
-      // Close right sidebar when switching to a new task
-      setIsRightSidebarVisible(false);
-      // Set loading to true immediately to prevent auto-expand effect
-      // from using stale data from the previous task
+      setIsCanvasVisible(false);
       setIsLoading(true);
     }
   }, [taskId]);
 
-  // Auto-expand right sidebar when there is actual content (only once)
-  // Content includes: artifacts, working files, MCP tools, or skills
+  // Auto-expand canvas panel when canvases become available (once per task)
   useEffect(() => {
-    // Skip if still loading - wait for task data to be ready
     if (isLoading) return;
-
-    // Skip if task data not loaded yet or task doesn't match current taskId
-    // This prevents using stale data from the previous task during task switching
     if (!task || task.id !== taskId) return;
-
-    // Skip if already auto-expanded
     if (hasAutoExpandedRef.current) return;
 
-    // Check if there's actual content to display
-    const hasArtifacts = artifacts.length > 0;
-    const hasWorkspace = !!workingDir;
-    const hasFileOps = messages.some(
-      (m) =>
-        m.type === 'tool_use' &&
-        ['Read', 'Write', 'Edit', 'Bash', 'Glob'].includes(m.name || '')
-    );
-    const hasMcpTools = messages.some(
-      (m) => m.type === 'tool_use' && m.name?.startsWith('mcp__')
-    );
-    const hasSkills = messages.some(
-      (m) => m.type === 'tool_use' && m.name === 'Skill'
-    );
-
-    const hasContent =
-      hasArtifacts || (hasWorkspace && hasFileOps) || hasMcpTools || hasSkills;
-
-    // Auto-expand when content becomes available (only once)
-    if (hasContent) {
-      setIsRightSidebarVisible(true);
+    if (canvases.length > 0) {
+      setIsCanvasVisible(true);
       hasAutoExpandedRef.current = true;
     }
-    // If no content, ensure sidebar stays collapsed (don't auto-expand)
-    // The sidebar starts collapsed by default and should stay that way for empty sessions
-  }, [artifacts.length, messages, workingDir, isLoading, task, taskId]);
+  }, [canvases.length, isLoading, task, taskId]);
 
-  // Live preview state
-  const {
-    previewUrl: livePreviewUrl,
-    status: livePreviewStatus,
-    error: livePreviewError,
-    startPreview,
-    stopPreview,
-  } = useVitePreview(taskId || null);
+  // Persist canvas width to localStorage
+  useEffect(() => {
+    localStorage.setItem('canvasWidth', String(canvasWidth));
+  }, [canvasWidth]);
 
-  // Handle starting live preview
-  const handleStartLivePreview = useCallback(() => {
-    if (workingDir) {
-      console.log(
-        '[TaskDetail] Starting live preview with workingDir:',
-        workingDir
-      );
-      startPreview(workingDir);
-    } else {
-      console.warn('[TaskDetail] Cannot start live preview: no workingDir');
-    }
-  }, [workingDir, startPreview]);
-
-  // Handle stopping live preview
-  const handleStopLivePreview = useCallback(() => {
-    console.log('[TaskDetail] Stopping live preview');
-    stopPreview();
-  }, [stopPreview]);
+  // Handle resize drag — positive delta widens the canvas panel
+  const handleCanvasResize = useCallback((delta: number) => {
+    setCanvasWidth((prev) => {
+      const maxW = Math.min(800, window.innerWidth * 0.6);
+      return Math.max(320, Math.min(maxW, prev + delta));
+    });
+ }, []);
 
   // Tool search
   const [toolSearchQuery] = useState('');
@@ -342,20 +254,8 @@ function TaskDetailContent() {
     } catch (error) {
       console.error('Failed to rename task:', error);
     }
-    setRenameDialogOpen(false);
-  }, [taskId, renameValue]);
-
-  // Handle artifact selection - opens preview
-  const handleSelectArtifact = useCallback((artifact: Artifact) => {
-    setSelectedArtifact(artifact);
-    setIsPreviewVisible(true);
-  }, []);
-
-  // Handle closing preview
-  const handleClosePreview = useCallback(() => {
-    setIsPreviewVisible(false);
-    setSelectedArtifact(null);
-  }, []);
+   setRenameDialogOpen(false);
+ }, [taskId, renameValue]);
 
   // Selected tool operation index for syncing with virtual computer
   const [selectedToolIndex, setSelectedToolIndex] = useState<number | null>(
@@ -383,223 +283,6 @@ function TaskDetailContent() {
     }),
     [selectedToolIndex]
   );
-
-  // Helper to convert file type from LibraryFile to Artifact type
-  const convertFileType = (fileType: string): Artifact['type'] => {
-    switch (fileType) {
-      case 'presentation':
-        return 'presentation';
-      case 'spreadsheet':
-        return 'spreadsheet';
-      case 'document':
-        return 'document';
-      case 'image':
-        return 'image';
-      case 'code':
-        return 'code';
-      case 'website':
-        return 'html';
-      case 'websearch':
-        return 'websearch';
-      default:
-        return 'text';
-    }
-  };
-
-  // Helper to get artifact type from file extension
-  const getArtifactTypeFromExt = (
-    ext: string | undefined
-  ): Artifact['type'] => {
-    if (!ext) return 'text';
-    if (ext === 'html' || ext === 'htm') return 'html';
-    if (ext === 'jsx' || ext === 'tsx') return 'jsx';
-    if (ext === 'css' || ext === 'scss' || ext === 'less') return 'css';
-    if (ext === 'json') return 'json';
-    if (ext === 'md' || ext === 'markdown') return 'markdown';
-    if (ext === 'csv') return 'csv';
-    if (ext === 'pdf') return 'pdf';
-    if (ext === 'doc' || ext === 'docx') return 'document';
-    if (ext === 'xls' || ext === 'xlsx') return 'spreadsheet';
-    if (ext === 'ppt' || ext === 'pptx') return 'presentation';
-    if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp'].includes(ext))
-      return 'image';
-    if (
-      [
-        'js',
-        'ts',
-        'py',
-        'rs',
-        'go',
-        'java',
-        'c',
-        'cpp',
-        'h',
-        'hpp',
-        'rb',
-        'php',
-        'swift',
-        'kt',
-        'sh',
-        'bash',
-        'sql',
-        'yaml',
-        'yml',
-        'xml',
-        'toml',
-      ].includes(ext)
-    )
-      return 'code';
-    return 'text';
-  };
-
-  // Extract artifacts from messages AND load from database
-  useEffect(() => {
-    const loadArtifacts = async () => {
-      const extractedArtifacts: Artifact[] = [];
-      const seenPaths = new Set<string>();
-
-      // 1. Extract from Write tool messages (in-memory content)
-      messages.forEach((msg) => {
-        if (msg.type === 'tool_use' && msg.name === 'Write') {
-          const input = msg.input as Record<string, unknown> | undefined;
-          const filePath = input?.file_path as string | undefined;
-          const content = input?.content as string | undefined;
-
-          if (filePath && !seenPaths.has(filePath)) {
-            seenPaths.add(filePath);
-            const filename = filePath.split('/').pop() || filePath;
-            const ext = filename.split('.').pop()?.toLowerCase();
-
-            extractedArtifacts.push({
-              id: filePath,
-              name: filename,
-              type: getArtifactTypeFromExt(ext),
-              content,
-              path: filePath,
-            });
-          }
-        }
-
-        // Extract WebSearch results as artifacts
-        if (msg.type === 'tool_use' && msg.name === 'WebSearch') {
-          const input = msg.input as Record<string, unknown> | undefined;
-          const query = input?.query as string | undefined;
-          const toolUseId = msg.id;
-          if (query) {
-            // Find the corresponding tool_result by toolUseId or by position
-            let output = '';
-            if (toolUseId) {
-              const resultMsg = messages.find(
-                (m) => m.type === 'tool_result' && m.toolUseId === toolUseId
-              );
-              output = resultMsg?.output || '';
-            }
-            // Fallback: find the next tool_result after this tool_use
-            if (!output) {
-              const msgIndex = messages.indexOf(msg);
-              for (let i = msgIndex + 1; i < messages.length; i++) {
-                if (messages[i].type === 'tool_result') {
-                  output = messages[i].output || '';
-                  break;
-                }
-                if (messages[i].type === 'tool_use') break; // Stop at next tool_use
-              }
-            }
-
-            const artifactId = `websearch-${query}`;
-            // Only add websearch artifact if it has valid search results
-            if (
-              !seenPaths.has(artifactId) &&
-              output &&
-              hasValidSearchResults(output)
-            ) {
-              seenPaths.add(artifactId);
-              extractedArtifacts.push({
-                id: artifactId,
-                name: `Search: ${query.slice(0, 50)}${query.length > 50 ? '...' : ''}`,
-                type: 'websearch',
-                content: output,
-              });
-            }
-          }
-        }
-      });
-
-      // 1.5. Extract files mentioned in tool_result messages and text messages
-      const filePatterns = [
-        // Match paths in backticks
-        /`([^`]+\.(?:pptx|xlsx|docx|pdf))`/gi,
-        // Match absolute paths
-        /(\/[^\s"'`\n]+\.(?:pptx|xlsx|docx|pdf))/gi,
-        // Match Chinese/unicode paths
-        /(\/[^\s"'\n]*[\u4e00-\u9fff][^\s"'\n]*\.(?:pptx|xlsx|docx|pdf))/gi,
-      ];
-
-      messages.forEach((msg) => {
-        // Check tool_result outputs and text message content
-        const textToSearch =
-          msg.type === 'tool_result'
-            ? msg.output
-            : msg.type === 'text'
-              ? msg.content
-              : null;
-
-        if (textToSearch) {
-          for (const pattern of filePatterns) {
-            const matches = textToSearch.matchAll(pattern);
-            for (const match of matches) {
-              const filePath = match[1] || match[0];
-              if (filePath && !seenPaths.has(filePath)) {
-                seenPaths.add(filePath);
-                const filename = filePath.split('/').pop() || filePath;
-                const ext = filename.split('.').pop()?.toLowerCase();
-
-                extractedArtifacts.push({
-                  id: filePath,
-                  name: filename,
-                  type: getArtifactTypeFromExt(ext),
-                  path: filePath,
-                });
-              }
-            }
-          }
-        }
-      });
-
-      // 2. Load files from database (includes files from Skill tool, etc.)
-      if (taskId) {
-        try {
-          const dbFiles = await getFilesByTaskId(taskId);
-          dbFiles.forEach((file: LibraryFile) => {
-            // Skip websearch - we extract these from messages with full output content
-            // Check both type and path pattern (search:// is used for WebSearch results)
-            if (file.path?.startsWith('search://')) return;
-            // Skip if we already have this file from Write tool
-            if (file.path && !seenPaths.has(file.path)) {
-              seenPaths.add(file.path);
-              extractedArtifacts.push({
-                id: file.path || `file-${file.id}`,
-                name: file.name,
-                type: convertFileType(file.type),
-                content: file.preview || undefined,
-                path: file.path,
-              });
-            }
-          });
-        } catch (error) {
-          console.error('Failed to load files from database:', error);
-        }
-      }
-
-      setArtifacts(extractedArtifacts);
-      // Auto-select first artifact if none selected
-      if (extractedArtifacts.length > 0 && !selectedArtifact) {
-        setSelectedArtifact(extractedArtifacts[0]);
-      }
-    };
-
-    loadArtifacts();
-  }, [messages, taskId]);
 
   // Auto scroll to bottom only when task is running AND user hasn't scrolled up
   useEffect(() => {
@@ -761,24 +444,17 @@ function TaskDetailContent() {
         // Only reset UI state here - loadTask will handle task switching
         setTask(null);
         setHasStarted(false);
-        isInitializingRef.current = false; // Reset for new task
+       isInitializingRef.current = false; // Reset for new task
 
-        // Reset preview and artifact state
-        setIsPreviewVisible(false);
-        setSelectedArtifact(null);
-        setArtifacts([]);
         setSelectedToolIndex(null);
 
-        // Reset right sidebar state
-        setIsRightSidebarVisible(false);
+        // Reset canvas panel state
+        setIsCanvasVisible(false);
         hasAutoExpandedRef.current = false;
-
-        // Stop live preview if running
-        stopPreview();
       }
       prevTaskIdRef.current = taskId;
     }
-  }, [taskId, stopPreview]);
+  }, [taskId]);
 
   // Load existing task or start new one
   useEffect(() => {
@@ -930,10 +606,10 @@ function TaskDetailContent() {
             ...backgroundTasks.filter((t) => t.isRunning).map((t) => t.taskId),
             // Include current task if it's running
             ...(isRunning && taskId ? [taskId] : []),
-          ]}
-        />
+         ]}
+       />
 
-        {/* Main Content Area with Responsive Layout */}
+        {/* Main Content Area */}
         <div
           ref={containerRef}
           className={cn(
@@ -941,22 +617,14 @@ function TaskDetailContent() {
             isMobile ? 'rounded-none' : 'my-2 mr-2 rounded-2xl shadow-sm'
           )}
         >
-          {/* Left Panel - Agent Chat (flex-1 to fill available space) */}
+          {/* Chat Panel */}
           <div
             className={cn(
-              'bg-background flex min-w-0 flex-col overflow-hidden transition-all duration-200',
-              !isPreviewVisible && !isRightSidebarVisible && 'rounded-2xl',
-              !isPreviewVisible && isRightSidebarVisible && 'rounded-l-2xl',
-              isPreviewVisible && 'rounded-l-2xl'
+              'bg-background flex min-w-0 flex-1 flex-col overflow-hidden',
+              isCanvasVisible ? 'rounded-l-2xl' : 'rounded-2xl'
             )}
-            style={{
-              flex: isPreviewVisible ? '0 0 auto' : '1 1 0%',
-              width: isPreviewVisible ? 'clamp(320px, 40%, 500px)' : undefined,
-              minWidth: '320px',
-              maxWidth: isPreviewVisible ? '500px' : undefined,
-            }}
           >
-            {/* Header - Full width */}
+            {/* Header */}
             <header className="border-border/50 bg-background z-10 flex shrink-0 items-center gap-2 border-none px-4 py-3">
               <button
                 onClick={toggleLeft}
@@ -985,35 +653,25 @@ function TaskDetailContent() {
                 </span>
               )}
 
-              {/* Toggle right sidebar button */}
+              {/* Toggle canvas panel */}
               <button
-                onClick={() => setIsRightSidebarVisible(!isRightSidebarVisible)}
+                onClick={() => setIsCanvasVisible(!isCanvasVisible)}
                 className={cn(
                   'text-muted-foreground hover:bg-accent hover:text-foreground flex cursor-pointer items-center justify-center rounded-lg p-2 transition-colors',
-                  isRightSidebarVisible && 'bg-accent/50'
+                  isCanvasVisible && 'bg-accent/50'
                 )}
-                title={isRightSidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
+                title={isCanvasVisible ? '隐藏画布' : '显示画布'}
               >
                 <PanelLeft className="size-4 rotate-180" />
               </button>
             </header>
 
-            {/* Messages Area - Centered content when sidebar hidden */}
+            {/* Messages Area */}
             <div
               ref={messagesContainerRef}
-              className={cn(
-                'scrollbar-soft relative flex-1 overflow-x-hidden overflow-y-auto',
-                !isPreviewVisible &&
-                  !isRightSidebarVisible &&
-                  'flex justify-center'
-              )}
+              className="scrollbar-soft relative flex flex-1 justify-center overflow-x-hidden overflow-y-auto"
             >
-              <div
-                className={cn(
-                  'w-full px-6 pt-4 pb-24',
-                  !isPreviewVisible && !isRightSidebarVisible && 'max-w-[800px]'
-                )}
-              >
+              <div className="w-full max-w-[800px] px-6 pt-4 pb-24">
                 {isLoading ? (
                   <div className="flex min-h-[200px] items-center justify-center py-12">
                     <div className="text-muted-foreground flex items-center gap-3">
@@ -1044,7 +702,6 @@ function TaskDetailContent() {
                       <RunningIndicator messages={messages} phase={phase} />
                     )}
 
-                    {/* Question Input UI - shown when agent asks questions */}
                     {pendingQuestion && (
                       <QuestionInput
                         pendingQuestion={pendingQuestion}
@@ -1058,16 +715,8 @@ function TaskDetailContent() {
               </div>
             </div>
 
-            {/* Reply Input - Centered when sidebar hidden */}
-            <div
-              className={cn(
-                'border-border/50 bg-background relative shrink-0 border-none',
-                !isPreviewVisible &&
-                  !isRightSidebarVisible &&
-                  'flex justify-center'
-              )}
-            >
-              {/* Scroll to bottom button - fixed above input */}
+            {/* Reply Input */}
+            <div className="border-border/50 bg-background relative flex shrink-0 justify-center border-none">
               {showScrollButton && (
                 <button
                   onClick={scrollToBottom}
@@ -1077,12 +726,7 @@ function TaskDetailContent() {
                   <ArrowDown className="size-4" />
                 </button>
               )}
-              <div
-                className={cn(
-                  'w-full px-4 py-3',
-                  !isPreviewVisible && !isRightSidebarVisible && 'max-w-[800px]'
-                )}
-              >
+              <div className="w-full max-w-[800px] px-4 py-3">
                 <ChatInput
                   variant="reply"
                   placeholder={t.home.reply}
@@ -1098,53 +742,45 @@ function TaskDetailContent() {
             </div>
           </div>
 
-          {/* Divider between chat and preview */}
-          {isPreviewVisible && <div className="bg-border/50 w-px shrink-0" />}
-
-          {/* Middle Panel - Artifact Preview (only shown when artifact selected) */}
-          {isPreviewVisible && (
-            <div className="bg-muted/10 flex min-w-0 flex-1 flex-col overflow-hidden">
-              <ArtifactPreview
-                artifact={selectedArtifact}
-                onClose={handleClosePreview}
-                allArtifacts={artifacts}
-                livePreviewUrl={livePreviewUrl}
-                livePreviewStatus={livePreviewStatus}
-                livePreviewError={livePreviewError}
-                onStartLivePreview={
-                  workingDir ? handleStartLivePreview : undefined
-                }
-                onStopLivePreview={handleStopLivePreview}
+          {/* Resize handle + Canvas Panel */}
+          {isCanvasVisible && (
+            <>
+              <div
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const startX = e.clientX;
+                  const startWidth = canvasWidth;
+                  const onMove = (ev: MouseEvent) => {
+                    const delta = startX - ev.clientX;
+                    const maxW = Math.min(800, window.innerWidth * 0.6);
+                    setCanvasWidth(
+                      Math.max(320, Math.min(maxW, startWidth + delta))
+                    );
+                  };
+                  const onUp = () => {
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                  };
+                  document.addEventListener('mousemove', onMove);
+                  document.addEventListener('mouseup', onUp);
+                  document.body.style.cursor = 'col-resize';
+                  document.body.style.userSelect = 'none';
+                }}
+                className="hover:bg-primary/30 active:bg-primary/50 group/handle w-1 shrink-0 cursor-col-resize transition-colors"
               />
-            </div>
+              <div
+                style={{ width: canvasWidth }}
+                className="bg-background flex shrink-0 flex-col overflow-hidden rounded-r-2xl"
+              >
+                <CanvasPanel
+                  canvases={canvases}
+                  onClose={() => setIsCanvasVisible(false)}
+                />
+              </div>
+            </>
           )}
-
-          {/* Divider between preview/chat and sidebar */}
-          <div
-            className={cn(
-              'bg-border/50 shrink-0 transition-all duration-300',
-              isRightSidebarVisible ? 'w-px' : 'w-0'
-            )}
-          />
-
-          {/* Right Panel - Progress, Artifacts, Context (fixed width) */}
-          <div
-            className={cn(
-              'bg-background flex shrink-0 flex-col overflow-hidden rounded-r-2xl transition-all duration-300',
-              isRightSidebarVisible ? 'w-[280px]' : 'w-0'
-            )}
-          >
-            <RightSidebar
-              messages={messages}
-              isRunning={isRunning}
-              artifacts={artifacts}
-              selectedArtifact={selectedArtifact}
-              onSelectArtifact={handleSelectArtifact}
-              workingDir={workingDir}
-              sessionFolder={sessionFolder || undefined}
-              filesVersion={filesVersion}
-            />
-          </div>
         </div>
       </div>
       {/* Rename dialog */}
