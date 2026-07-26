@@ -378,15 +378,18 @@ export async function updateTaskFromMessage(
   messageType: string,
   subtype?: string,
   cost?: number,
-  duration?: number
+  duration?: number,
+  usage?: { input_tokens: number; output_tokens: number }
 ): Promise<void> {
   if (messageType === 'result') {
     const provider_usage =
-      cost !== undefined || duration !== undefined
+      cost !== undefined || duration !== undefined || (usage && typeof usage.input_tokens === 'number')
         ? JSON.stringify({
             source: 'agent_result',
             cost_usd: cost ?? null,
             duration_ms: duration ?? null,
+            input_tokens: usage && typeof usage.input_tokens === 'number' ? usage.input_tokens : null,
+            output_tokens: usage && typeof usage.output_tokens === 'number' ? usage.output_tokens : null,
             captured_at: new Date().toISOString(),
           })
         : undefined;

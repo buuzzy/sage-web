@@ -1144,7 +1144,8 @@ export function useAgent(): UseAgentReturn {
                     data.type,
                     data.subtype,
                     data.cost,
-                    data.duration
+                    data.duration,
+                    data.usage
                   );
                 } catch (dbError) {
                   console.error('Failed to save message:', dbError);

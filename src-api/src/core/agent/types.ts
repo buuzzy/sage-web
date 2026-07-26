@@ -33,6 +33,17 @@ export type AgentMessageType =
   | 'plan'
   | 'direct_answer';
 
+/**
+ * Snapshot of model token usage for a single agent turn.
+ * input_tokens is the authoritative signal for context-window consumption.
+ */
+export interface TokenUsageSnapshot {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+}
+
 export interface AgentMessage {
   type: AgentMessageType;
   sessionId?: string;
@@ -50,6 +61,8 @@ export interface AgentMessage {
   plan?: TaskPlan;
   // Error fields
   message?: string;
+  // Token usage from the model result (authoritative context consumption)
+  usage?: TokenUsageSnapshot;
 }
 
 export interface ConversationMessage {

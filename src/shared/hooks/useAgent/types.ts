@@ -105,6 +105,12 @@ export interface AgentMessage {
   subtype?: string;
   cost?: number;
   duration?: number;
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
   message?: string;
   errorCategory?: AgentErrorCategory;
   retryable?: boolean;

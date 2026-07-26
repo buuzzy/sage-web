@@ -117,6 +117,7 @@ function TaskDetailContent() {
   // Context window detection by model name
   const CONTEXT_WINDOWS: Array<[RegExp, number]> = [
     [/opus.*1m|1m.*opus/i, 1000000],
+    [/minimax/i, 1000000],
     [/opus/i, 200000],
     [/sonnet/i, 200000],
     [/haiku/i, 200000],
@@ -139,6 +140,22 @@ function TaskDetailContent() {
 
   // Estimate the same conversation payload sent for follow-up requests.
   function calculateCurrentTokens(): number {
+    // Prefer the model's real input_tokens from the most recent result message.
+    // Authoritative: covers system prompt + tools + history + current prompt.
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.type === 'result' && m.usage && typeof m.usage.input_tokens === 'number') {
+        return m.usage.input_tokens;
+      }
+    }
+    // Persisted usage on the task (survives page refresh / reload)
+    if (task?.provider_usage) {
+      try {
+        const parsed = JSON.parse(task.provider_usage);
+        if (typeof parsed.input_tokens === 'number') return parsed.input_tokens;
+      } catch { /* ignore malformed JSON */ }
+    }
+    // Last resort: client-side estimate (only meaningful before first response)
     const settings = getSettings();
     const hasPersistedUserMessage = messages.some((msg) => msg.type === 'user');
     return estimateConversationContextTokens(

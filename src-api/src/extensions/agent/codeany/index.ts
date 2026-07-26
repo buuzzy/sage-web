@@ -37,6 +37,7 @@ import type {
   ImageAttachment,
   McpConfig,
   PlanOptions,
+  TokenUsageSnapshot,
 } from '@/core/agent/types';
 import {
   DEFAULT_API_HOST,
@@ -1099,6 +1100,7 @@ export class CodeAnyAgent extends BaseAgent {
       subtype?: string;
       total_cost_usd?: number;
       duration_ms?: number;
+      usage?: { input_tokens: number; output_tokens: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number };
       result?: { tool_use_id?: string; tool_name?: string; output?: string };
     };
 
@@ -1145,6 +1147,7 @@ export class CodeAnyAgent extends BaseAgent {
       yield {
         type: 'result', content: msg.subtype,
         cost: msg.total_cost_usd, duration: msg.duration_ms,
+        usage: msg.usage,
       };
     }
   }
