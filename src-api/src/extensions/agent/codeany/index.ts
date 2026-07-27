@@ -177,21 +177,13 @@ async function saveImagesToDisk(
 
 const ALLOWED_TOOLS = [
   'Read',
-  'Edit',
-  'Write',
-  'Glob',
-  'Grep',
   'Bash',
   'WebSearch',
   'WebFetch',
   'Skill',
   'Task',
-  'LSP',
   'TodoWrite',
-  'Agent',       // 多 Agent 并行协作（AgentTool）
-  'SendMessage', // 跨 Agent 消息传递
   // 内置 memory MCP server 暴露的工具：让 Agent 能召回用户历史对话原文。
-  // SDK 给 MCP 工具的命名规则：mcp__<server-name>__<tool-name>。
   'mcp__memory__search_memory',
 ];
 
