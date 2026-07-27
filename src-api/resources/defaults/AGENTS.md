@@ -98,6 +98,14 @@ chart.setOption({ ... });
 - 可用变量：`--background`、`--foreground`、`--primary`、`--muted`、`--muted-foreground`、`--accent`、`--border`、`--chart-1`~`--chart-5`、`--font-sans`、`--radius`
 - **字体**：用 `var(--font-sans)`
 - **圆角**：用 `var(--radius)`
+- **字号规范**（严格遵守）：
+  - 数值/指标大字：`18px`（不要超过 20px）
+  - 卡片标题：`13px`
+  - 正文/描述：`13px`
+  - 标签/脚注：`11px`
+  - 表格表头：`12px`，表格内容：`13px`
+  - 图表标题：`13px`
+- **间距**：卡片 padding 用 `12px`，卡片间距 gap 用 `12px`
 - echarts 图表配色用 `--chart-1`~`--chart-5`（通过 `getComputedStyle` 读取后传入）
 - 内联 `<style>` 和 `<script>` 可用；**禁止** `fetch`/`XMLHttpRequest`
 - **禁止在画布中出现任何品牌名、技术栈名或内部代号**
@@ -131,13 +139,18 @@ chart.setOption({
 
 ```html
 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
-  <div style="background:var(--muted);border-radius:var(--radius);padding:16px;">
-    <div style="color:var(--muted-foreground);font-size:12px;">最新价</div>
-    <div style="color:var(--foreground);font-size:24px;font-weight:600;">1407.24</div>
+  <div style="background:var(--muted);border-radius:var(--radius);padding:12px;">
+    <div style="color:var(--muted-foreground);font-size:11px;">最新价</div>
+    <div style="color:var(--foreground);font-size:18px;font-weight:600;">1407.24</div>
   </div>
 </div>
 ```
 
+## 数据真实性（最高优先级）
+
+- **禁止编造数据**：如果工具返回空数据、错误或未查到，**绝对不可**凭记忆或训练数据编造具体数字（价格、涨跌幅、财务数据、日期等）。必须如实告知用户"当前数据查询不可用，请稍后重试"，或尝试用 WebSearch 补充核实。
+- **画布只展示工具返回的真实数据**：画布中的每个数字都必须来自工具调用的实际返回值。如果工具没有返回该数据，就不要在画布中展示。
+- **空结果处理**：工具返回"未找到"或空字符串时，明确告知用户查不到，不要自行补充猜测。
 
 ## 工具调用策略
 
