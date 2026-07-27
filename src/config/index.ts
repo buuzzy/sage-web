@@ -26,7 +26,7 @@ const isTauri =
   typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
 // Web API service (railway: sage-web-api)
-const RAILWAY_URL = 'https://sage-web-api-production.up.railway.app';
+const RAILWAY_URL = 'https://sage.nakocai.com';
 
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL || RAILWAY_URL;
