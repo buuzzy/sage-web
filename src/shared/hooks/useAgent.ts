@@ -591,16 +591,23 @@ export function useAgent(): UseAgentReturn {
             type: 'error' as const,
             message: msg.error_message || undefined,
           });
-        } else if (msg.type === 'plan') {
-          // Restore plan message with parsed plan data
-          try {
-            const planData = msg.content
-              ? (JSON.parse(msg.content) as TaskPlan)
-              : undefined;
-            if (planData) {
-              // Determine how to mark plan steps based on task status
-              let restoredPlan: TaskPlan;
-              if (taskIsStopped && !isRestoringFromBackground) {
+       } else if (msg.type === 'plan') {
+         // Restore plan message with parsed plan data
+         try {
+           const planData = msg.content
+             ? (JSON.parse(msg.content) as TaskPlan)
+             : undefined;
+           if (planData) {
+             // Check if there's a result message after this plan (execution finished)
+             const hasResultAfter = dbMessages
+               .slice(i + 1)
+               .some((m) => m.type === 'result');
+             const executionFinished =
+               (taskIsCompleted || hasResultAfter) && !isRestoringFromBackground;
+
+             // Determine how to mark plan steps based on task status
+             let restoredPlan: TaskPlan;
+              if (taskIsStopped && executionFinished) {
                 // Task was cancelled - mark steps as cancelled
                 restoredPlan = {
                   ...planData,
@@ -609,7 +616,7 @@ export function useAgent(): UseAgentReturn {
                     status: 'cancelled' as const,
                   })),
                 };
-              } else if (taskIsCompleted && !isRestoringFromBackground) {
+              } else if (executionFinished) {
                 // Task completed - mark steps as completed
                 restoredPlan = {
                   ...planData,
@@ -650,14 +657,18 @@ export function useAgent(): UseAgentReturn {
           lastPlanMessage.type === 'plan' &&
           lastPlanMessage.plan
         ) {
-          const planSteps = lastPlanMessage.plan.steps || [];
-          // Check if plan has incomplete steps (pending or no status)
-          const hasIncompleteSteps = planSteps.some(
-            (s) => !s.status || s.status === 'pending'
-          );
+         const planSteps = lastPlanMessage.plan.steps || [];
+         // Check if plan has incomplete steps (pending or no status)
+         const hasIncompleteSteps = planSteps.some(
+           (s) => !s.status || s.status === 'pending'
+         );
+         // Check if execution already finished (result message exists after plan)
+         const hasResultMessage = agentMessages.some(
+           (m) => m.type === 'result'
+         );
 
-          // Restore plan if task is not completed/stopped and has incomplete steps
-          if (hasIncompleteSteps && !taskIsCompleted && !taskIsStopped) {
+          // Restore awaiting-approval state only if plan is truly unexecuted
+          if (hasIncompleteSteps && !taskIsCompleted && !taskIsStopped && !hasResultMessage) {
             console.log(
               '[useAgent] Restoring plan awaiting approval for task:',
               id,
@@ -1824,9 +1835,9 @@ export function useAgent(): UseAgentReturn {
       await createMessage({
         task_id: taskId,
         type: 'plan',
-        content: JSON.stringify(plan),
+        content: JSON.stringify(updatedPlan),
       });
-      console.log('[useAgent] Saved plan to database:', plan.id);
+      console.log('[useAgent] Saved plan to database (approved):', updatedPlan.id);
     } catch (error) {
       console.error('Failed to save plan to database:', error);
     }
