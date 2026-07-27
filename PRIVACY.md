@@ -48,7 +48,7 @@ The App relies on the following third-party services:
 |---------|---------|-----------|
 | **Supabase** | Account auth + data storage | Account info, conversations, profile, notes (encrypted in transit and at rest) |
 | **OpenAI / MiniMax / etc.** | AI model inference (chat responses + nightly profile distillation) | Conversation content (per their respective API terms; these providers do not retain your data) |
-| **Financial data APIs** (westock, htsc, etc.) | Real-time market data | Query parameters only (e.g., stock symbols); **no personal information** |
+| **Financial data API** | Real-time market data | Query parameters only (e.g., stock symbols); **no personal information** |
 
 ### Data Encryption
 
@@ -129,7 +129,7 @@ Sage 是一款在线服务产品，定位为您的"金融数字分身"。为了�
 |------|------|---------|
 | **Supabase** | 账号认证 + 数据存储 | 账号信息、对话、分身、笔记（传输+存储均加密） |
 | **OpenAI / MiniMax 等** | 大模型推理（生成对话回复 + 每晚分身整理） | 对话内容（按各家 API 协议处理；这些服务商不保留您的数据） |
-| **金融数据 API**（westock、htsc 等） | 实时市场数据 | 仅查询参数（如股票代码），**不传递个人信息** |
+| **金融数据 API** | 实时市场数据 | 仅查询参数（如股票代码），**不传递个人信息** |
 
 ### 数据加密
 

@@ -32,7 +32,7 @@ Required variable families:
 - Runtime: `NODE_ENV`, `RAILWAY_DOCKERFILE_PATH`
 - Auth: `SAGE_API_TOKEN`, `SAGE_INTERNAL_TOKEN`
 - Supabase: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
-- Financial data: `WESTOCK_API_KEY`, `HTSC_APP_KEY`
+- Financial data: `MINISHARE_MCP_URL (MCP server URL)`
 - Persona/distillation LLM: `MIMO_*`, `DEEPSEEK_*`
 - Optional background jobs: `SAGE_ENABLE_BACKGROUND_JOBS`
 
