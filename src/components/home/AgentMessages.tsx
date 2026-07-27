@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { AgentMessage } from '@/shared/hooks/useAgent';
+import { getMcpToolDisplayName } from '@/shared/lib/mcpToolLabels';
 import { useLanguage } from '@/shared/providers/language-provider';
 import {
   AlertCircle,
@@ -41,7 +42,7 @@ function getToolDisplayName(toolName: string): string {
     // mcp__sandbox__sandbox_run_script -> run_script
     return toolName.replace('mcp__sandbox__sandbox_', '');
   }
-  return toolName;
+  return getMcpToolDisplayName(toolName);
 }
 
 function getToolIcon(toolName: string) {

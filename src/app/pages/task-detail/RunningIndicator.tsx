@@ -3,6 +3,7 @@
  */
 
 import type { AgentMessage, AgentPhase } from '@/shared/hooks/useAgent';
+import { getMcpToolDisplayName } from '@/shared/lib/mcpToolLabels';
 
 function RunningIndicator({
   messages,
@@ -62,7 +63,7 @@ function RunningIndicator({
       case 'Task':
         return 'Running subtask...';
       default:
-        return `Running ${lastToolUse.name}...`;
+        return `${getMcpToolDisplayName(lastToolUse.name)}...`;
     }
   };
 

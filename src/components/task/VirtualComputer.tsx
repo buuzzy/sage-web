@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentMessage } from '@/shared/hooks/useAgent';
+import { getMcpToolDisplayName } from '@/shared/lib/mcpToolLabels';
 import { cn } from '@/shared/lib/utils';
 import {
   CheckCircle2,
@@ -265,7 +266,7 @@ function getToolActionText(
     case 'WebSearch':
       return `Searching web  "${input?.query || ''}"`;
     default:
-      return `Using ${toolName}`;
+      return getMcpToolDisplayName(toolName);
   }
 }
 
@@ -286,7 +287,7 @@ function getToolTypeLabel(toolName: string): string {
     case 'WebSearch':
       return 'Browser';
     default:
-      return 'Tool';
+      return '数据服务';
   }
 }
 

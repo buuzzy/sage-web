@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { AgentMessage } from '@/shared/hooks/useAgent';
 import { generateArtifactFromMetadata } from '@/shared/lib/artifactFromMetadata';
+import { getMcpToolDisplayName } from '@/shared/lib/mcpToolLabels';
 import { cn } from '@/shared/lib/utils';
 import { X } from 'lucide-react';
 
@@ -40,7 +41,7 @@ function getToolDisplayName(toolName: string): string {
     case 'LSP':
       return 'LSP';
     default:
-      return toolName;
+      return getMcpToolDisplayName(toolName);
   }
 }
 
@@ -301,7 +302,7 @@ function ToolDetailModal({
         {/* Header */}
         <div className="border-border flex shrink-0 items-center justify-between border-b px-4 py-3">
           <div className="flex items-center gap-2">
-            <span className="font-mono font-medium">{toolName}</span>
+            <span className="font-mono font-medium">{getMcpToolDisplayName(toolName)}</span>
             {isError && (
               <span className="rounded bg-red-500/10 px-1.5 py-0.5 text-xs text-red-500">
                 Error

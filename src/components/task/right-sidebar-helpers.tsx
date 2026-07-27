@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { API_BASE_URL } from '@/config';
 import type { AgentMessage } from '@/shared/hooks/useAgent';
+import { getMcpToolDisplayName } from '@/shared/lib/mcpToolLabels';
 import { cn } from '@/shared/lib/utils';
 import {
   ChevronDown,
@@ -287,13 +288,9 @@ function isSkillTool(toolName: string): boolean {
 // Get display info for skill/MCP
 function getSkillMCPInfo(toolName: string): { name: string; category: string } {
   if (toolName.startsWith('mcp__')) {
-    // Parse MCP tool name: mcp__server__tool
-    const parts = toolName.split('__');
-    const serverName = parts[1] || 'unknown';
-    const tool = parts[2] || '';
     return {
-      name: tool || serverName,
-      category: serverName,
+      name: getMcpToolDisplayName(toolName),
+      category: '数据服务',
     };
   }
   switch (toolName) {
@@ -386,7 +383,7 @@ function ToolPreviewModal({
               const IconComponent = getToolIcon(tool.name);
               return <IconComponent className="text-muted-foreground size-4" />;
             })()}
-            <span className="font-medium">{tool.name}</span>
+            <span className="font-medium">{getMcpToolDisplayName(tool.name)}</span>
             {tool.isError && (
               <span className="rounded bg-red-500/10 px-1.5 py-0.5 text-xs text-red-500">
                 Error
