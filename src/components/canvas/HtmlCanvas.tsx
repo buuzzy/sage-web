@@ -61,6 +61,20 @@ const ECHARTS_BOOTSTRAP = `<script>
 })();
 </script>`;
 
+// Intercepts link clicks inside the iframe and opens them in a new tab.
+// Without this, sandboxed iframes either silently swallow navigation
+// or browsers show "blocked" warnings.
+const LINK_HANDLER = `<script>
+(function(){
+  document.addEventListener('click', function(e) {
+    var a = e.target.closest('a');
+    if (!a || !a.href) return;
+    e.preventDefault();
+    window.open(a.href, '_blank');
+  });
+})();
+</script>`;
+
 interface HtmlCanvasProps {
   html: string;
 }
@@ -101,6 +115,7 @@ a { color: var(--primary); }
 </head>
 <body>
 ${ECHARTS_BOOTSTRAP}
+${LINK_HANDLER}
 ${html}
 </body>
 </html>`;
@@ -132,7 +147,7 @@ ${html}
         ref={iframeRef}
         srcDoc={srcDoc}
         key={html}
-        sandbox="allow-scripts"
+        sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
         className="size-full border-none"
         title="canvas"
       />
