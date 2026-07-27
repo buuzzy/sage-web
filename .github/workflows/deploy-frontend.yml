@@ -3,16 +3,6 @@ name: Deploy Frontend
 on:
   push:
     branches: [main]
-    paths:
-      - 'src/**'
-      - 'public/**'
-      - 'configs/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - 'vite.config.ts'
-      - 'tsconfig.json'
-      - 'Dockerfile.web'
 
 jobs:
   deploy:
