@@ -105,7 +105,8 @@ chart.setOption({ ... });
 
 ### 设计约束
 
-- **CSS 变量取色**：必须用 `var(--xxx)`，禁止硬编码颜色值
+- **CSS 变量取色（HTML/CSS）**：在 HTML 元素的 `style` 属性中必须用 `var(--xxx)`，禁止硬编码颜色值
+- **CSS 变量取色（echarts）**：echarts 使用 canvas 渲染，**不能用 `var(--xxx)` 字符串**。必须先通过 `getComputedStyle` 解析为实际色值再传入。违反此规则会导致 hover 时图表线条消失。
 - 可用变量：`--background`、`--foreground`、`--primary`、`--muted`、`--muted-foreground`、`--accent`、`--border`、`--chart-1`~`--chart-5`、`--font-sans`、`--radius`
 - **字体**：用 `var(--font-sans)`
 - **圆角**：用 `var(--radius)`
@@ -117,7 +118,6 @@ chart.setOption({ ... });
   - 表格表头：`12px`，表格内容：`13px`
   - 图表标题：`13px`
 - **间距**：卡片 padding 用 `12px`，卡片间距 gap 用 `12px`
-- echarts 图表配色用 `--chart-1`~`--chart-5`（通过 `getComputedStyle` 读取后传入）
 - 内联 `<style>` 和 `<script>` 可用；**禁止** `fetch`/`XMLHttpRequest`
 - **禁止在画布中出现任何品牌名、技术栈名或内部代号**
 - HTML 是 body 片段，无需写 `<html>/<head>/<body>`
@@ -126,14 +126,31 @@ chart.setOption({ ... });
 
 运行环境已注入 echarts，直接调用 `echarts.init()` 即可。
 
-**K线图示例**（candlestick）：
+**必须先解析所有 CSS 变量**：
 ```javascript
 const css = getComputedStyle(document.documentElement);
 const c1 = css.getPropertyValue('--chart-1').trim();
+const c2 = css.getPropertyValue('--chart-2').trim();
+const fg = css.getPropertyValue('--foreground').trim();
+const mf = css.getPropertyValue('--muted-foreground').trim();
+const bd = css.getPropertyValue('--border').trim();
+const bg = css.getPropertyValue('--background').trim();
+```
+
+**K线图示例**（candlestick）：
+```javascript
 const chart = echarts.init(document.getElementById('chart'));
 chart.setOption({
-  xAxis: { data: ['2026-07-01','2026-07-02',...] },
-  yAxis: {},
+  tooltip: { trigger: 'axis' },
+  xAxis: {
+    data: ['2026-07-01','2026-07-02',...],
+    axisLabel: { color: mf },
+    axisLine: { lineStyle: { color: bd } },
+  },
+  yAxis: {
+    axisLabel: { color: mf },
+    splitLine: { lineStyle: { color: bd } },
+  },
   series: [{
     type: 'candlestick',
     data: [[open,close,low,high], ...],
@@ -142,7 +159,26 @@ chart.setOption({
 });
 ```
 
+- **✘ 错误写法**：`axisLabel: { color: 'var(--muted-foreground)' }` — canvas 无法解析 CSS 变量，hover 时线条会消失
+- **✔ 正确写法**：`axisLabel: { color: mf }`（mf 已通过 getComputedStyle 解析）
+- **所有 echarts 配色**（series、axis、splitLine、tooltip 背景等）都必须用解析后的值
+
 **柱状图/折线图**：同样用 `echarts.init` + `setOption`，`type` 设为 `bar` 或 `line`。
+```javascript
+const chart2 = echarts.init(document.getElementById('chart2'));
+chart2.setOption({
+  tooltip: { trigger: 'axis' },
+  xAxis: { data: dates, axisLabel: { color: mf } },
+  yAxis: { axisLabel: { color: mf }, splitLine: { lineStyle: { color: bd } } },
+  series: [{
+    type: 'line',
+    data: vals,
+    lineStyle: { color: c1, width: 2 },
+    itemStyle: { color: c1 },
+    areaStyle: { color: c1, opacity: 0.15 }
+  }]
+});
+```
 
 ### 纯 HTML 组件
 
