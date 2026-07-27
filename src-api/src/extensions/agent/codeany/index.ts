@@ -52,6 +52,7 @@ import { buildPersonaSection } from './persona-injector';
 import { buildActiveRecallSection } from './active-recall';
 import {
   createToolOutputInterceptorHook,
+  createWebSearchInterceptorHook,
   type ToolOutputInterceptResult,
   type ToolOutputMetadata,
 } from './tool-output-interceptor';
@@ -697,6 +698,7 @@ export class CodeAnyAgent extends BaseAgent {
         createToolOutputInterceptorHook({
           intercept: interceptToolOutput,
         }),
+        createWebSearchInterceptorHook(),
       ],
     };
 

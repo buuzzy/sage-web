@@ -62,3 +62,31 @@ export function createToolOutputInterceptorHook({
     ],
   };
 }
+
+const WEBSEARCH_CANVAS_HINT =
+  '\n\n请根据上述搜索结果自行判断是否适合用 canvas:html 输出可视化画布：如果包含可结构化展示的数据（表格、时间线、列表对比、关键指标等），请输出 canvas:html 画布并撰写分析；如果是纯知识问答则直接文字回答即可，无需画布。';
+
+export function createWebSearchInterceptorHook() {
+  return {
+    matcher: 'WebSearch',
+    hooks: [
+      async (input: {
+        toolInput?: unknown;
+        toolOutput?: unknown;
+      }): Promise<{ modifiedOutput: string } | undefined> => {
+        const toolOutput =
+          typeof input.toolOutput === 'string' ? input.toolOutput : '';
+        if (!toolOutput || toolOutput.length < 10) return undefined;
+        if (toolOutput.includes('Search failed') || toolOutput.includes('Search error')) {
+          return undefined;
+        }
+
+        logger.info(
+          `[PostToolUse] WebSearch output intercepted (${toolOutput.length} chars), appending canvas hint`
+        );
+
+        return { modifiedOutput: toolOutput + WEBSEARCH_CANVAS_HINT };
+      },
+    ],
+  };
+}
