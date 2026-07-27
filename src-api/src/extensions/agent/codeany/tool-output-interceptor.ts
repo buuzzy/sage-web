@@ -37,6 +37,8 @@ const DATA_CANVAS_TOOLS = [
   'dividend',
   'fina_indicator',
   'moneyflow',
+  'express',
+  'fina_mainbz',
   'top_list',
   'top_inst',
   'margin_detail',
@@ -63,6 +65,7 @@ const TEXT_CANVAS_TOOLS = [
   'stock_basic',
   'new_share',
   'stk_managers',
+  'hsgt_top10',
 ];
 
 // ---------------------------------------------------------------------------
