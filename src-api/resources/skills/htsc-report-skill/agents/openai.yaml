@@ -1,4 +1,0 @@
-interface:
-  display_name: "htsc 研报查询"
-  short_description: "调用htscRIS接口，按条件获取最新5篇研报"
-  name: "htsc-report-skill"

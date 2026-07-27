@@ -51,394 +51,13 @@ import { isSupabaseConfigured } from '@/shared/supabase/client';
 import { buildPersonaSection } from './persona-injector';
 import { buildActiveRecallSection } from './active-recall';
 import {
-  createToolOutputInterceptorHook,
+  createMinishareCanvasHooks,
   createWebSearchInterceptorHook,
-  type ToolOutputInterceptResult,
-  type ToolOutputMetadata,
 } from './tool-output-interceptor';
 import { createLogger, LOG_FILE_PATH } from '@/shared/utils/logger';
 import { stripHashSuffix } from '@/shared/utils/url';
 
 const logger = createLogger('CodeAnyAgent');
-
-// ============================================================================
-// Deterministic Tool Output Interception
-//
-// Detects westock API calls from Bash command URL patterns and JSON response
-// structure. No LLM cooperation required — works purely at the code layer.
-//
-// Detection strategy (two layers):
-//   Layer 1 — URL pattern matching on the Bash command string
-//   Layer 2 — JSON response structure matching on the tool output
-//
-// When a match is found:
-//   • Full data is formatted as an artifact block and queued for the frontend
-//   • A concise summary (~100-200 chars) replaces the tool output for the LLM
-//   • Token savings: ~5K tokens per intercepted query
-// ============================================================================
-
-/**
- * URL path → (skill, action) mapping for GET endpoints.
- * Order matters: first match wins. Patterns are tested with String.includes().
- */
-const URL_PATH_PATTERNS: Array<{ pattern: string; skill: string; action: string }> = [
-  // westock-quote GET endpoints
-  // westock-market GET endpoints
-  { pattern: '/smartbox/search',               skill: 'westock-market',   action: 'stock_search' },
-  { pattern: '/HotStock/getHotStockDetail',    skill: 'westock-market',   action: 'hot_stock' },
-  { pattern: '/board/index',                   skill: 'westock-market',   action: 'hot_board' },
-  { pattern: '/ipo/search',                    skill: 'westock-market',   action: 'ipo_calendar' },
-  { pattern: '/FinanceCalendar/query',         skill: 'westock-market',   action: 'finance_calendar' },
-  { pattern: '/watchlist/rank',                skill: 'westock-market',   action: 'watchlist_rank' },
-  // westock-research GET endpoints
-  { pattern: '/investRate/getReport',          skill: 'westock-research', action: 'stock_report' },
-  { pattern: '/noticeList/searchByType',       skill: 'westock-research', action: 'announcement_list' },
-  { pattern: '/news/content/content',          skill: 'westock-research', action: 'announcement_content' },
-  { pattern: '/news/info/search',              skill: 'westock-research', action: 'market_news' },
-];
-
-/**
- * POST route names used with the proxy endpoint (/openai/openclaw/proxy).
- * Maps the `"route"` field in the request body to (skill, action).
- */
-const POST_ROUTE_MAP: Record<string, { skill: string; action: string }> = {
-  'stock_quote_snapshot':      { skill: 'westock-quote',    action: 'stock_quote_snapshot' },
-  'stock_quote_history':       { skill: 'westock-quote',    action: 'stock_quote_history' },
-  'research_report_list_get':  { skill: 'westock-research', action: 'research_report_curated' },
-  'stock_filter_query':        { skill: 'westock-screener', action: 'stock_filter_query' },
-  'query_list_data_by_date':   { skill: 'westock-screener', action: 'query_list_data_by_date' },
-};
-
-// ---- Layer 1: URL / route detection from the Bash command string -----------
-
-/**
- * Extract (skill, action) from the Bash command string by matching URL paths
- * and POST route names. Returns null if no westock API call is detected.
- */
-function detectFromCommand(command: string): ToolOutputMetadata | null {
-  if (!command) return null;
-
-  // Layer 1a: Match GET endpoint URL paths
-  for (const { pattern, skill, action } of URL_PATH_PATTERNS) {
-    if (command.includes(pattern)) {
-      return { skill, action };
-    }
-  }
-
-  // Layer 1b: Match POST proxy route names
-  // The command may contain the route in a JSON body, e.g.:
-  //   curl ... -d '{"route":"stock_quote_snapshot", ...}'
-  //   requests.post(..., json={"route": "stock_quote_snapshot", ...})
-  // We use a broad regex that catches both single/double quoted JSON
-  const routeMatch = command.match(/"route"\s*:\s*"([^"]+)"/);
-  if (routeMatch) {
-    const routeName = routeMatch[1];
-    const mapping = POST_ROUTE_MAP[routeName];
-    if (mapping) {
-      const meta: ToolOutputMetadata = { ...mapping };
-
-      // For screener list queries, also extract list_codes
-      if (routeName === 'query_list_data_by_date') {
-        const listCodeMatch = command.match(/"list_codes"\s*:\s*\[\s*"([^"]+)"/);
-        if (listCodeMatch) {
-          meta.list_code = listCodeMatch[1];
-        }
-      }
-      return meta;
-    }
-  }
-
-  return null;
-}
-
-// ---- Layer 2: JSON response structure detection from tool output ----------
-
-/**
- * Detect (skill, action) from JSON response structure when Layer 1 fails.
- * This handles cases where MiniMax uses Python scripts or unconventional
- * command patterns that don't match our URL regex.
- */
-function detectFromResponseStructure(parsed: any): ToolOutputMetadata | null {
-  if (!parsed || typeof parsed !== 'object') return null;
-
-  const data = parsed.data;
-  if (!data) return null;
-
-  // stock_quote_snapshot: { data: { stocks: [{ code, name, data: { ClosePrice, ... } }] } }
-  if (data.stocks && Array.isArray(data.stocks) && data.stocks.length > 0) {
-    const first = data.stocks[0];
-    if (first?.data?.ClosePrice !== undefined || first?.data?.LastestTradedPrice !== undefined) {
-      return { skill: 'westock-quote', action: 'stock_quote_snapshot' };
-    }
-    // hot_stock: { data: { stocks: [{ code, name, zdf, zxj }] } }
-    if (first?.zdf !== undefined || first?.zxj !== undefined) {
-      return { skill: 'westock-market', action: 'hot_stock' };
-    }
-  }
-
-  // stock_quote_history: { data: { code, name, series: [{ date, data: {...} }] } }
-  if (data.series && Array.isArray(data.series) && data.code) {
-    return { skill: 'westock-quote', action: 'stock_quote_history' };
-  }
-
-  // hot_board: { data: { rank: { plate: [...] } } }
-  if (data.rank && (data.rank.plate || data.rank.concept)) {
-    return { skill: 'westock-market', action: 'hot_board' };
-  }
-
-  // ipo_calendar: { data: { ipoList: [...] } }
-  if (data.ipoList && Array.isArray(data.ipoList)) {
-    return { skill: 'westock-market', action: 'ipo_calendar' };
-  }
-
-  // finance_calendar: { data: [{ date, list: [{ FinancialEvent, ... }] }] }
-  if (Array.isArray(data) && data.length > 0 && data[0]?.list && Array.isArray(data[0].list)) {
-    const item = data[0].list[0];
-    if (item?.FinancialEvent !== undefined || item?.CountryName !== undefined) {
-      return { skill: 'westock-market', action: 'finance_calendar' };
-    }
-  }
-
-  // stock_filter_query: { data: { component_data: { total_stocks, data: { stocks: [...] } } } }
-  if (data.component_data?.data?.stocks || data.component_data?.total_stocks !== undefined) {
-    return { skill: 'westock-screener', action: 'stock_filter_query' };
-  }
-
-  // query_list_data_by_date: { data: { data: { <list_code>: { list_data, list_info } } } }
-  if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
-    const keys = Object.keys(data.data);
-    const firstVal = keys.length > 0 ? data.data[keys[0]] : null;
-    if (firstVal?.list_data !== undefined && firstVal?.list_info?.list_code) {
-      return {
-        skill: 'westock-screener',
-        action: 'query_list_data_by_date',
-        list_code: firstVal.list_info.list_code,
-      };
-    }
-  }
-
-  // market_news: { data: { total_num, data: [{ title, src, time, ... }] } }
-  if (data.total_num !== undefined && Array.isArray(data.data) && data.data.length > 0) {
-    const item = data.data[0];
-    if (item?.title && item?.src && item?.time) {
-      // Could be news or announcement_list — differentiate by field presence
-      if (item?.importance !== undefined || item?.predictTimestamp !== undefined || item?.summary !== undefined) {
-        return { skill: 'westock-research', action: 'market_news' };
-      }
-      if (item?.newstype !== undefined || item?.type !== undefined) {
-        return { skill: 'westock-research', action: 'announcement_list' };
-      }
-      // Default to market_news for list-like responses with title+src+time
-      return { skill: 'westock-research', action: 'market_news' };
-    }
-  }
-
-  // stock_report: { data: { reports: [...] } }
-  if (data.reports && Array.isArray(data.reports)) {
-    return { skill: 'westock-research', action: 'stock_report' };
-  }
-
-  // research_report_curated: { data: { items: [{ id, title, preview, ... }] } }
-  if (data.items && Array.isArray(data.items) && data.items[0]?.preview !== undefined) {
-    return { skill: 'westock-research', action: 'research_report_curated' };
-  }
-
-  return null;
-}
-
-// ---- Data transformation: API response → Component data format ------------
-
-
-// ---- Main interception function -------------------------------------------
-
-/**
- * Deterministic interception of Bash tool output.
- *
- * @param command  - The Bash command string (from toolInput.command)
- * @param output   - The tool output string (stdout from Bash execution)
- * @returns InterceptResult if intercepted, null otherwise (fall-through to LLM)
- */
-function interceptToolOutput(
-  command: string,
-  output: string
-): ToolOutputInterceptResult | null {
-  if (!output || output.length < 10) return null;
-
-  // Try to parse output as JSON
-  let parsed: any;
-  try {
-    // Handle case where output has leading/trailing whitespace or debug lines
-    const jsonStart = output.indexOf('{');
-    const jsonEnd = output.lastIndexOf('}');
-    if (jsonStart === -1 || jsonEnd === -1 || jsonEnd <= jsonStart) return null;
-    const jsonStr = output.slice(jsonStart, jsonEnd + 1);
-    parsed = JSON.parse(jsonStr);
-  } catch {
-    return null;
-  }
-
-  // Quick check: must look like a westock API response (has code or data field)
-  if (parsed.code === undefined && !parsed.data) return null;
-
-  // Skip error responses — only intercept successful API calls
-  if (parsed.code !== undefined && parsed.code !== 0 && !parsed.data) return null;
-
-  // Unwrap cli.py output wrapper
-  if (parsed.success !== undefined && parsed.data && typeof parsed.data === 'object') {
-    parsed = parsed.data;
-  }
-
-  // Layer 1: Detect from Bash command URL/route patterns
-  let meta = detectFromCommand(command);
-
-  // Layer 1c: Detect from cli.py invocations
-  if (!meta) {
-    const cliSkillMatch = command.match(/skills\/([^/]+)\/scripts\/cli\.py/);
-    const cliRouteMatch = command.match(/--route\s+(\S+)/);
-    if (cliSkillMatch && cliRouteMatch) {
-      const skillName = cliSkillMatch[1];
-      const routeName = cliRouteMatch[1];
-      const cliRouteMap: Record<string, string> = {
-        'snapshot': 'stock_quote_snapshot',
-        'history': 'stock_quote_history',
-        'minute': 'minute_quote',
-        'hot-stocks': 'hot_stock',
-        'hot-boards': 'hot_board',
-        'ipo': 'ipo_calendar',
-        'calendar': 'finance_calendar',
-        'search': 'stock_search',
-        'watchlist': 'watchlist_rank',
-        'reports': 'stock_report',
-        'report-list': 'research_report_curated',
-        'notices': 'announcement_list',
-        'notice-content': 'announcement_content',
-        'news': 'market_news',
-        'filter': 'stock_filter_query',
-        'list': 'query_list_data_by_date',
-      };
-      meta = { skill: skillName, action: cliRouteMap[routeName] || routeName };
-    }
-  }
-
-  // Layer 2: Fallback to response structure detection
-  if (!meta) {
-    meta = detectFromResponseStructure(parsed);
-  }
-
-  // If _metadata is present (rare, but honor it as Layer 0)
-  if (!meta && parsed._metadata?.skill && parsed._metadata?.action) {
-    meta = {
-      skill: parsed._metadata.skill,
-      action: parsed._metadata.action,
-      list_code: parsed._metadata.list_code,
-    };
-  }
-
-  if (!meta) return null;
-  // Generate a concise summary for the LLM
-  const summary = generateSummary(meta, parsed);
-
-  logger.info(`[interceptToolOutput] Intercepted ${meta.skill}/${meta.action} (summary: ${summary.length} chars, original: ${output.length} chars, detection: ${detectFromCommand(command) ? 'url' : 'structure'})`);
-
-  return { metadata: meta, summary };
-}
-
-// ---- Summary generation ---------------------------------------------------
-
-/**
- * Generate a concise text summary from API response data.
- * This is what the LLM sees instead of the full data payload.
- */
-function generateSummary(meta: ToolOutputMetadata, parsed: any): string {
-  const data = parsed.data;
-  try {
-    if (meta.skill === 'westock-quote') {
-      if (meta.action === 'stock_quote_snapshot' && data?.stocks?.length > 0) {
-        const s = data.stocks[0];
-        const d = s.data || {};
-        return `[数据已获取] ${s.name || ''}(${s.code || ''}) 最新价${d.ClosePrice || d.LastestTradedPrice || '—'} 涨跌${d.Change || '—'}(${d.ChangeRatio || '—'}%) 昨收${d.PrevClosePrice || '—'} 开${d.OpenPrice || '—'} 高${d.HighPrice || '—'} 低${d.LowPrice || '—'}。请基于上述数据用 canvas:html 输出可视化画布（使用 echarts 绘制图表），并撰写分析。`;
-      }
-     if (meta.action === 'stock_quote_history' && data?.series?.length > 0) {
-       const series = data.series;
-       const first = series[0];
-      const last = series[series.length - 1];
-        // Pass OHLCV as JSON so the model embeds data verbatim — no transcription errors.
-        const ohlcv = series.slice(-60).map((s: any) => {
-          const d = s.data || {};
-          return {
-            date: s.date,
-            open: Number(d.OpenPrice) || 0,
-            high: Number(d.HighPrice) || 0,
-            low: Number(d.LowPrice) || 0,
-            close: Number(d.ClosePrice) || 0,
-            volume: Number(d.TurnoverVolume ?? d.Volume) || 0,
-          };
-        });
-        const json = JSON.stringify(ohlcv);
-        return `[数据已获取] ${data.name || ''}(${data.code || ''}) K线${series.length}天 ${first.date}~${last.date} 首日收${first.data?.ClosePrice || '—'} 末日收${last.data?.ClosePrice || '—'}。\n\n以下是完整的 OHLCV 数据（JSON 格式）。请在 canvas:html 中直接引用此 JSON 变量生成 echarts candlestick 图表，严禁手动逐个重新输入或修改任何数值：\n\nconst RAW_DATA = ${json};\n\n请基于上述数据用 canvas:html 输出 K线图（使用 echarts candlestick 系列），并撰写分析。`;
-     }
-    }
-
-    if (meta.skill === 'westock-market') {
-      if (meta.action === 'hot_stock') {
-        const stocks = data?.stocks || [];
-        const top3 = Array.isArray(stocks) ? stocks.slice(0, 3).map((s: any) => `${s.name}(${s.zdf})`).join('、') : '';
-        return `[数据已获取] 热搜股票${Array.isArray(stocks) ? stocks.length : 0}只${top3 ? '，前3：' + top3 : ''}。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
-      }
-      if (meta.action === 'hot_board') {
-        return `[数据已获取] 板块排行数据已获取。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
-      }
-      if (meta.action === 'ipo_calendar') {
-        const list = data?.ipoList || [];
-        return `[数据已获取] 新股日历${Array.isArray(list) ? list.length : 0}条。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
-      }
-      if (meta.action === 'finance_calendar') {
-        return `[数据已获取] 投资日历数据已获取。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
-      }
-      return `[数据已获取] 市场数据已获取。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
-    }
-
-    if (meta.skill === 'westock-research') {
-      if (meta.action === 'market_news') {
-        const news = data?.data || [];
-        const count = Array.isArray(news) ? news.length : 0;
-        const top = Array.isArray(news) && news.length > 0 ? `，最新：${news[0].title?.slice(0, 30)}` : '';
-        return `[数据已获取] ${count}条新闻${top}。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
-      }
-      if (meta.action === 'stock_report') {
-        const reports = data?.reports || [];
-        return `[数据已获取] ${Array.isArray(reports) ? reports.length : 0}条研报。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
-      }
-      if (meta.action === 'research_report_curated') {
-        const items = data?.items || [];
-        return `[数据已获取] ${Array.isArray(items) ? items.length : 0}条精选研报。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
-      }
-      if (meta.action === 'announcement_list') {
-        const list = data?.data || [];
-        return `[数据已获取] ${Array.isArray(list) ? list.length : 0}条公告。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
-      }
-      return `[数据已获取] 研报/公告数据已获取。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
-    }
-
-    if (meta.skill === 'westock-screener') {
-      if (meta.action === 'stock_filter_query') {
-        const total = data?.component_data?.total_stocks || 0;
-        const desc = data?.component_data?.selection_desc || '';
-        return `[数据已获取] 筛选结果${total}只股票${desc ? '。' + desc : ''}。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
-      }
-      if (meta.action === 'query_list_data_by_date') {
-        const keys = data?.data ? Object.keys(data.data) : [];
-        return `[数据已获取] 列表数据(${keys.join(', ')})已获取。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
-      }
-      return `[数据已获取] 列表数据已获取。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
-    }
-  } catch {
-    // Fall through to generic summary
-  }
-
-  // Generic fallback
-  return `[数据已获取] ${meta.skill}/${meta.action} 数据已获取。请基于上述数据用 canvas:html 输出可视化画布，并撰写分析。`;
-}
 
 // Sandbox API URL
 const isDev = !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
@@ -628,31 +247,44 @@ export class CodeAnyAgent extends BaseAgent {
    * a query-string parameter so the memory MCP can talk to Supabase under
    * user-scoped RLS. The query string never leaves loopback.
    */
-  private buildBuiltinMcpServers(
-    userId?: string,
-    accessToken?: string
-  ): Record<string, McpServerConfig> {
-    if (!userId || !isSupabaseConfigured()) {
-      return {};
-    }
-    const port = process.env.PORT || '2026';
-    const params = new URLSearchParams({ user_id: userId });
-    if (accessToken) {
-      params.set('access_token', accessToken);
-    }
-    const url = `http://127.0.0.1:${port}/mcp-memory?${params.toString()}`;
-    const headers: Record<string, string> = {};
-    if (process.env.SAGE_API_TOKEN) {
-      headers.Authorization = `Bearer ${process.env.SAGE_API_TOKEN}`;
-    }
-    return {
-      memory: {
-        type: 'http',
-        url,
-        ...(Object.keys(headers).length > 0 ? { headers } : {}),
-      },
-    };
-  }
+ private buildBuiltinMcpServers(
+   userId?: string,
+   accessToken?: string
+ ): Record<string, McpServerConfig> {
+   if (!userId || !isSupabaseConfigured()) {
+     // Even without memory server, inject the minishare data MCP
+     const minishareUrl = process.env.MINISHARE_MCP_URL;
+     if (!minishareUrl) return {};
+     return {
+       minishare: {
+         type: 'sse',
+         url: minishareUrl,
+       },
+     };
+   }
+   const port = process.env.PORT || '2026';
+   const params = new URLSearchParams({ user_id: userId });
+   if (accessToken) {
+     params.set('access_token', accessToken);
+   }
+   const url = `http://127.0.0.1:${port}/mcp-memory?${params.toString()}`;
+   const headers: Record<string, string> = {};
+   if (process.env.SAGE_API_TOKEN) {
+     headers.Authorization = `Bearer ${process.env.SAGE_API_TOKEN}`;
+   }
+   const servers: Record<string, McpServerConfig> = {
+     memory: {
+       type: 'http',
+       url,
+       ...(Object.keys(headers).length > 0 ? { headers } : {}),
+     },
+   };
+   const minishareUrl = process.env.MINISHARE_MCP_URL;
+   if (minishareUrl) {
+     servers.minishare = { type: 'sse', url: minishareUrl };
+   }
+   return servers;
+ }
 
   private buildSdkOptions(
     sessionCwd: string,
@@ -698,14 +330,11 @@ export class CodeAnyAgent extends BaseAgent {
       sdkOpts.abortController = options.abortController;
     }
 
-    // Sage-owned hook: deterministic interception stays in our adapter. The SDK
-    // patch only supplies the generic `modifiedOutput` transport.
+    // PostToolUse hooks: canvas hints for minishare MCP tools + WebSearch.
     sdkOpts.hooks = {
       ...((sdkOpts as any).hooks || {}),
       PostToolUse: [
-        createToolOutputInterceptorHook({
-          intercept: interceptToolOutput,
-        }),
+        ...createMinishareCanvasHooks(),
         createWebSearchInterceptorHook(),
       ],
     };

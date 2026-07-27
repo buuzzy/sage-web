@@ -1,68 +1,79 @@
 /**
- * Official, curated Chinese labels for built-in skills.
+ * Curated capabilities shown read-only in the web UI.
  *
- * Skills are listed read-only in the web UI. We never expose the raw internal
- * skill IDs (which carry brand/vendor prefixes) or any vendor names to users;
- * instead every skill is shown with a plain, capability-focused name and a
- * plain-text description of what it does.
- *
- * Keys here are the `name` field returned by the backend (the SKILL.md
- * frontmatter `name`, e.g. "htsc-daily-review-skill"). Unknown skills fall
- * back to their raw name so the panel still renders.
+ * These map to the minishare MCP server's tool categories + the web-access
+ * skill. Users see plain Chinese names and capability-focused descriptions.
+ * No vendor/brand references anywhere in user-visible text.
  */
 
 export interface SkillLabel {
-  /** User-facing display name, no brand/vendor references. */
+  /** Stable id for React keys */
+  id: string;
+  /** User-facing display name */
   name: string;
-  /** Plain-text description of the capability, no brand/vendor references. */
+  /** Plain-text description of the capability */
   description: string;
 }
 
-const SKILL_LABELS: Record<string, SkillLabel> = {
-  'htsc-daily-review-skill': {
-    name: 'A股每日复盘',
-    description:
-      '最近一个交易日或近一周的 A 股市场复盘，包含行情回顾与走势分析',
+export const CURATED_SKILLS: SkillLabel[] = [
+  {
+    id: 'market-quote',
+    name: '行情数据',
+    description: 'A股日K、周K、月K线行情，开盘、收盘、最高、最低与成交量数据',
   },
-  'htsc-industry-outlook-skill': {
-    name: '行业赛道分析',
-    description: '行业与赛道的周度观点，涵盖基本面、短期交易与参考思路',
+  {
+    id: 'valuation',
+    name: '估值指标',
+    description: 'PE、PB、换手率、量比、总市值等每日估值与交易指标',
   },
-  'htsc-report-skill': {
-    name: '深度研报检索',
-    description: '按公司或研究方向获取专业的深度研究报告',
+  {
+    id: 'financials',
+    name: '财务报表',
+    description: '利润表、资产负债表、现金流量表完整数据与财务指标分析',
   },
-  'htsc-valuation-skill': {
-    name: '公司估值与财务',
-    description: '估值模型、盈利能力、营收预测与三大财务报表数据',
+  {
+    id: 'forecast-dividend',
+    name: '业绩与分红',
+    description: '业绩预告、分红送转方案、主要财务指标与审计意见',
   },
-  'web-access': {
+  {
+    id: 'capital-flow',
+    name: '资金与龙虎榜',
+    description: '主力资金流向、龙虎榜明细、融资融券余额与大宗交易',
+  },
+  {
+    id: 'fund-etf',
+    name: '基金与ETF',
+    description: '公募基金与ETF行情、净值、持仓、基金经理与分红数据',
+  },
+  {
+    id: 'news',
+    name: '财经新闻',
+    description: '实时新闻快讯、重大财经新闻与新闻联播文字稿',
+  },
+  {
+    id: 'research',
+    name: '券商研报',
+    description: '按公司或研究方向获取最新券商研究报告',
+  },
+  {
+    id: 'announcements',
+    name: '公司公告',
+    description: '上市公司最新公告、年报季报与重大事项披露',
+  },
+  {
+    id: 'irm-qa',
+    name: '董秘问答',
+    description: '互动平台上投资者向董秘的提问与回复',
+  },
+  {
+    id: 'policy',
+    name: '政策法规',
+    description: '国家各部委发布的政策文件与法规信息',
+  },
+  {
+    id: 'web-access',
     name: '联网搜索',
     description: '实时检索互联网信息，获取网页内容与最新资讯',
   },
-  'westock-market': {
-    name: '市场总览',
-    description: '热搜股票、板块排行、新股日历、财经事件与北向资金',
-  },
-  'westock-quote': {
-    name: '实时行情',
-    description: '实时价格、K线、技术指标、资金流向与机构评级',
-  },
-  'westock-research': {
-    name: '研报与公告',
-    description: '个股研报列表、公司公告、市场资讯与新闻',
-  },
-  'westock-screener': {
-    name: '选股与宏观',
-    description: '条件选股筛选、指数板块成份与宏观经济数据',
-  },
-};
-
-/**
- * Resolve a user-facing label for a skill. Falls back to the raw name when the
- * skill is not in the curated set (e.g. a future built-in not yet mapped),
- * so the read-only panel always renders something sensible.
- */
-export function getSkillLabel(rawName: string): SkillLabel {
-  return SKILL_LABELS[rawName] ?? { name: rawName, description: '' };
-}
+];
