@@ -53,9 +53,8 @@ export function extractAllCanvases(messages: AgentMessage[]): CanvasItem[] {
     const content = msg.content || '';
     if (!content) return;
 
-    // Skip if any block is still streaming
+    // Skip if canvas:html block is still streaming
     if (hasIncompleteHtmlBlock(content)) return;
-    if (hasIncompleteBlock(content)) return;
 
     const re = /```canvas:html\s*\n([\s\S]*?)```/g;
     let match: RegExpExecArray | null;
