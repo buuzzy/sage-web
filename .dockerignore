@@ -1,11 +1,9 @@
-# Only include files needed for sage-api Docker build
+# Exclude build artifacts and non-essential dirs from Docker context
 node_modules/
 dist/
-src/
 src-tauri/
 ios/
 docs/
 .git/
 .github/
 *.md
-!src-api/
