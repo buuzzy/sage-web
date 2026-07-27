@@ -1,9 +1,9 @@
 /**
  * Tool Metadata Extraction Utilities
  *
- * Handles extraction and parsing of tool_metadata from skill responses
- * for deterministic artifact mapping.
- */
+ * Legacy utility — extracts tool_metadata from the old Skill tool.
+ * MCP-based tools do not populate this field; new conversations use canvas:html.
+*/
 
 import type { ToolMetadata } from '@/shared/config/artifactMapping';
 
@@ -15,11 +15,7 @@ import type { ToolMetadata } from '@/shared/config/artifactMapping';
  * {
  *   "code": 0,
  *   "data": {...},
- *   "_metadata": {
- *     "skill": "westock-quote",
- *     "action": "stock_quote_snapshot",
- *     "list_code": "optional_value"
- *   }
+ *   "_metadata": { "skill": "...", "action": "..." }
  * }
  * ```
  *

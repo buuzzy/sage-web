@@ -40,7 +40,7 @@ export type MessageType =
  * facilitating automatic artifact component selection.
  */
 export interface ToolMetadata {
-  skill: string; // e.g., "westock-quote", "westock-market"
+  skill: string; // legacy tool metadata
   action: string; // e.g., "stock_quote_snapshot", "hot_stock"
   list_code?: string; // Optional: for screener list queries like "macro_cpi_ppi"
 }

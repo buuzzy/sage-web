@@ -228,16 +228,9 @@ async function start() {
   // Load configuration
   await loadConfig();
 
-  // Financial data API keys are read from environment variables:
-  //   WESTOCK_API_KEY  — required for westock skills
-  //   HTSC_APP_KEY     — required for htsc skills and MCP
-  // Set them in .env (local) or Railway environment variables (production).
-  if (!process.env.WESTOCK_API_KEY) {
-    console.warn('[Startup] WESTOCK_API_KEY not set — westock skills will fail');
-  }
-  if (!process.env.HTSC_APP_KEY) {
-    console.warn('[Startup] HTSC_APP_KEY not set — htsc skills and MCP will fail');
-  }
+  // Financial data is served via the minishare MCP server (Railway).
+  // The MCP URL is configured via MINISHARE_MCP_URL env var and injected
+  // by buildBuiltinMcpServers() in the agent extension.
 
   // Install built-in skills to ~/.sage/skills/
   const { installBuiltinSkills } = await import('@/shared/skills/loader');

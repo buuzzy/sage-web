@@ -152,16 +152,10 @@ async function installDefaultFiles(appDir: string): Promise<void> {
   // Create skeleton files with minimal content.
   // Phase 2 起不再创建 user.md / MEMORY.md：历史记忆全部走云端 supabase
   // + mcp__memory__search_memory 工具，无需本地长期记忆文件。
+  // MCP servers are now injected via buildBuiltinMcpServers() in the agent
+  // extension (minishare data MCP + memory MCP). No legacy third-party MCP
+  // servers are auto-seeded here.
   const defaultMcpServers: Record<string, unknown> = {};
-
-  // Auto-seed HTSC Research MCP if API key is configured
-  if (process.env.HTSC_APP_KEY) {
-    defaultMcpServers['htsc_research_mcp'] = {
-      type: 'http',
-      url: 'https://inst.htsc.com/mcp/v1/ris/htsc_research_mcp',
-      headers: { HTSC_APP_KEY: process.env.HTSC_APP_KEY },
-    };
-  }
 
   await writeIfMissing(
     join(appDir, 'mcp.json'),

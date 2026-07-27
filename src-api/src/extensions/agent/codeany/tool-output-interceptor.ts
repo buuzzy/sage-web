@@ -1,13 +1,9 @@
 /**
  * PostToolUse hooks for canvas triggering.
  *
- * Two interceptors:
+* Two interceptors:
  *   1. Minishare MCP tools — data-visualization tools get a canvas:html hint appended.
  *   2. WebSearch — appends a canvas hint for structured search results.
- *
- * The old westock/Bash interceptor (URL pattern matching, JSON structure
- * detection, 600+ lines) has been removed. MCP tools already return
- * pre-formatted text, so token compression is no longer needed.
  */
 
 import { createLogger } from '@/shared/utils/logger';
