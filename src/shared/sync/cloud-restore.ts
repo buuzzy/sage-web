@@ -77,14 +77,16 @@ export async function restoreCloudConversations(): Promise<RestoreCloudConversat
 }
 
 /**
- * 增量同步：拉取比本地最新 session 更新的数据。
- * 每次启动调用，不会重复导入已有数据（importBackupData 内部去重）。
+ * Incremental sync: fetch cloud sessions newer than local latest.
+ *
+ * Query order: sessions -> tasks (by session_id) -> messages+files (by task_id).
+ * This two-step chain is required because messages reference task_id, not session_id.
  */
 export async function incrementalCloudSync(): Promise<void> {
   const { getAllSessions } = await import('@/shared/db/sessions');
   const localSessions = await getAllSessions();
 
-  // 找到本地最新的 updated_at
+  // Find the most recent local updated_at
   let latestLocal: string | null = null;
   if (localSessions.length > 0) {
     const dates = localSessions
@@ -96,7 +98,7 @@ export async function incrementalCloudSync(): Promise<void> {
     }
   }
 
-  // 从 Supabase 拉取比本地更新的 sessions
+  // Fetch cloud sessions newer than local (or all if fresh device)
   let sessionsQuery = supabase.from('sessions').select('*').order('updated_at', { ascending: false });
   if (latestLocal) {
     sessionsQuery = sessionsQuery.gt('updated_at', latestLocal);
@@ -114,13 +116,41 @@ export async function incrementalCloudSync(): Promise<void> {
 
   console.log(`[CloudSync] Found ${newSessions.length} new/updated sessions, syncing...`);
 
-  // 拉取这些 session 关联的 tasks 和 messages
   const sessionIds = newSessions.map((s: { id: string }) => s.id);
 
-  const [{ data: tasks }, { data: messages }] = await Promise.all([
-    supabase.from('tasks').select('*').in('session_id', sessionIds).order('created_at', { ascending: true }),
-    supabase.from('messages').select('*').in('task_id', sessionIds).order('created_at', { ascending: true }),
+  // Step 1: fetch tasks by session_id
+  const { data: tasks, error: tasksError } = await supabase
+    .from('tasks')
+    .select('*')
+    .in('session_id', sessionIds)
+    .order('created_at', { ascending: true });
+
+  if (tasksError) {
+    console.warn('[CloudSync] Failed to fetch tasks:', tasksError.message);
+  }
+
+  // Step 2: extract real task IDs, then fetch messages and files by task_id
+  const taskIds = (tasks ?? []).map((t: { id: string }) => t.id);
+
+  const messagesPromise = taskIds.length > 0
+    ? supabase.from('messages').select('*').in('task_id', taskIds).order('created_at', { ascending: true })
+    : Promise.resolve({ data: [], error: null });
+
+  const filesPromise = taskIds.length > 0
+    ? supabase.from('files').select('*').in('task_id', taskIds).order('created_at', { ascending: true })
+    : Promise.resolve({ data: [], error: null });
+
+  const [{ data: messages, error: messagesError }, { data: files, error: filesError }] = await Promise.all([
+    messagesPromise,
+    filesPromise,
   ]);
+
+  if (messagesError) {
+    console.warn('[CloudSync] Failed to fetch messages:', messagesError.message);
+  }
+  if (filesError) {
+    console.warn('[CloudSync] Failed to fetch files:', filesError.message);
+  }
 
   const normalizedSessions = (newSessions as CloudSessionRow[]).map((session) => ({
     id: session.id,
@@ -134,8 +164,8 @@ export async function incrementalCloudSync(): Promise<void> {
     sessions: normalizedSessions,
     tasks: tasks ?? [],
     messages: messages ?? [],
-    files: [],
+    files: files ?? [],
   });
 
-  console.log(`[CloudSync] Incremental sync done: ${result.sessions} sessions, ${result.messages} messages`);
+  console.log(`[CloudSync] Incremental sync done: ${result.sessions} sessions, ${result.tasks} tasks, ${result.messages} messages, ${result.files} files`);
 }
