@@ -361,13 +361,21 @@ function generateSummary(meta: ToolOutputMetadata, parsed: any): string {
      if (meta.action === 'stock_quote_history' && data?.series?.length > 0) {
        const series = data.series;
        const first = series[0];
-       const last = series[series.length - 1];
-        // Include compact OHLCV data so the LLM can render a proper chart.
+      const last = series[series.length - 1];
+        // Pass OHLCV as JSON so the model embeds data verbatim — no transcription errors.
         const ohlcv = series.slice(-60).map((s: any) => {
           const d = s.data || {};
-          return `${s.date},${d.OpenPrice ?? ''},${d.HighPrice ?? ''},${d.LowPrice ?? ''},${d.ClosePrice ?? ''},${d.Volume ?? ''}`;
-        }).join('\n');
-        return `[数据已获取] ${data.name || ''}(${data.code || ''}) K线${series.length}天 ${first.date}~${last.date} 首日收${first.data?.ClosePrice || '—'} 末日收${last.data?.ClosePrice || '—'}。\nOHLCV数据(日期,开盘,最高,最低,收盘,成交量):\n${ohlcv}\n请基于上述数据用 canvas:html 输出 K线图（使用 echarts candlestick 系列），并撰写分析。`;
+          return {
+            date: s.date,
+            open: Number(d.OpenPrice) || 0,
+            high: Number(d.HighPrice) || 0,
+            low: Number(d.LowPrice) || 0,
+            close: Number(d.ClosePrice) || 0,
+            volume: Number(d.TurnoverVolume ?? d.Volume) || 0,
+          };
+        });
+        const json = JSON.stringify(ohlcv);
+        return `[数据已获取] ${data.name || ''}(${data.code || ''}) K线${series.length}天 ${first.date}~${last.date} 首日收${first.data?.ClosePrice || '—'} 末日收${last.data?.ClosePrice || '—'}。\n\n以下是完整的 OHLCV 数据（JSON 格式）。请在 canvas:html 中直接引用此 JSON 变量生成 echarts candlestick 图表，严禁手动逐个重新输入或修改任何数值：\n\nconst RAW_DATA = ${json};\n\n请基于上述数据用 canvas:html 输出 K线图（使用 echarts candlestick 系列），并撰写分析。`;
      }
     }
 
