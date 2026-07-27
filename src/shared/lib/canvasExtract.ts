@@ -15,6 +15,7 @@ export interface CanvasItem {
   title: string;
   html: string;
   messageIndex: number;
+  turnIndex: number;
 }
 
 function hasIncompleteHtmlBlock(text: string): boolean {
@@ -44,11 +45,17 @@ export function stripCanvasBlocks(text: string): string {
 
 /**
  * Extract all canvas:html blocks from a message list.
+ * Each canvas is tagged with turnIndex (which user-assistant turn it belongs to).
  */
 export function extractAllCanvases(messages: AgentMessage[]): CanvasItem[] {
   const canvases: CanvasItem[] = [];
+  let turnIndex = 0;
 
   messages.forEach((msg, idx) => {
+    if (msg.type === 'user') {
+      turnIndex++;
+      return;
+    }
     if (msg.type !== 'text') return;
     const content = msg.content || '';
     if (!content) return;
@@ -67,6 +74,7 @@ export function extractAllCanvases(messages: AgentMessage[]): CanvasItem[] {
           html,
           title: '画布',
           messageIndex: idx,
+          turnIndex,
         });
         htmlIdx++;
       }

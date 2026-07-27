@@ -68,6 +68,7 @@ ${html}
   return (
     <iframe
       srcDoc={srcDoc}
+      key={html}
       sandbox="allow-scripts"
       style={{ width: '100%', height: '100%', border: 'none' }}
       title="canvas"

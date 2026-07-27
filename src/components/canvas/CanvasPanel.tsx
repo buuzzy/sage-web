@@ -17,9 +17,15 @@ export function CanvasPanel({ canvases, onClose, className }: CanvasPanelProps) 
 
   useEffect(() => {
     if (canvases.length > 0) {
-      setSelectedIndex(canvases.length - 1);
+      // Jump to the latest canvas from the most recent turn
+      const latestTurn = canvases[canvases.length - 1].turnIndex;
+      const lastInTurn = canvases
+        .map((c, i) => ({ c, i }))
+        .filter((x) => x.c.turnIndex === latestTurn)
+        .pop();
+      setSelectedIndex(lastInTurn ? lastInTurn.i : canvases.length - 1);
     }
-  }, [canvases.length]);
+  }, [canvases.length, canvases[canvases.length - 1]?.turnIndex]);
 
   const selected = canvases[Math.min(selectedIndex, canvases.length - 1)];
 
@@ -39,7 +45,7 @@ export function CanvasPanel({ canvases, onClose, className }: CanvasPanelProps) 
             >
               <ChevronLeft className="size-4" />
             </button>
-            <span className="text-muted-foreground text-xs tabular-nums">
+            <span className="text-muted-foreground text-xs tabular-nums" title={`第 ${selected?.turnIndex || 1} 轮对话`}>
               {selectedIndex + 1}/{canvases.length}
             </span>
             <button
