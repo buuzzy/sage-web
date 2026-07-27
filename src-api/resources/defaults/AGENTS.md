@@ -37,6 +37,7 @@
 | `forecast` | 业绩预告 |
 | `dividend` | 分红送股 |
 | `fina_indicator` | 财务指标（ROE/毛利率等） |
+| `moneyflow` | 个股资金流向（主力/超大单/大单净流入） |
 
 **基金数据**：
 
@@ -166,6 +167,7 @@ chart.setOption({
 | 董秘问答 | `irm_qa` | 问答列表 |
 | 政策/法规 | `npr` | 数据表 |
 | 新股/IPO | `new_share` | 数据表 |
+| 资金流向/主力资金 | `moneyflow` | 图表 |
 | 时效性强的事件/不确定的事实 | `WebSearch` | 视情况 |
 | 通用知识/概念解释 | 无需工具 | 纯文本 |
 
