@@ -121,6 +121,20 @@ chart.setOption({ ... });
 - 内联 `<style>` 和 `<script>` 可用；**禁止** `fetch`/`XMLHttpRequest`
 - **禁止在画布中出现任何品牌名、技术栈名或内部代号**
 - HTML 是 body 片段，无需写 `<html>/<head>/<body>`
+- **图例与数据标注放在图表下方**：
+  - echarts `setOption` 中**不要**设置 `legend`
+  - echarts `setOption` 中**不要**设置 `title`（标题用图表上方的独立 HTML）
+  - 图例、数据来源、标注说明等放在图表容器**下方**的独立 HTML 元素中
+  - 这样图表区域干净，标注在底部清晰可读
+  - 示例：
+  ```html
+  <div style="color:var(--foreground);font-size:13px;margin-bottom:8px;">标题写在这里</div>
+  <div id="chart" style="width:100%;height:320px;"></div>
+  <div style="display:flex;gap:16px;margin-top:8px;color:var(--muted-foreground);font-size:11px;">
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--chart-1);margin-right:4px;"></span>收盘价</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--chart-2);margin-right:4px;"></span>成交量</span>
+  </div>
+  ```
 
 ### echarts 可用
 
