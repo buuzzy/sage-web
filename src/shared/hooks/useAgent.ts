@@ -782,390 +782,466 @@ export function useAgent(): UseAgentReturn {
       let sawTerminalError = false;
       let sawResultMessage = false;
       let sawVisibleStreamOutput = false;
+      let processedEventCount = 0; // mirror of server-side seq for catchup
+      let shouldStop = false; // set true by AskUserQuestion to halt
 
       // Helper to check if this stream is still for the active task
       const isActiveTask = () => activeTaskIdRef.current === currentTaskId;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      // ─── Extracted event handler (shared by live stream + catchup) ──────
+      const handleEvent = async (data: AgentMessage) => {
+        processedEventCount++;
+        const isActive = isActiveTask();
 
-        // Note: We no longer cancel the reader when task switches.
-        // Background tasks continue to process the stream and save to database.
-        // UI updates are skipped for inactive tasks via isActiveTask() checks below.
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
+        if (data.type === 'session') {
+          if (isActive) {
+            sessionIdRef.current = data.sessionId || null;
+          }
+        } else if (data.type === 'done') {
+          if (!sawVisibleStreamOutput && !sawTerminalError) {
+            const fallbackMessage: AgentMessage = {
+              type: 'error',
+              message: MODEL_EMPTY_RESPONSE_MESSAGE,
+            };
+            if (isActive) {
+              setMessages((prev) => [...prev, fallbackMessage]);
+            }
             try {
-              const data = JSON.parse(line.slice(6)) as AgentMessage;
-
-              // Check if this is the active task for UI updates
-              const isActive = isActiveTask();
-
-              if (data.type === 'session') {
-                if (isActive) {
-                  sessionIdRef.current = data.sessionId || null;
-                }
-              } else if (data.type === 'done') {
-                if (!sawVisibleStreamOutput && !sawTerminalError) {
-                  const fallbackMessage: AgentMessage = {
-                    type: 'error',
-                    message: MODEL_EMPTY_RESPONSE_MESSAGE,
-                  };
-                  if (isActive) {
-                    setMessages((prev) => [...prev, fallbackMessage]);
-                  }
-                  try {
-                    await createMessage({
-                      task_id: currentTaskId,
-                      type: 'error',
-                      error_message: MODEL_EMPTY_RESPONSE_MESSAGE,
-                    });
-                    await updateTask(currentTaskId, { status: 'error' });
-                  } catch (dbError) {
-                    console.error(
-                      'Failed to save empty stream fallback:',
-                      dbError
-                    );
-                  }
-                } else if (
-                  sawToolActivity &&
-                  !sawFinalTextAfterTool &&
-                  !sawTerminalError
-                ) {
-                  const reason =
-                    finalResultSubtype && finalResultSubtype !== 'success'
-                      ? `本轮执行结束状态：${finalResultSubtype}。`
-                      : '本轮工具检索已经结束，但模型没有生成最终总结。';
-                  const fallbackMessage: AgentMessage = {
-                    type: 'text',
-                    content:
-                      `${reason}\n\n` +
-                      '我已经停止继续调用工具，避免空转。你可以直接让我“基于已检索结果总结”，或把范围缩小后继续追问。',
-                  };
-                  if (isActive) {
-                    setMessages((prev) => [...prev, fallbackMessage]);
-                  }
-                  try {
-                    await createMessage({
-                      task_id: currentTaskId,
-                      type: 'text',
-                      content: fallbackMessage.content,
-                    });
-                  } catch (dbError) {
-                    console.error('Failed to save fallback message:', dbError);
-                  }
-                }
-                if (sawToolActivity && !sawResultMessage && !sawTerminalError) {
-                  try {
-                    await updateTask(currentTaskId, { status: 'stopped' });
-                  } catch (dbError) {
-                    console.error('Failed to mark task stopped:', dbError);
-                  }
-                }
-
-                // Update background task status (always, even if not active)
-                updateBackgroundTaskStatus(currentTaskId, false);
-
-                // UI updates only for active task
-                if (isActive) {
-                  // Stream ended - mark all plan steps as completed
-                  setPendingPermission(null);
-                  setPlan((currentPlan) => {
-                    if (!currentPlan) return currentPlan;
-                    return {
-                      ...currentPlan,
-                      steps: currentPlan.steps.map((step) => ({
-                        ...step,
-                        status: 'completed' as const,
-                      })),
-                    };
-                  });
-                }
-              } else if (data.type === 'permission_request') {
-                // Handle permission request - only for active task
-                if (isActive && data.permission) {
-                  setPendingPermission(data.permission);
-                  setMessages((prev) => [...prev, data]);
-                }
-              } else if (data.type === 'session_action') {
-                // /new or /reset: clear current session messages
-                if (
-                  isActive &&
-                  (data.action === 'new' || data.action === 'reset')
-                ) {
-                  console.log(`[useAgent] Session action: ${data.action}`);
-                  try {
-                    const { deleteMessagesByTaskId } =
-                      await import('@/shared/db');
-                    await deleteMessagesByTaskId(currentTaskId);
-                    setMessages([]);
-                  } catch (err) {
-                    console.error('[useAgent] Failed to clear messages:', err);
-                  }
-                }
-              } else if (data.type === 'compact_result' && data.conversation) {
-                // Legacy: /compact command replace (no longer used, kept for compat)
-                if (isActive) {
-                  console.log(
-                    '[useAgent] Compact result received, replacing conversation with',
-                    (data.conversation as unknown[]).length,
-                    'messages'
-                  );
-                  // Replace messages in DB: delete old messages and insert compacted ones
-                  try {
-                    const { deleteMessagesByTaskId, createMessage } =
-                      await import('@/shared/db');
-                    await deleteMessagesByTaskId(currentTaskId);
-                    const compactedConv = data.conversation as Array<{
-                      role: string;
-                      content: string;
-                    }>;
-                    for (const msg of compactedConv) {
-                      await createMessage({
-                        task_id: currentTaskId,
-                        type: msg.role === 'user' ? 'user' : 'text',
-                        content: msg.content,
-                      });
-                    }
-                    // Reload messages in UI (map DB Message → AgentMessage to align types)
-                    const { getMessagesByTaskId } = await import('@/shared/db');
-                    const freshMessages =
-                      await getMessagesByTaskId(currentTaskId);
-                    const agentMsgs: AgentMessage[] = freshMessages.map(
-                      (msg) => ({
-                        type: msg.type as AgentMessage['type'],
-                        content: msg.content ?? undefined,
-                        name: msg.tool_name ?? undefined,
-                        output: msg.tool_output ?? undefined,
-                        toolUseId: msg.tool_use_id ?? undefined,
-                        subtype: msg.subtype as AgentMessage['subtype'],
-                      })
-                    );
-                    setMessages(agentMsgs);
-                  } catch (err) {
-                    console.error(
-                      '[useAgent] Failed to apply compact result:',
-                      err
-                    );
-                  }
-                }
-              } else {
-                if (data.type === 'tool_use' || data.type === 'tool_result') {
-                  sawToolActivity = true;
-                  sawFinalTextAfterTool = false;
-                } else if (
-                  data.type === 'text' &&
-                  data.content &&
-                  !data.content.trim().startsWith('```artifact:')
-                ) {
-                  sawFinalTextAfterTool = true;
-                } else if (data.type === 'result') {
-                  finalResultSubtype = data.content || data.subtype;
-                  sawResultMessage = true;
-                } else if (data.type === 'error') {
-                  sawTerminalError = true;
-                }
-
-                if (
-                  (data.type === 'text' && Boolean(data.content?.trim())) ||
-                  data.type === 'tool_use' ||
-                  data.type === 'tool_result' ||
-                  (data as AgentMessage).type === 'permission_request' ||
-                  data.type === 'error'
-                ) {
-                  sawVisibleStreamOutput = true;
-                }
-
-                // UI update only for active task
-                if (isActive) {
-                  // For tool_result messages, extract metadata for artifact mapping
-                  let messageToAdd = data;
-                  if (data.type === 'tool_result' && data.output && data.name) {
-                    const metadata = extractToolMetadata(
-                      data.output,
-                      data.name
-                    );
-                    if (metadata) {
-                      messageToAdd = {
-                        ...data,
-                        toolMetadata: serializeToolMetadata(metadata),
-                      };
-                    }
-                  }
-                  setMessages((prev) => [...prev, messageToAdd]);
-                }
-
-                // Extract file paths from text messages
-                if (data.type === 'text' && data.content) {
-                  await extractFilesFromText(currentTaskId, data.content);
-                }
-
-                // Track tool_use messages for file extraction
-                if (data.type === 'tool_use' && data.name) {
-                  const toolUseId =
-                    (data as { id?: string }).id || `tool_${Date.now()}`;
-                  pendingToolUses.set(toolUseId, {
-                    name: data.name,
-                    input: (data.input as Record<string, unknown>) || {},
-                  });
-                  totalToolCount++;
-
-                  // Handle AskUserQuestion tool - show question UI and pause execution
-                  // Only handle for active task to avoid affecting wrong task's UI
-                  if (
-                    isActive &&
-                    data.name === 'AskUserQuestion' &&
-                    data.input
-                  ) {
-                    const input = data.input as { questions?: AgentQuestion[] };
-                    if (input.questions && Array.isArray(input.questions)) {
-                      setPendingQuestion({
-                        id: `question_${Date.now()}`,
-                        toolUseId,
-                        questions: input.questions,
-                      });
-                      // Stop agent execution and wait for user response
-                      // The user's answer will be sent via continueConversation
-                      console.log(
-                        '[useAgent] AskUserQuestion detected, pausing execution'
-                      );
-                      setIsRunning(false);
-                      if (abortControllerRef.current) {
-                        abortControllerRef.current.abort();
-                        abortControllerRef.current = null;
-                      }
-                      // Also stop backend agent
-                      if (sessionIdRef.current) {
-                        getRequestHeaders().then(headers => fetch(
-                          `${AGENT_SERVER_URL}/agent/stop/${sessionIdRef.current}`,
-                          {
-                            method: 'POST',
-                            headers,
-                          }
-                        )).catch(() => {});
-                      }
-                      reader.cancel();
-                      return; // Stop processing this stream
-                    }
-                  }
-                }
-
-                // When we get a tool_result, extract files from the matched tool_use
-                if (data.type === 'tool_result' && data.toolUseId) {
-                  const toolUse = pendingToolUses.get(data.toolUseId);
-                  if (toolUse) {
-                    await extractAndSaveFiles(
-                      currentTaskId,
-                      toolUse.name,
-                      toolUse.input,
-                      data.output
-                    );
-                    pendingToolUses.delete(data.toolUseId);
-
-                    // Trigger working files refresh for file-writing tools
-                    const fileWritingTools = [
-                      'Write',
-                      'Edit',
-                      'Bash',
-                      'NotebookEdit',
-                    ];
-                    if (
-                      fileWritingTools.includes(toolUse.name) ||
-                      toolUse.name.includes('sandbox')
-                    ) {
-                      setFilesVersion((v) => v + 1);
-                    }
-                  }
-
-                  // Update plan step progress
-                  completedToolCount++;
-                  setPlan((currentPlan) => {
-                    if (!currentPlan || !currentPlan.steps.length)
-                      return currentPlan;
-
-                    const stepCount = currentPlan.steps.length;
-                    // Calculate how many steps should be completed based on tool progress
-                    // Use a heuristic: distribute tool completions across steps
-                    const progressRatio =
-                      completedToolCount /
-                      Math.max(totalToolCount, stepCount * 2);
-                    const completedSteps = Math.min(
-                      Math.floor(progressRatio * stepCount),
-                      stepCount - 1 // Keep at least one step as in_progress until done
-                    );
-
-                    const updatedSteps = currentPlan.steps.map(
-                      (step, index) => {
-                        if (index < completedSteps) {
-                          return { ...step, status: 'completed' as const };
-                        } else if (index === completedSteps) {
-                          return { ...step, status: 'in_progress' as const };
-                        }
-                        return { ...step, status: 'pending' as const };
-                      }
-                    );
-
-                    return { ...currentPlan, steps: updatedSteps };
-                  });
-                }
-
-                // Save message to database
-                try {
-                  // Extract tool metadata for artifact mapping
-                  let toolMetadata: string | undefined;
-                  if (data.type === 'tool_result' && data.output && data.name) {
-                    const metadata = extractToolMetadata(
-                      data.output,
-                      data.name
-                    );
-                    if (metadata) {
-                      toolMetadata = serializeToolMetadata(metadata);
-                    }
-                  }
-
-                  await createMessage({
-                    task_id: currentTaskId,
-                    type: data.type as
-                      | 'text'
-                      | 'tool_use'
-                      | 'tool_result'
-                      | 'result'
-                      | 'error'
-                      | 'user',
-                    content: data.content,
-                    tool_name: data.name,
-                    tool_input: data.input
-                      ? JSON.stringify(data.input)
-                      : undefined,
-                    tool_output: data.output,
-                    tool_use_id: data.toolUseId,
-                    tool_metadata: toolMetadata,
-                    subtype: data.subtype,
-                    error_message: data.message,
-                  });
-
-                  // Update task status based on message
-                  await updateTaskFromMessage(
-                    currentTaskId,
-                    data.type,
-                    data.subtype,
-                    data.cost,
-                    data.duration,
-                    data.usage
-                  );
-                } catch (dbError) {
-                  console.error('Failed to save message:', dbError);
-                }
-              }
-            } catch {
-              // Ignore parse errors
+              await createMessage({
+                task_id: currentTaskId,
+                type: 'error',
+                error_message: MODEL_EMPTY_RESPONSE_MESSAGE,
+              });
+              await updateTask(currentTaskId, { status: 'error' });
+            } catch (dbError) {
+              console.error(
+                'Failed to save empty stream fallback:',
+                dbError
+              );
+            }
+          } else if (
+            sawToolActivity &&
+            !sawFinalTextAfterTool &&
+            !sawTerminalError
+          ) {
+            const reason =
+              finalResultSubtype && finalResultSubtype !== 'success'
+                ? `本轮执行结束状态：${finalResultSubtype}。`
+                : '本轮工具检索已经结束，但模型没有生成最终总结。';
+            const fallbackMessage: AgentMessage = {
+              type: 'text',
+              content:
+                `${reason}\n\n` +
+                '我已经停止继续调用工具，避免空转。你可以直接让我"基于已检索结果总结"，或把范围缩小后继续追问。',
+            };
+            if (isActive) {
+              setMessages((prev) => [...prev, fallbackMessage]);
+            }
+            try {
+              await createMessage({
+                task_id: currentTaskId,
+                type: 'text',
+                content: fallbackMessage.content,
+              });
+            } catch (dbError) {
+              console.error('Failed to save fallback message:', dbError);
             }
           }
+          if (sawToolActivity && !sawResultMessage && !sawTerminalError) {
+            try {
+              await updateTask(currentTaskId, { status: 'stopped' });
+            } catch (dbError) {
+              console.error('Failed to mark task stopped:', dbError);
+            }
+          }
+
+          // Update background task status (always, even if not active)
+          updateBackgroundTaskStatus(currentTaskId, false);
+
+          // UI updates only for active task
+          if (isActive) {
+            // Stream ended - mark all plan steps as completed
+            setPendingPermission(null);
+            setPlan((currentPlan) => {
+              if (!currentPlan) return currentPlan;
+              return {
+                ...currentPlan,
+                steps: currentPlan.steps.map((step) => ({
+                  ...step,
+                  status: 'completed' as const,
+                })),
+              };
+            });
+          }
+        } else if (data.type === 'permission_request') {
+          // Handle permission request - only for active task
+          if (isActive && data.permission) {
+            setPendingPermission(data.permission);
+            setMessages((prev) => [...prev, data]);
+          }
+        } else if (data.type === 'session_action') {
+          // /new or /reset: clear current session messages
+          if (
+            isActive &&
+            (data.action === 'new' || data.action === 'reset')
+          ) {
+            console.log(`[useAgent] Session action: ${data.action}`);
+            try {
+              const { deleteMessagesByTaskId } =
+                await import('@/shared/db');
+              await deleteMessagesByTaskId(currentTaskId);
+              setMessages([]);
+            } catch (err) {
+              console.error('[useAgent] Failed to clear messages:', err);
+            }
+          }
+        } else if (data.type === 'compact_result' && data.conversation) {
+          // Legacy: /compact command replace (no longer used, kept for compat)
+          if (isActive) {
+            console.log(
+              '[useAgent] Compact result received, replacing conversation with',
+              (data.conversation as unknown[]).length,
+              'messages'
+            );
+            // Replace messages in DB: delete old messages and insert compacted ones
+            try {
+              const { deleteMessagesByTaskId, createMessage } =
+                await import('@/shared/db');
+              await deleteMessagesByTaskId(currentTaskId);
+              const compactedConv = data.conversation as Array<{
+                role: string;
+                content: string;
+              }>;
+              for (const msg of compactedConv) {
+                await createMessage({
+                  task_id: currentTaskId,
+                  type: msg.role === 'user' ? 'user' : 'text',
+                  content: msg.content,
+                });
+              }
+              // Reload messages in UI (map DB Message → AgentMessage to align types)
+              const { getMessagesByTaskId } = await import('@/shared/db');
+              const freshMessages =
+                await getMessagesByTaskId(currentTaskId);
+              const agentMsgs: AgentMessage[] = freshMessages.map(
+                (msg) => ({
+                  type: msg.type as AgentMessage['type'],
+                  content: msg.content ?? undefined,
+                  name: msg.tool_name ?? undefined,
+                  output: msg.tool_output ?? undefined,
+                  toolUseId: msg.tool_use_id ?? undefined,
+                  subtype: msg.subtype as AgentMessage['subtype'],
+                })
+              );
+              setMessages(agentMsgs);
+            } catch (err) {
+              console.error(
+                '[useAgent] Failed to apply compact result:',
+                err
+              );
+            }
+          }
+        } else {
+          if (data.type === 'tool_use' || data.type === 'tool_result') {
+            sawToolActivity = true;
+            sawFinalTextAfterTool = false;
+          } else if (
+            data.type === 'text' &&
+            data.content &&
+            !data.content.trim().startsWith('```artifact:')
+          ) {
+            sawFinalTextAfterTool = true;
+          } else if (data.type === 'result') {
+            finalResultSubtype = data.content || data.subtype;
+            sawResultMessage = true;
+          } else if (data.type === 'error') {
+            sawTerminalError = true;
+          }
+
+          if (
+            (data.type === 'text' && Boolean(data.content?.trim())) ||
+            data.type === 'tool_use' ||
+            data.type === 'tool_result' ||
+            (data as AgentMessage).type === 'permission_request' ||
+            data.type === 'error'
+          ) {
+            sawVisibleStreamOutput = true;
+          }
+
+          // UI update only for active task
+          if (isActive) {
+            // For tool_result messages, extract metadata for artifact mapping
+            let messageToAdd = data;
+            if (data.type === 'tool_result' && data.output && data.name) {
+              const metadata = extractToolMetadata(
+                data.output,
+                data.name
+              );
+              if (metadata) {
+                messageToAdd = {
+                  ...data,
+                  toolMetadata: serializeToolMetadata(metadata),
+                };
+              }
+            }
+            setMessages((prev) => [...prev, messageToAdd]);
+          }
+
+          // Extract file paths from text messages
+          if (data.type === 'text' && data.content) {
+            await extractFilesFromText(currentTaskId, data.content);
+          }
+
+          // Track tool_use messages for file extraction
+          if (data.type === 'tool_use' && data.name) {
+            const toolUseId =
+              (data as { id?: string }).id || `tool_${Date.now()}`;
+            pendingToolUses.set(toolUseId, {
+              name: data.name,
+              input: (data.input as Record<string, unknown>) || {},
+            });
+            totalToolCount++;
+
+            // Handle AskUserQuestion tool - show question UI and pause execution
+            // Only handle for active task to avoid affecting wrong task's UI
+            if (
+              isActive &&
+              data.name === 'AskUserQuestion' &&
+              data.input
+            ) {
+              const input = data.input as { questions?: AgentQuestion[] };
+              if (input.questions && Array.isArray(input.questions)) {
+                setPendingQuestion({
+                  id: `question_${Date.now()}`,
+                  toolUseId,
+                  questions: input.questions,
+                });
+                // Stop agent execution and wait for user response
+                // The user's answer will be sent via continueConversation
+                console.log(
+                  '[useAgent] AskUserQuestion detected, pausing execution'
+                );
+                setIsRunning(false);
+                if (abortControllerRef.current) {
+                  abortControllerRef.current.abort();
+                  abortControllerRef.current = null;
+                }
+                // Also stop backend agent
+                if (sessionIdRef.current) {
+                  getRequestHeaders().then(headers => fetch(
+                    `${AGENT_SERVER_URL}/agent/stop/${sessionIdRef.current}`,
+                    {
+                      method: 'POST',
+                      headers,
+                    }
+                  )).catch(() => {});
+                }
+                shouldStop = true;
+                return;
+              }
+            }
+          }
+
+          // When we get a tool_result, extract files from the matched tool_use
+          if (data.type === 'tool_result' && data.toolUseId) {
+            const toolUse = pendingToolUses.get(data.toolUseId);
+            if (toolUse) {
+              await extractAndSaveFiles(
+                currentTaskId,
+                toolUse.name,
+                toolUse.input,
+                data.output
+              );
+              pendingToolUses.delete(data.toolUseId);
+
+              // Trigger working files refresh for file-writing tools
+              const fileWritingTools = [
+                'Write',
+                'Edit',
+                'Bash',
+                'NotebookEdit',
+              ];
+              if (
+                fileWritingTools.includes(toolUse.name) ||
+                toolUse.name.includes('sandbox')
+              ) {
+                setFilesVersion((v) => v + 1);
+              }
+            }
+
+            // Update plan step progress
+            completedToolCount++;
+            setPlan((currentPlan) => {
+              if (!currentPlan || !currentPlan.steps.length)
+                return currentPlan;
+
+              const stepCount = currentPlan.steps.length;
+              // Calculate how many steps should be completed based on tool progress
+              // Use a heuristic: distribute tool completions across steps
+              const progressRatio =
+                completedToolCount /
+                Math.max(totalToolCount, stepCount * 2);
+              const completedSteps = Math.min(
+                Math.floor(progressRatio * stepCount),
+                stepCount - 1 // Keep at least one step as in_progress until done
+              );
+
+              const updatedSteps = currentPlan.steps.map(
+                (step, index) => {
+                  if (index < completedSteps) {
+                    return { ...step, status: 'completed' as const };
+                  } else if (index === completedSteps) {
+                    return { ...step, status: 'in_progress' as const };
+                  }
+                  return { ...step, status: 'pending' as const };
+                }
+              );
+
+              return { ...currentPlan, steps: updatedSteps };
+            });
+          }
+
+          // Save message to database
+          try {
+            // Extract tool metadata for artifact mapping
+            let toolMetadata: string | undefined;
+            if (data.type === 'tool_result' && data.output && data.name) {
+              const metadata = extractToolMetadata(
+                data.output,
+                data.name
+              );
+              if (metadata) {
+                toolMetadata = serializeToolMetadata(metadata);
+              }
+            }
+
+            await createMessage({
+              task_id: currentTaskId,
+              type: data.type as
+                | 'text'
+                | 'tool_use'
+                | 'tool_result'
+                | 'result'
+                | 'error'
+                | 'user',
+              content: data.content,
+              tool_name: data.name,
+              tool_input: data.input
+                ? JSON.stringify(data.input)
+                : undefined,
+              tool_output: data.output,
+              tool_use_id: data.toolUseId,
+              tool_metadata: toolMetadata,
+              subtype: data.subtype,
+              error_message: data.message,
+            });
+
+            // Update task status based on message
+            await updateTaskFromMessage(
+              currentTaskId,
+              data.type,
+              data.subtype,
+              data.cost,
+              data.duration,
+              data.usage
+            );
+          } catch (dbError) {
+            console.error('Failed to save message:', dbError);
+          }
+        }
+      };
+
+      // ─── Live SSE stream reader ──────────────────────────────────────────
+      const readStream = async () => {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (shouldStop) { reader.cancel(); break; }
+
+          // Note: We no longer cancel the reader when task switches.
+          // Background tasks continue to process the stream and save to database.
+          // UI updates are skipped for inactive tasks via isActiveTask() checks below.
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6)) as AgentMessage;
+                await handleEvent(data);
+                if (shouldStop) break;
+              } catch {
+                // Ignore parse errors
+              }
+            }
+            // SSE comment lines (": keepalive") are ignored — they only keep
+            // the TCP connection alive through Cloudflare / Railway proxies.
+          }
+        }
+      };
+
+      // ─── Catchup via events endpoint (SSE reconnection) ──────────────────
+      const catchupEvents = async () => {
+        const MAX_ATTEMPTS = 120; // 120 × 2s = 4 min max wait
+        const POLL_INTERVAL = 2000;
+
+        for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+          if (_abortController.signal.aborted || shouldStop) return;
+
+          try {
+            const headers = await getRequestHeaders();
+            const res = await fetch(
+              `${AGENT_SERVER_URL}/agent/task/${currentTaskId}/events?after=${processedEventCount - 1}`,
+              { headers }
+            );
+
+            if (res.status === 404) {
+              // Task buffer expired (10-min TTL) — agent likely completed long ago.
+              // Reload messages from DB as final fallback.
+              console.warn('[useAgent] Catchup buffer expired, reloading from DB');
+              break;
+            }
+
+            if (!res.ok) {
+              console.warn(`[useAgent] Catchup poll returned ${res.status}`);
+            } else {
+              const result = await res.json();
+              if (result.events && result.events.length > 0) {
+                for (const event of result.events) {
+                  await handleEvent(event.data as AgentMessage);
+                  if (shouldStop) return;
+                }
+              }
+              if (result.isComplete) {
+                console.log('[useAgent] Catchup complete — task finished');
+                return;
+              }
+            }
+          } catch {
+            // Transient network error during catchup poll — keep retrying
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
+        }
+      };
+
+      // ─── Orchestrate: stream → catchup on disconnect ────────────────────
+      try {
+        await readStream();
+      } catch (streamError) {
+        if (_abortController.signal.aborted || shouldStop) return;
+        // Stream disconnected (network error, proxy reset, etc.)
+      // Backend continues executing and buffering events — recover via catchup.
+      // streamError is typed as unknown by catch; coerce for logging
+      const errMsg = streamError instanceof Error ? streamError.message : String(streamError);
+        console.warn('[useAgent] SSE stream disconnected, recovering via catchup...', errMsg);
+        try {
+          await catchupEvents();
+        } catch (catchupError) {
+          console.error('[useAgent] Catchup also failed:', catchupError);
+          throw streamError;
         }
       }
     },

@@ -75,8 +75,20 @@ function createSSEStream(generator: AsyncGenerator<unknown>, taskId?: string) {
     initTaskBuffer(taskId);
   }
 
-  return new ReadableStream({
+ return new ReadableStream({
     async start(controller) {
+      // Heartbeat: send a comment every 15s to keep Cloudflare / Railway
+      // proxy connections alive during long tool execution gaps.
+      // SSE comments (lines starting with ":") are ignored by the client
+      // but count as traffic for proxy idle-timeout resets.
+      const heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(': keepalive\n\n'));
+        } catch {
+          // controller already closed
+        }
+      }, 15_000);
+
       try {
         for await (const message of generator) {
           // Store event in buffer (for reconnection)
@@ -107,7 +119,8 @@ function createSSEStream(generator: AsyncGenerator<unknown>, taskId?: string) {
         } catch {
           // Client already disconnected
         }
-      } finally {
+     } finally {
+        clearInterval(heartbeat);
         // Mark task as complete in buffer
         if (taskId) {
           markTaskComplete(taskId);
@@ -118,6 +131,9 @@ function createSSEStream(generator: AsyncGenerator<unknown>, taskId?: string) {
           // Already closed
         }
       }
+    },
+    cancel() {
+      // Client disconnected — interval will be cleaned up by finally block
     },
   });
 }
