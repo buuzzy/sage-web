@@ -49,6 +49,7 @@ import {
   applyAgentStrategyHint,
   classifyAgentExecutionStrategy,
 } from './useAgent/strategy';
+import { matchSlashCommand } from './useAgent/slash-command';
 // Sub-module imports
 import { sanitizeTitle } from './useAgent/title';
 import type {
@@ -1479,8 +1480,48 @@ export function useAgent(): UseAgentReturn {
         );
       }
 
-      try {
-        const modelConfig = getModelConfig();
+     try {
+       const modelConfig = getModelConfig();
+
+        // Slash commands bypass planning and don't pollute conversation history
+        const slashMatch = matchSlashCommand(augmentedPrompt);
+        if (slashMatch) {
+          console.log(
+            `[useAgent] Slash command /${slashMatch.name}, routing directly to /agent`
+          );
+          setPhase('executing');
+
+          const workDir = computedSessionFolder || (await getAppDataDir());
+          const sandboxConfig = getSandboxConfig();
+          const skillsConfig = getSkillsConfig();
+          const language = getPreferredLanguage();
+          const mcpConfig = getMcpConfig();
+
+          const response = await fetchWithRetry(
+            `${AGENT_SERVER_URL}/agent`,
+            {
+              method: 'POST',
+              headers: await getRequestHeaders(),
+              body: JSON.stringify({
+                prompt: augmentedPrompt,
+                workDir,
+                taskId: currentTaskId,
+                modelConfig,
+                sandboxConfig,
+                skillsConfig,
+                mcpConfig,
+                language,
+                userId: getCurrentBoundUid() ?? undefined,
+                accessToken: await getCurrentAccessToken(),
+              }),
+              signal: abortController.signal,
+            }
+          );
+
+          throwForBadResponse(response, '/agent');
+          await processStream(response, currentTaskId, abortController);
+          return currentTaskId;
+        }
 
         // Note: We no longer check if model is configured here.
         // The backend will check if Claude Code is available locally.
@@ -2122,7 +2163,10 @@ export function useAgent(): UseAgentReturn {
       attachments?: MessageAttachment[],
       _mode?: 'auto' | 'chat' | 'task'
     ): Promise<void> => {
-      if (!taskId) return;
+     if (!taskId) return;
+
+      // Slash commands bypass normal conversation flow (no DB save, no UI message)
+      const isSlashCmd = !!matchSlashCommand(reply);
 
       // If a previous agent turn is still running, auto-stop it before sending
       // the new message. A stuck "Running command..." should not silently swallow
@@ -2141,27 +2185,31 @@ export function useAgent(): UseAgentReturn {
         attachments:
           attachments && attachments.length > 0 ? attachments : undefined,
       };
-      setMessages((prev) => [...prev, userMessage]);
+      if (!isSlashCmd) {
+        setMessages((prev) => [...prev, userMessage]);
+      }
 
       // Save user message to database (save attachments to files first)
-      try {
-        let attachmentRefs: string | undefined;
-        if (attachments && attachments.length > 0 && sessionFolder) {
-          // Save attachments to file system and get references
-          const refs = await saveAttachments(sessionFolder, attachments);
-          attachmentRefs = JSON.stringify(refs);
-          console.log('[useAgent] Saved attachments to files:', refs.length);
-          // Trigger working files refresh
-          setFilesVersion((v) => v + 1);
+      if (!isSlashCmd) {
+        try {
+          let attachmentRefs: string | undefined;
+          if (attachments && attachments.length > 0 && sessionFolder) {
+            // Save attachments to file system and get references
+            const refs = await saveAttachments(sessionFolder, attachments);
+            attachmentRefs = JSON.stringify(refs);
+            console.log('[useAgent] Saved attachments to files:', refs.length);
+            // Trigger working files refresh
+            setFilesVersion((v) => v + 1);
+          }
+          await createMessage({
+            task_id: taskId,
+            type: 'user',
+            content: reply,
+            attachments: attachmentRefs,
+          });
+        } catch (error) {
+          console.error('Failed to save user message:', error);
         }
-        await createMessage({
-          task_id: taskId,
-          type: 'user',
-          content: reply,
-          attachments: attachmentRefs,
-        });
-      } catch (error) {
-        console.error('Failed to save user message:', error);
       }
 
       setIsRunning(true);
@@ -2172,7 +2220,8 @@ export function useAgent(): UseAgentReturn {
 
       try {
         // Build conversation history including the new reply
-        const currentMessages = [...messages, userMessage];
+        // Exclude slash command itself from conversation history
+        const currentMessages = isSlashCmd ? messages : [...messages, userMessage];
         const conversationHistory = buildConversationHistory(
           initialPrompt,
           currentMessages
