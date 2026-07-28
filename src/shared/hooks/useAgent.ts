@@ -171,6 +171,9 @@ export function useAgent(): UseAgentReturn {
   const taskIdRef = useRef<string | null>(null);
   const isRunningRef = useRef<boolean>(false);
   const initialPromptRef = useRef<string>('');
+  // Tracks the most recent prompt that should be passed to /agent/execute.
+  // For follow-up messages (continueConversation), this replaces initialPrompt.
+  const pendingExecutePromptRef = useRef<string>('');
 
   // Keep refs in sync with state (for use in callbacks to avoid stale closures)
   useEffect(() => {
@@ -1984,7 +1987,7 @@ export function useAgent(): UseAgentReturn {
           headers: await getRequestHeaders(),
           body: JSON.stringify({
             planId: plan.id,
-            prompt: initialPrompt,
+            prompt: pendingExecutePromptRef.current || initialPrompt,
             workDir,
             taskId,
             modelConfig,
@@ -2270,7 +2273,117 @@ export function useAgent(): UseAgentReturn {
         });
         const executionPrompt = applyAgentStrategyHint(reply, followUpStrategy);
 
-        // Send conversation with full history (agent SDK path)
+        // Route complex queries through planning (PLAN → approve → execute)
+        // Simple/direct queries skip planning and go straight to /agent
+        if (followUpStrategy.route === 'plan' && !hasImages) {
+          console.log(
+            `[useAgent] Follow-up "${followUpStrategy.intent}", routing to /agent/plan`
+          );
+          setPhase('planning');
+          pendingExecutePromptRef.current = executionPrompt;
+
+          const planResponse = await fetchWithRetry(
+            `${AGENT_SERVER_URL}/agent/plan`,
+            {
+              method: 'POST',
+              headers: await getRequestHeaders(),
+              body: JSON.stringify({
+                prompt: executionPrompt,
+                modelConfig,
+                language: getPreferredLanguage(),
+                userId: getCurrentBoundUid() ?? undefined,
+                accessToken: await getCurrentAccessToken(),
+              }),
+              signal: abortController.signal,
+            }
+          );
+
+          throwForBadResponse(planResponse, '/agent/plan');
+
+          // Process planning stream
+          const reader = planResponse.body?.getReader();
+          if (!reader) throw new Error('No response body');
+
+          const decoder = new TextDecoder();
+          let buffer = '';
+          let sawOutcome = false;
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              try {
+                const data = JSON.parse(line.slice(6)) as AgentMessage;
+                const isActive = activeTaskIdRef.current === taskId;
+
+                if (data.type === 'session') {
+                  if (isActive) sessionIdRef.current = data.sessionId || null;
+                } else if (data.type === 'direct_answer' && data.content) {
+                  sawOutcome = true;
+                  let actualContent = data.content;
+                  try {
+                    if (typeof data.content === 'string' && data.content.trim().startsWith('{')) {
+                      const parsed = JSON.parse(data.content);
+                      if (parsed.answer && typeof parsed.answer === 'string') {
+                        actualContent = parsed.answer;
+                      }
+                    }
+                  } catch { /* not JSON */ }
+                  if (isActive) {
+                    setMessages((prev) => [...prev, { type: 'text', content: actualContent }]);
+                    setPhase('idle');
+                  }
+                  try {
+                    await createMessage({ task_id: taskId, type: 'text', content: actualContent });
+                    await updateTask(taskId, { status: 'completed' });
+                  } catch (dbErr) {
+                    console.error('[useAgent] Failed to save direct answer:', dbErr);
+                  }
+                } else if (data.type === 'plan' && data.plan) {
+                  sawOutcome = true;
+                  if (isActive) {
+                    setPlan(data.plan);
+                    setPhase('awaiting_approval');
+                    setMessages((prev) => [...prev, data]);
+                  }
+                  try {
+                    await createMessage({ task_id: taskId, type: 'plan', content: JSON.stringify(data.plan) });
+                  } catch (dbErr) {
+                    console.error('[useAgent] Failed to save plan:', dbErr);
+                  }
+                } else if (data.type === 'text') {
+                  const content = data.content || '';
+                  const isPlanJson = content.includes('"type"') && content.includes('"plan"') && (content.includes('"steps"') || content.includes('"goal"'));
+                  if (isActive && !isPlanJson) {
+                    setMessages((prev) => [...prev, data]);
+                  }
+                } else if (data.type === 'done') {
+                  if (!sawOutcome) {
+                    sawOutcome = true;
+                    if (isActive) {
+                      setMessages((prev) => [...prev, { type: 'error', message: MODEL_EMPTY_RESPONSE_MESSAGE }]);
+                      setPhase('idle');
+                    }
+                  }
+                }
+              } catch { /* skip parse errors */ }
+            }
+          }
+
+          // Planning phase ends here. If awaiting_approval, execution
+          // resumes when the user clicks approve → approvePlan().
+          // If direct_answer or error, phase was already set above.
+          return;
+        }
+
+        // Direct execution path (simple queries, images, OpenAI providers)
+        pendingExecutePromptRef.current = '';
         const response = await fetchWithRetry(`${AGENT_SERVER_URL}/agent`, {
           method: 'POST',
           headers: await getRequestHeaders(),
