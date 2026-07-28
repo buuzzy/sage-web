@@ -253,26 +253,27 @@ agent.post('/execute', async (c) => {
     return c.json({ error: 'Plan not found or expired' }, 404);
   }
 
-  const session = createSession('execute');
-  const resolvedConfig = await resolveModelConfig(body.modelConfig, body.userId);
-  const readable = createSSEStream(
-    runExecutionPhase(
-      body.planId,
-      session,
-      body.prompt || '',
-      body.workDir,
-      body.taskId,
-      resolvedConfig,
-      body.sandboxConfig,
-      body.skillsConfig,
-      body.mcpConfig,
-      body.language,
-      body.userId,
-      body.accessToken
-    )
-  );
+ const session = createSession('execute');
+ const resolvedConfig = await resolveModelConfig(body.modelConfig, body.userId);
+ const readable = createSSEStream(
+   runExecutionPhase(
+     body.planId,
+     session,
+     body.prompt || '',
+     body.workDir,
+     body.taskId,
+     resolvedConfig,
+     body.sandboxConfig,
+     body.skillsConfig,
+     body.mcpConfig,
+     body.language,
+     body.userId,
+     body.accessToken
+   ),
+   body.taskId
+ );
 
-  return new Response(readable, { headers: SSE_HEADERS });
+ return new Response(readable, { headers: SSE_HEADERS });
 });
 
 // Legacy: Direct execution (plan + execute in one call)

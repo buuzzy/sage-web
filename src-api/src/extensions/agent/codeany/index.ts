@@ -865,9 +865,8 @@ export class CodeAnyAgent extends BaseAgent {
     const sageSystemPrompt = [baseSageSystemPrompt, execPersonaSection, execRecallSection]
       .filter((s) => s && s.length > 0)
       .join('\n');
-    const executionPrompt =
-      formatPlanForExecution(plan, sessionCwd, sandboxOpts, options.language, options.originalPrompt) +
-      '\n\nOriginal request: ' + options.originalPrompt;
+   const executionPrompt =
+      formatPlanForExecution(plan, sessionCwd, sandboxOpts, options.language, options.originalPrompt);
 
     const sentTextHashes = new Set<string>();
     const sentToolIds = new Set<string>();

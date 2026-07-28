@@ -540,7 +540,7 @@ ${plan.notes ? `Notes: ${plan.notes}` : ''}
 
 Now execute this plan. You have full permissions to use all available tools.
 
-Original request: `;
+Original request: ${originalPrompt ?? ''}`;
 }
 
 /**
