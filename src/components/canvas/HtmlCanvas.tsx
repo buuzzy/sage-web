@@ -18,7 +18,21 @@ function readThemeVars(): string {
   const lines: string[] = [];
   for (const v of THEME_VARS) {
     const val = style.getPropertyValue(v).trim();
-    if (val) lines.push(`  ${v}: ${val};`);
+    if (!val) continue;
+    // Custom properties return their raw value (e.g. oklch(...)).
+    // ECharts canvas renderer can't parse oklch() on hover redraw,
+    // causing lines to disappear. Resolve to rgb/rgba via a temp element
+    // so injected values are always canvas-safe.
+    if (val.startsWith('oklch') || val.startsWith('hsl') || val.startsWith('lab') || val.startsWith('lch')) {
+      const probe = document.createElement('div');
+      probe.style.color = val;
+      document.body.appendChild(probe);
+      const resolved = getComputedStyle(probe).color; // returns rgb(...) or rgba(...)
+      document.body.removeChild(probe);
+      lines.push(`  ${v}: ${resolved};`);
+    } else {
+      lines.push(`  ${v}: ${val};`);
+    }
   }
   return lines.join('\n');
 }
