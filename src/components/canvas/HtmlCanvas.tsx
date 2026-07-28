@@ -19,22 +19,55 @@ function readThemeVars(): string {
   for (const v of THEME_VARS) {
     const val = style.getPropertyValue(v).trim();
     if (!val) continue;
-    // Custom properties return their raw value (e.g. oklch(...)).
-    // ECharts canvas renderer can't parse oklch() on hover redraw,
-    // causing lines to disappear. Resolve to rgb/rgba via a temp element
-    // so injected values are always canvas-safe.
-    if (val.startsWith('oklch') || val.startsWith('hsl') || val.startsWith('lab') || val.startsWith('lch')) {
+    lines.push(`  ${v}: ${convertColor(val)};`);
+  }
+  return lines.join('\n');
+}
+
+/** Deterministic oklch → rgb conversion (no browser dependency). */
+function oklchToRgb(L: number, C: number, H: number): string {
+  const hRad = H * Math.PI / 180;
+  const a = C * Math.cos(hRad);
+  const b = C * Math.sin(hRad);
+  const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+  const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+  const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+  const l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+  const r = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+  const g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+  const bl = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+  const gam = (c: number) =>
+    c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+  const to255 = (c: number) =>
+    Math.round(Math.max(0, Math.min(255, gam(c) * 255)));
+  return `rgb(${to255(r)}, ${to255(g)}, ${to255(bl)})`;
+}
+
+/** Resolve any CSS color to a canvas-safe string. */
+function convertColor(val: string): string {
+  // Fast path: already safe
+  if (/^(rgb|rgba|var\(|#|none|transparent)/i.test(val)) return val;
+
+  // oklch(L C H) — deterministic math conversion
+  const m = val.match(/oklch\(\s*([\d.]+)(?:%|)\s+([\d.]+)(?:%|)\s+([\d.]+)/);
+  if (m) {
+    const L = parseFloat(m[1]) > 1 ? parseFloat(m[1]) / 100 : parseFloat(m[1]);
+    return oklchToRgb(L, parseFloat(m[2]), parseFloat(m[3]));
+  }
+
+  // hsl/lab/lch — DOM probe fallback
+  if (/^(hsl|lab|lch)/i.test(val)) {
+    try {
       const probe = document.createElement('div');
       probe.style.color = val;
       document.body.appendChild(probe);
-      const resolved = getComputedStyle(probe).color; // returns rgb(...) or rgba(...)
+      const resolved = getComputedStyle(probe).color;
       document.body.removeChild(probe);
-      lines.push(`  ${v}: ${resolved};`);
-    } else {
-      lines.push(`  ${v}: ${val};`);
-    }
+      if (/^rgb/i.test(resolved)) return resolved;
+    } catch { /* passthrough */ }
   }
-  return lines.join('\n');
+
+  return val;
 }
 
 // Script injected into every iframe to track echarts instances and
