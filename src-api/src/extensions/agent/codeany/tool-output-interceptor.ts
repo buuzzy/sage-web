@@ -15,10 +15,10 @@ const logger = createLogger('ToolOutputInterceptor');
 // ---------------------------------------------------------------------------
 
 const CANVAS_HINT_DATA =
-  '\n\n请基于上述数据用 canvas:html 输出可视化画布（使用 echarts 绘制图表），并撰写分析。';
+  '\n\n请基于上述数据调用 render_canvas 工具输出可视化画布（使用 echarts 绘制图表），然后撰写文字分析。';
 
 const CANVAS_HINT_LIGHT =
-  '\n\n请根据上述结果自行判断是否适合用 canvas:html 输出可视化画布：如果包含可结构化展示的数据（表格、时间线、列表对比、关键指标等），请输出 canvas:html 画布并撰写分析；如果是纯知识问答则直接文字回答即可。';
+  '\n\n请根据上述结果自行判断是否适合调用 render_canvas 工具输出可视化画布：如果包含可结构化展示的数据（表格、时间线、列表对比、关键指标等），请调用 render_canvas 工具输出画布并撰写分析；如果是纯知识问答则直接文字回答即可。';
 
 // ---------------------------------------------------------------------------
 // Minishare MCP tool name constants

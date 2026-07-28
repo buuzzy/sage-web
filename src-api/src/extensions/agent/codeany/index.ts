@@ -54,6 +54,7 @@ import {
   createMinishareCanvasHooks,
   createWebSearchInterceptorHook,
 } from './tool-output-interceptor';
+import { createCanvasMcpServer, CANVAS_TOOL_FULL_NAME } from './canvas-tool';
 import { createLogger, LOG_FILE_PATH } from '@/shared/utils/logger';
 import { stripHashSuffix } from '@/shared/utils/url';
 
@@ -185,6 +186,8 @@ const ALLOWED_TOOLS = [
   'TodoWrite',
   // 内置 memory MCP server 暴露的工具：让 Agent 能召回用户历史对话原文。
   'mcp__memory__search_memory',
+  // C-plan experiment: structured canvas delivery via tool call
+  CANVAS_TOOL_FULL_NAME,
 ];
 
 // ============================================================================
@@ -242,18 +245,19 @@ export class CodeAnyAgent extends BaseAgent {
  private buildBuiltinMcpServers(
    userId?: string,
    accessToken?: string
- ): Record<string, McpServerConfig> {
+ ): Record<string, any> {
    if (!userId || !isSupabaseConfigured()) {
      // Even without memory server, inject the minishare data MCP
      const minishareUrl = process.env.MINISHARE_MCP_URL;
-     if (!minishareUrl) return {};
-     return {
-       minishare: {
-         type: 'sse',
-         url: minishareUrl,
-       },
-     };
-   }
+   if (!minishareUrl) return {};
+   return {
+     minishare: {
+       type: 'sse',
+       url: minishareUrl,
+     },
+     canvas: createCanvasMcpServer(),
+   };
+ }
    const port = process.env.PORT || '2026';
    const params = new URLSearchParams({ user_id: userId });
    if (accessToken) {
@@ -264,7 +268,7 @@ export class CodeAnyAgent extends BaseAgent {
    if (process.env.SAGE_API_TOKEN) {
      headers.Authorization = `Bearer ${process.env.SAGE_API_TOKEN}`;
    }
-   const servers: Record<string, McpServerConfig> = {
+   const servers: Record<string, any> = {
      memory: {
        type: 'http',
        url,
@@ -272,11 +276,12 @@ export class CodeAnyAgent extends BaseAgent {
      },
    };
    const minishareUrl = process.env.MINISHARE_MCP_URL;
-   if (minishareUrl) {
-     servers.minishare = { type: 'sse', url: minishareUrl };
-   }
-   return servers;
- }
+  if (minishareUrl) {
+    servers.minishare = { type: 'sse', url: minishareUrl };
+  }
+  servers.canvas = createCanvasMcpServer();
+  return servers;
+}
 
   private buildSdkOptions(
     sessionCwd: string,
@@ -458,13 +463,23 @@ export class CodeAnyAgent extends BaseAgent {
            sentTextHashes.add(textHash);
            yield { type: 'text', content: sanitizedText };
           }
-        } else if ('name' in block && 'id' in block) {
-          const toolId = block.id as string;
-          if (!sentToolIds.has(toolId)) {
-            sentToolIds.add(toolId);
-            yield { type: 'tool_use', id: toolId, name: block.name as string, input: block.input };
-          }
-        }
+       } else if ('name' in block && 'id' in block) {
+         const toolId = block.id as string;
+         if (!sentToolIds.has(toolId)) {
+           sentToolIds.add(toolId);
+           yield { type: 'tool_use', id: toolId, name: block.name as string, input: block.input };
+           // C-plan experiment: intercept render_canvas tool call and yield
+           // the HTML as a canvas:html text block the frontend already renders.
+           if (block.name === CANVAS_TOOL_FULL_NAME || block.name === 'render_canvas') {
+             const toolInput = block.input as Record<string, unknown> | undefined;
+             const html = toolInput?.html as string;
+             if (html && html.length > 10) {
+               logger.info(`[processMessage] render_canvas intercepted: ${html.length} chars HTML, yielding as canvas text`);
+               yield { type: 'text', content: '```canvas:html\n' + html + '\n```' };
+             }
+           }
+         }
+       }
       }
     }
 
