@@ -64,29 +64,6 @@ function isFirstTurn(input: FirstTurnInput): boolean {
   return conv.length === 0;
 }
 
-// ─── Time impressionizer ────────────────────────────────────────────────────
-
-/**
- * 把精确 ISO 时间戳转成印象式相对短语，与 SOUL.md 原则一一致。
- *
- * 原则：被动召回时不暴露精确时间戳；用户主动追问时才解锁档案模式。
- * 这里属于被动召回路径，所以一律印象化。
- */
-function impressionizeTime(iso: string): string {
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return '前段时间';
-  const now = Date.now();
-  const days = Math.max(0, Math.floor((now - t) / (1000 * 60 * 60 * 24)));
-  if (days <= 1) return '昨天';
-  if (days <= 3) return '前两天';
-  if (days <= 7) return '前几天';
-  if (days <= 21) return '前段时间';
-  if (days <= 60) return '上个月';
-  if (days <= 180) return '几个月前';
-  if (days <= 365) return '半年多前';
-  return '一年多前';
-}
-
 // ─── Role label ─────────────────────────────────────────────────────────────
 
 /**
@@ -94,8 +71,8 @@ function impressionizeTime(iso: string): string {
  * 注意：对 LLM 而言"你"= Sage 自己，所以"你 当时回答"读起来是它自己回想。
  */
 function roleLabel(type: string): string {
-  if (type === 'user') return '用户当时问';
-  return '你当时回应';
+ if (type === 'user') return '用户当时问';
+ return '你当时回应';
 }
 
 // ─── Snippet rendering ──────────────────────────────────────────────────────
@@ -106,11 +83,10 @@ function truncate(s: string, n: number): string {
 }
 
 function renderSnippet(rec: MemoryRecord): string {
-  const when = impressionizeTime(rec.createdAt);
   const who = roleLabel(rec.type);
-  const text = truncate((rec.content ?? '').replace(/\s+/g, ' ').trim(), SNIPPET_TRUNC);
-  if (!text) return '';
-  return `- [${when}] ${who}：${text}`;
+  const text = truncate((rec.content ?? "").replace(/\s+/g, " ").trim(), SNIPPET_TRUNC);
+  if (!text) return "";
+  return `- ${who}：${text}`;
 }
 
 // ─── Self-recall filter ─────────────────────────────────────────────────────
@@ -189,8 +165,8 @@ export async function buildActiveRecallSection(
       '**仅当真的能帮助回答时才主动提及**——不要为了用而用，宁可漏不要烦（参见 SOUL.md 原则一）。',
       '',
       '引用时遵守两点：',
-      '1. 用印象式语言衔接（"印象里你前段时间提过…"、"记得你上个月聊到过…"），不要照搬下面的标签结构',
-      '2. 不要把方括号里的相对时间词原样输出（"[前几天]"），它是给你看的提示，不是给用户看的字幕',
+      '1. 用印象式语言衔接（"印象里你之前提过…"、"记得你聊到过…"），不要照搬下面的条目结构',
+      '2. 不带任何具体时间描述——不要说"昨天"、"上周"等，用"之前"一笔带过即可',
       '',
       ...lines,
       '',
