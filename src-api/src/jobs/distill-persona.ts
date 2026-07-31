@@ -13,7 +13,9 @@
  * 详见 docs/memory/phase3-design.md §5.1 Sprint 2
  */
 
-import { mimoChat, extractContent, MimoApiError } from '@/shared/llm/mimo';
+import Anthropic from '@anthropic-ai/sdk';
+import { getBuiltInModelConfig } from '@/shared/builtin-model';
+import { stripHashSuffix } from '@/shared/utils/url';
 import { getServiceSupabase } from '@/shared/supabase/client';
 import {
   EMPTY_PROFILE,
@@ -23,15 +25,6 @@ import {
 } from '@/shared/types/persona-memory';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
-
-/**
- * 蒸馏 LLM 使用的 MiMo 模型。
- * 通过 MIMO_MODEL 环境变量切换，便于在不同套餐 / base_url 下选用对应型号：
- *   · 官方 API:    mimo-v2-flash / mimo-v2-pro / mimo-v2-omni
- *   · Coding Plan: MiMo-V2.5-Pro / MiMo-V2.5 / MiMo-V2-Pro / MiMo-V2-Omni
- * 默认 mimo-v2-flash（官方 API 入门级，结构化 JSON 已足够）。
- */
-const DISTILL_MODEL = process.env.MIMO_MODEL?.trim() || 'mimo-v2-flash';
 
 /** 单次蒸馏拉取消息上限（防止用户消息暴增时拖垮蒸馏） */
 const MAX_NEW_MESSAGES_PER_RUN = 500;
@@ -472,21 +465,32 @@ async function callDistillLlm(
     '',
     '基于以上信息，输出新的 profile + recent_threads JSON。严格按 system prompt 中的 schema。',
     '记住：implicit 字段允许根据 behavior_stats + new_messages 漂移；hard_rules 不漂移。',
-  ].join('\n');
+ ].join('\n');
 
-  const res = await mimoChat({
-    model: DISTILL_MODEL,
-    messages: [
-      { role: 'system', content: DISTILL_SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt },
-    ],
-    temperature: 0.3,
-    max_tokens: 8192,
-    timeoutMs: DISTILL_TIMEOUT_MS,
+  const config = getBuiltInModelConfig();
+  if (!config) {
+    throw new Error('MINIMAX_API_KEY not configured — cannot run distillation');
+  }
+
+  const client = new Anthropic({
+    apiKey: config.apiKey,
+    baseURL: stripHashSuffix(config.baseUrl),
+    timeout: DISTILL_TIMEOUT_MS,
   });
 
-  const content = extractContent(res);
-  console.log('[distill] DeepSeek response content (first 200 chars):', content.slice(0, 200));
+  const message = await client.messages.create({
+    model: config.model,
+    max_tokens: 16000,
+    system: DISTILL_SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: userPrompt }],
+    thinking: { type: 'disabled' },
+  } as Parameters<typeof client.messages.create>[0]) as Anthropic.Message;
+
+  const content = message.content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
+
   // 去掉 markdown 代码块包裹
   let parsed: unknown;
   const codeBlock = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
@@ -596,16 +600,14 @@ export async function distillUser(userId: string): Promise<DistillStats> {
     stats.ran = true;
     stats.duration_ms = Date.now() - start;
     return stats;
-  } catch (e) {
-    stats.duration_ms = Date.now() - start;
-    stats.error =
-      e instanceof MimoApiError
-        ? `MiMo: ${e.message} [${e.status}]`
-        : e instanceof Error
-        ? e.message
-        : String(e);
-    return stats;
-  }
+ } catch (e) {
+   stats.duration_ms = Date.now() - start;
+  stats.error =
+    e instanceof Error
+      ? e.message
+      : String(e);
+  return stats;
+ }
 }
 
 /**

@@ -11,14 +11,16 @@
  *      → Railway / 受控服务器才打开；桌面端 sidecar 默认关闭
  *   2. process.env.SUPABASE_SERVICE_ROLE_KEY 已配置
  *      → 没有 service-role 拉不到跨用户数据
- *   3. process.env.MIMO_API_KEY 已配置
- *      → 无 LLM key 蒸馏跑不了
- *
- * 注：调度器只在 Railway 上运行。桌面端用户的对话也走 Railway sage-api
- * 时会被纳入；本地纯 sidecar 模式下用户数据本来就同步到云端，由 Railway 蒸馏。
- */
+*   3. process.env.MINIMAX_API_KEY 已配置
+*      → 无 LLM key 蒸馏跑不了
+*
+* 注：调度器只在 Railway 上运行。桌面端用户的对话也走 Railway sage-api
+* 时会被纳入；本地纯 sidecar 模式下用户数据本来就同步到云端，由 Railway 蒸馏。
+*/
 
 import cron from 'node-cron';
+
+import { getBuiltInModelConfig } from '@/shared/builtin-model';
 
 import { distillAllUsers } from './distill-persona.js';
 
@@ -56,9 +58,9 @@ export function registerBackgroundJobs(): void {
   //           1) 过期 → 删；2) 24h+ 未处理 → 归档；3) 归档 48h+ → 删（总寿命 72h）。
   //    已删除 action-lifecycle.ts + mobile-actions service。保留此注释作为历史。
 
-  if (!process.env.MIMO_API_KEY) {
+  if (!getBuiltInModelConfig()) {
     console.warn(
-      '[scheduler] MIMO_API_KEY missing — persona-distill skipped (price-watch monitor still active)'
+      '[scheduler] MINIMAX_API_KEY missing — persona-distill skipped'
     );
     registered = true;
     return;
