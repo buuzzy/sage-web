@@ -149,20 +149,14 @@ function renderProfile(profile: PersonaProfile): string {
     lines.push('');
   }
 
-  // ── 隐式字段（蒸馏推断区） ─────────────────────────────────────────
-  const im = profile.implicit;
-  const implicitLines: string[] = [];
+ // ── 隐式字段（蒸馏推断区） ─────────────────────────────────────────
+ const im = profile.implicit;
+ const implicitLines: string[] = [];
 
-  const active = im.focus_universe?.active ?? [];
-  if (active.length > 0) {
-    const top = active.slice(0, 8);
-    const items = top
-      .map((a) => (a.code ? `${a.name}(${a.code})` : a.name))
-      .join('、');
-    implicitLines.push(`- 近期对话里他常聊到：${items}`);
-  }
+  // active 列表（"近期常聊到的对象"）已移除——在同一则 prompt 中出现多个标的
+  // 会污染代词消解。当前对话上下文中已有明确标的时，模型不需要记忆中的标的列表。
 
-  if (im.risk_tolerance && RISK_LABELS[im.risk_tolerance]) {
+ if (im.risk_tolerance && RISK_LABELS[im.risk_tolerance]) {
     implicitLines.push(`- 你感觉他的风格偏${RISK_LABELS[im.risk_tolerance]}`);
   }
 
@@ -187,12 +181,14 @@ function renderProfile(profile: PersonaProfile): string {
     }
   }
 
-  // Phase 4 / L4-light: 行为摘要——蒸馏 cron 从 90 天行为日志聚合的一段叙述
-  const behaviorSummary = (im.behavior_summary ?? '').trim();
-  if (behaviorSummary) {
-    implicitLines.push('- 你对他最近这阵子在做什么的整体印象：');
-    implicitLines.push(`    ${behaviorSummary}`);
-  }
+ // Phase 4 / L4-light: 行为摘要——蒸馏 cron 从 90 天行为日志聚合的一段叙述
+ const behaviorSummary = (im.behavior_summary ?? '').trim();
+ if (behaviorSummary) {
+    // 剥离括号内的标的主体（如"消费（贵州茅台）" → "消费"），只保留板块/题材
+    const clean = behaviorSummary.replace(/（[^）]*）/g, '');
+   implicitLines.push('- 你对他最近这阵子的整体印象（历史行为模式，不一定反映当前关注）：');
+    implicitLines.push(`    ${clean}`);
+ }
 
   if (implicitLines.length > 0) {
     lines.push('## 你对他的印象（从过去对话里慢慢形成的，不是档案）');
@@ -257,31 +253,21 @@ export async function buildPersonaSection(
     if (!profileSection && !threadsSection) return '';
 
     const header = [
-      '# 关于这位用户（你已经认识他/她）',
+      '# 关于这位用户（辅助参考——当前对话为准）',
       '',
-      '以下是你对这位用户的认识。这不是检索结果——是你的「身份记忆」，',
-      '在每次对话开始前已经预装载。基于这个本体回答用户当前的问题，',
-      '让用户感觉到你认识他，而不是「刚刚查了一下他」。',
+      '**首要原则：当前对话上下文优先级高于以下所有画像信息。用户说"它"时，先看本轮在聊什么。以下画像仅供参考。**',
       '',
-      '## 引用这些信息时的两条铁律（违反任何一条都会让用户出戏）',
+      '## 引用规则',
       '',
-      '**铁律 1 — 用印象式语言，不照搬术语。**',
-      '',
+      '**用印象式语言，不照搬术语。**',
       '✅ "印象里你提过不太碰高估值科技股…"  /  "记得你在跟踪宁德时代…"',
-      '❌ "根据你的硬规则…"  /  "你的 user profile 显示…"  /  "系统记录显示…"',
+      '❌ "根据你的硬规则…"  /  "你的 user profile 显示…"',
       '',
-      '上面 markdown 块里的"用户曾明确立过这些规则"是给你看的元数据，',
-      '不是要让你原文搬到回答里。你引用它们时要说得像老朋友突然想起来，',
-      '而不是档案管理员翻档案。',
+      '上面标记为"用户曾明确立过这些规则"的内容是元数据，引用时像老朋友想起来，不是档案管理员翻档案。',
       '',
-      '**铁律 2 — 用户当前行为违反硬规则时，反问动机而非阻挡决策。**',
-      '',
-      '✅ 教练："你想这么做没问题。但是你之前定过 X，现在想突破是怎么考虑的？"',
-      '❌ 守门员："你定过 X，所以不行。"',
-      '❌ 建议者："考虑到你的 X，建议你 Y。"',
-      '',
-      '决策权 100% 留给用户。把矛盾摆出来 = 帮他自我觉察；替他做决定 = 越权。',
-      '详见 SOUL.md「记忆使用的两条根本原则」。',
+      '**用户行为违反硬规则时，反问动机而非阻挡。**',
+      '✅ "你想这么做没问题。但是你之前定过 X，现在想突破是怎么考虑的？"',
+      '❌ "你定过 X，所以不行。"  /  "考虑到你的 X，建议你 Y。"',
       '',
     ].join('\n');
 

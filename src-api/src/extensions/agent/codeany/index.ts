@@ -194,6 +194,20 @@ const ALLOWED_TOOLS = [
 // CodeAny Agent class
 // ============================================================================
 
+/**
+ * Derive a reasonable history token budget from the model name.
+ * Uses 80% of the model's context window to leave headroom for system prompt,
+ * tool definitions, and the current turn.
+ */
+function getHistoryBudget(model?: string): number {
+  if (!model) return 100000;
+  const m = model.toLowerCase();
+  if (m.includes('minimax') || m.includes('deepseek') || m.includes('opus')) return 800000;
+  if (m.includes('sonnet') || m.includes('haiku') || m.includes('gpt-4o')) return 160000;
+  if (m.includes('qwen')) return 104000;
+  return 100000;
+}
+
 export class CodeAnyAgent extends BaseAgent {
   readonly provider: AgentProvider = 'codeany';
 
@@ -351,7 +365,7 @@ export class CodeAnyAgent extends BaseAgent {
 
     try {
       const { assembleContext } = await import('@/shared/context/assembler');
-      const maxContextTokens = (this.config.providerConfig?.maxHistoryTokens as number) || 12000;
+      const maxContextTokens = (this.config.providerConfig?.maxHistoryTokens as number) || getHistoryBudget(this.config.model);
 
       const result = await assembleContext(sessionId, conversation, {
         maxContextTokens,
@@ -372,7 +386,7 @@ export class CodeAnyAgent extends BaseAgent {
    * Fallback: simple truncation (used when assembler fails).
    */
   private formatConversationHistoryFallback(conversation: ConversationMessage[]): string {
-    const maxTokens = (this.config.providerConfig?.maxHistoryTokens as number) || 12000;
+    const maxTokens = (this.config.providerConfig?.maxHistoryTokens as number) || getHistoryBudget(this.config.model);
     const parts: string[] = [];
     let budget = maxTokens;
 
