@@ -135,9 +135,9 @@ const DISTILL_SYSTEM_PROMPT = `你是 Sage 数字分身的「记忆消化模块�
 ### implicit.behavior_summary（Phase 4 新增）
 基于 behavior_stats 表（最近 90 天的行为日志聚合）综合写出的「这位用户最近在做什么」一段自然语言摘要，最多 500 字。
 不是清单，是叙述。重要约束（必须严格遵守）：
-- 绝对不出现任何具体股票名称、股票代码或基金名称
+- 绝对不出现任何具体股票名称（如"紫金矿业"、"比亚迪"、"腾讯"等）、股票代码或基金名称——即使 new_messages 中提到了，也只能用板块/行业名概括
 - 不出现具体查询次数
-- 只用板块/主题/行业描述行为偏好（如"消费"、"资源"、"科技"、"金融"等）
+- 只用板块/主题/行业描述行为偏好（如"消费"、"资源"、"科技"、"金融"、"新能源"等）
 - 如果 current_profile 中的旧 behavior_summary 包含股票名称，重写时必须全部清除
 例子：
 
@@ -512,14 +512,32 @@ async function callDistillLlm(
     .map((b) => b.text)
     .join('');
 
-  // 去掉 markdown 代码块包裹
+  // 解析 JSON（容错：MiniMax-M3 可能包 markdown code fence 或尾部多打 '}'）
   let parsed: unknown;
-  const codeBlock = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  if (codeBlock) {
-    parsed = JSON.parse(codeBlock[1]);
-  } else {
-    parsed = JSON.parse(content);
+  function tryParseJson(raw: string): unknown {
+    // Strip markdown code fences first
+    const cb = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    const body = cb ? cb[1] : raw.trim();
+    try {
+      return JSON.parse(body);
+    } catch {
+      // MiniMax-M3 sometimes appends trailing characters (e.g. extra '}')
+      // after valid JSON. Try progressively shorter prefixes.
+      // Scan from the first '{' and find the first prefix that parses.
+      const start = body.indexOf('{');
+      if (start < 0) throw new Error('No JSON object found in response');
+      for (let end = body.length; end > start; end--) {
+        if (body[end - 1] !== '}') continue; // skip to next '}'
+        try {
+          return JSON.parse(body.slice(start, end));
+        } catch {
+          // continue trimming
+        }
+      }
+      throw new Error('JSON parse failed even after trimming trailing chars');
+    }
   }
+  parsed = tryParseJson(content);
   const result = parsed as DistillResult;
 
   // 容错：LLM 可能跳过外层 "profile" 包装，直接输出 profile 内容（以 "explicit" 开头）
