@@ -670,7 +670,14 @@ export class CodeAnyAgent extends BaseAgent {
       let finalResultSubtype: string | undefined;
 
       // Use the pooled agent's query() method instead of stateless query()
-      for await (const message of sdkAgent.query(finalPrompt, sdkOpts as any)) {
+      // CRITICAL: do NOT pass allowedTools/mcpServers in overrides — they would
+      // cause filterTools() to strip MCP tools (minishare, chart, etc.) from the
+      // pool. Those are registered once at Agent construction in setup(). Only
+      // pass per-turn concerns (abort controller, maxTurns).
+      const queryOverrides: any = {
+        abortController: options?.abortController || session.abortController,
+      };
+      for await (const message of sdkAgent.query(finalPrompt, queryOverrides)) {
         if (session.abortController.signal.aborted) break;
         for (const msg of this.processMessage(message, session.id, sentTextHashes, sentToolIds)) {
           if (msg.type === 'tool_use') {
