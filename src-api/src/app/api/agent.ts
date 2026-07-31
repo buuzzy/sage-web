@@ -289,7 +289,8 @@ agent.post('/plan', async (c) => {
       resolvedConfig,
       body.language,
       body.userId,
-      body.accessToken
+      body.accessToken,
+      body.conversation
     )
   );
 
@@ -320,6 +321,7 @@ agent.post('/execute', async (c) => {
     language?: string;
     userId?: string;
     accessToken?: string;
+    conversation?: Array<{ role: 'user' | 'assistant'; content: string }>;
   }>();
 
   console.log('[AgentAPI] POST /execute received:', {
@@ -359,7 +361,8 @@ agent.post('/execute', async (c) => {
      body.mcpConfig,
      body.language,
      body.userId,
-     body.accessToken
+     body.accessToken,
+     body.conversation
    ),
    body.taskId
  );

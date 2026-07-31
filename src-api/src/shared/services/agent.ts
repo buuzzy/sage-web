@@ -164,7 +164,8 @@ export async function* runPlanningPhase(
   modelConfig?: { apiKey?: string; baseUrl?: string; model?: string; apiType?: 'anthropic-messages' | 'openai-completions' },
   language?: string,
   userId?: string,
-  accessToken?: string
+  accessToken?: string,
+  conversation?: ConversationMessage[]
 ): AsyncGenerator<AgentMessage> {
   const agent = await getAgent(modelConfig as Partial<AgentConfig>);
 
@@ -174,6 +175,7 @@ export async function* runPlanningPhase(
     language,
     userId,
     accessToken,
+    conversation,
   })) {
     // Intercept plan messages and save to global store
     if (message.type === 'plan' && message.plan) {
@@ -198,7 +200,8 @@ export async function* runExecutionPhase(
   mcpConfig?: McpConfig,
   language?: string,
   userId?: string,
-  accessToken?: string
+  accessToken?: string,
+  conversation?: ConversationMessage[]
 ): AsyncGenerator<AgentMessage> {
   const agent = await getAgent(modelConfig);
 
@@ -236,6 +239,7 @@ export async function* runExecutionPhase(
     language,
     userId,
     accessToken,
+    conversation,
   })) {
     yield message;
   }

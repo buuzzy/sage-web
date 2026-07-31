@@ -762,7 +762,9 @@ export class CodeAnyAgent extends BaseAgent {
     const sageSystemPrompt = [baseSageSystemPrompt, planPersonaSection, planRecallSection]
       .filter((s) => s && s.length > 0)
       .join('\n');
-    const planningPrompt = workspaceInstruction + PLANNING_INSTRUCTION + languageInstruction + prompt;
+    const contextSessionId = options?.taskId || session.id;
+    const conversationContext = await this.buildConversationContext(contextSessionId, options?.conversation);
+    const planningPrompt = workspaceInstruction + PLANNING_INSTRUCTION + conversationContext + languageInstruction + prompt;
 
     let fullResponse = '';
 
@@ -911,8 +913,10 @@ export class CodeAnyAgent extends BaseAgent {
     const sageSystemPrompt = [baseSageSystemPrompt, execPersonaSection, execRecallSection]
       .filter((s) => s && s.length > 0)
       .join('\n');
+    const execContextSessionId = options.taskId || session.id;
+    const conversationContext = await this.buildConversationContext(execContextSessionId, options.conversation);
    const executionPrompt =
-      formatPlanForExecution(plan, sessionCwd, sandboxOpts, options.language, options.originalPrompt);
+      formatPlanForExecution(plan, sessionCwd, sandboxOpts, options.language, options.originalPrompt) + conversationContext;
 
     const sentTextHashes = new Set<string>();
     const sentToolIds = new Set<string>();

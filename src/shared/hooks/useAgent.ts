@@ -1713,13 +1713,13 @@ export function useAgent(): UseAgentReturn {
           {
             method: 'POST',
             headers: await getRequestHeaders(),
-            body: JSON.stringify({
-              prompt: executionPrompt,
-              modelConfig,
-              language: getPreferredLanguage(),
-              userId: getCurrentBoundUid() ?? undefined,
-              accessToken: await getCurrentAccessToken(),
-            }),
+             body: JSON.stringify({
+               prompt: executionPrompt,
+               modelConfig,
+               language: getPreferredLanguage(),
+               userId: getCurrentBoundUid() ?? undefined,
+               accessToken: await getCurrentAccessToken(),
+             }),
             signal: abortController.signal,
           }
         );
@@ -1980,24 +1980,28 @@ export function useAgent(): UseAgentReturn {
       const mcpConfig = getMcpConfig();
       const language = getPreferredLanguage();
 
+      // Build conversation history so execute phase has multi-turn context.
+      const executeConversation = buildConversationHistory(initialPrompt, messages);
+
       const response = await fetchWithRetry(
         `${AGENT_SERVER_URL}/agent/execute`,
         {
           method: 'POST',
           headers: await getRequestHeaders(),
-          body: JSON.stringify({
-            planId: plan.id,
-            prompt: pendingExecutePromptRef.current || initialPrompt,
-            workDir,
-            taskId,
-            modelConfig,
-            sandboxConfig,
-            skillsConfig,
-            mcpConfig,
-            language,
-            userId: getCurrentBoundUid() ?? undefined,
-            accessToken: await getCurrentAccessToken(),
-          }),
+         body: JSON.stringify({
+           planId: plan.id,
+           prompt: pendingExecutePromptRef.current || initialPrompt,
+           conversation: executeConversation,
+           workDir,
+           taskId,
+           modelConfig,
+           sandboxConfig,
+           skillsConfig,
+           mcpConfig,
+           language,
+           userId: getCurrentBoundUid() ?? undefined,
+           accessToken: await getCurrentAccessToken(),
+         }),
           signal: abortController.signal,
         }
       );
