@@ -258,6 +258,51 @@ export interface DistillStats {
 // ─── Core ───────────────────────────────────────────────────────────────────
 
 /**
+ * 后处理：从 behavior_summary 中确定性清除已知标的名。
+ *
+ * LLM 即便 prompt 约束了"不写标的名"，从 new_messages 中仍可能泄露。
+ * 这层是确定性兜底——拿 behavior_stats 里的已知标的名称表做正则替换，
+ * 清除后如果文本太短则置 null（不注入比注入错误信息更安全）。
+ */
+function sanitizeBehaviorSummary(
+  summary: string | null | undefined,
+  knownAssetNames: string[]
+): string | null {
+  if (!summary || summary.trim().length === 0) return null;
+
+  let cleaned = summary;
+  // 按长度降序排列，避免短名先匹配导致长名被拆断
+  const allNames = [...knownAssetNames].sort((a, b) => b.length - a.length);
+
+  for (const name of allNames) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    cleaned = cleaned.replace(new RegExp(escaped, 'g'), '');
+  }
+
+  // 清除内容被掏空后的括号（如 "（vs）" 或 "（、）"）
+  cleaned = cleaned.replace(/（([^（）]*)）/g, (match, inner) => {
+    const meaningful = inner.replace(/[vsVSVS、，,\s/]/g, '');
+    if (meaningful.length === 0) return '';
+    return match;
+  });
+
+  // 清除孤立的 "vs" 残留（标的名被删除后 "XvsY" → "vs"）
+  cleaned = cleaned.replace(/[，,、\s]*vs[，,、\s]*/g, '、');
+
+  // 折叠连续标点
+  cleaned = cleaned.replace(/[、，,]{2,}/g, '，');
+  cleaned = cleaned.replace(/[，,]、/g, '，');
+  cleaned = cleaned.replace(/、[，,]/g, '，');
+  cleaned = cleaned.replace(/\s{2,}/g, ' ');
+  cleaned = cleaned.replace(/[，,]\s*[。.]/g, '。');
+  cleaned = cleaned.replace(/^[，,、\s]+/, '');
+
+  const trimmed = cleaned.trim();
+  if (trimmed.length < 20) return null;
+  return trimmed;
+}
+
+/**
  * 拉取一个用户自 since 以来的新消息，按时间正序。
  */
 async function fetchNewMessagesForUser(
@@ -631,6 +676,15 @@ export async function distillUser(userId: string): Promise<DistillStats> {
       newMessages,
       behaviorStats
     );
+
+    // 确定性后处理：清除 behavior_summary 中的已知标的名
+    const assetNames = behaviorStats.top_assets.map((a) => a.asset);
+    if (result.profile.implicit) {
+      result.profile.implicit.behavior_summary = sanitizeBehaviorSummary(
+        result.profile.implicit.behavior_summary,
+        assetNames
+      );
+    }
 
     // 游标推进到最新一条 message 的 created_at
     const newCursor = newMessages[newMessages.length - 1].created_at;
