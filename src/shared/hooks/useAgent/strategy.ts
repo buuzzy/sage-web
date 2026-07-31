@@ -85,16 +85,17 @@ function hasDirectLookupIntent(lower: string): boolean {
     '走势',
     '日线',
     '周线',
-    // Simple lookups
-    '最新价',
-    '收盘价',
-    '开盘价',
-    '换手率',
-    '成交量',
-    '市盈率',
-    '市净率',
-    'pe',
-    'pb',
+   // Simple lookups
+   '最新价',
+   '收盘价',
+   '开盘价',
+   '换手率',
+   '成交量',
+   '市盈率',
+   '市净率',
+    '估值',
+   'pe',
+   'pb',
     // Fund NAV
     '净值',
     // Quick news
@@ -115,73 +116,19 @@ function classifyAgentExecutionStrategy(
   prompt: string,
   options: { hasImages?: boolean; apiType?: string | null }
 ): AgentExecutionStrategy {
+  // Single-path architecture: all queries go through direct execution.
+  // The LLM decides its own workflow with full tools + conversation context.
+  // Plan/execute split has been removed — it caused context loss on follow-ups.
   const trimmed = prompt.trim();
   const lower = trimmed.toLowerCase();
   const isOpenAiProvider = options.apiType === 'openai-completions';
   const multiTarget = isMultiTargetQuery(trimmed);
 
-  if (options.hasImages) {
-    return {
-      route: 'direct',
-      intent: 'image',
-      boostPrompt: multiTarget,
-      reason: 'images require execution path',
-    };
-  }
-
-  if (isOpenAiProvider) {
-    return {
-      route: 'direct',
-      intent: multiTarget ? 'multi_target' : 'openai_provider',
-      boostPrompt: multiTarget,
-      reason: 'OpenAI-compatible providers use direct execution',
-    };
-  }
-
-  if (trimmed.length > 300) {
-    return {
-      route: 'plan',
-      intent: 'complex_task',
-      reason: 'long request benefits from explicit plan',
-    };
-  }
-
-  if (isConversationalPrompt(lower)) {
-    return {
-      route: 'direct',
-      intent: 'conversation',
-      reason: 'low-risk conversational prompt',
-    };
-  }
-
-  if (isMemoryRecallPrompt(lower)) {
-    return {
-      route: 'direct',
-      intent: 'memory_recall',
-      reason: 'memory recall should execute tools directly',
-    };
-  }
-
-  if (multiTarget) {
-    return {
-      route: 'plan',
-      intent: 'multi_target',
-      reason: 'multi-target comparison needs structured execution',
-    };
-  }
-
-  if (hasDirectLookupIntent(lower)) {
-    return {
-      route: 'direct',
-      intent: 'simple_lookup',
-      reason: 'simple lookup can skip explicit approval',
-    };
-  }
-
   return {
-    route: 'plan',
-    intent: 'complex_task',
-    reason: 'default explicit planning path',
+    route: 'direct',
+    intent: multiTarget ? 'multi_target' : 'simple_lookup',
+    boostPrompt: multiTarget,
+    reason: 'single-path architecture: direct execution for all queries',
   };
 }
 

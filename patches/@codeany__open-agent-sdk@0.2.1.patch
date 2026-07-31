@@ -1,3 +1,18 @@
+diff --git a/dist/agent.js b/dist/agent.js
+index 3caea26e563a9e8eaedd55a7f49b79478a6aad56..ee2da820979a32fec0e940bfeb5e38a370d5f2fb 100644
+--- a/dist/agent.js
++++ b/dist/agent.js
+@@ -47,6 +47,10 @@ export class Agent {
+     constructor(options = {}) {
+         // Shallow copy to avoid mutating caller's object
+         this.cfg = { ...options };
++        // Sage extension: inject prior conversation history for stateless multi-turn bootstrap
++        if (options.priorMessages && Array.isArray(options.priorMessages)) {
++            this.history = options.priorMessages;
++        }
+         // Merge credentials from options.env map, direct options, and process.env
+         this.apiCredentials = this.pickCredentials();
+         this.modelId = this.cfg.model ?? this.readEnv('CODEANY_MODEL') ?? 'claude-sonnet-4-6';
 diff --git a/dist/engine.js b/dist/engine.js
 index 51cf771ca01412f9f71159a46d436e1c011438b0..ffc023d72da62b430aeebfcb4562e8bd99af669a 100644
 --- a/dist/engine.js
@@ -197,6 +212,44 @@ index 73644b8deac296b5553c44d6736e93478dba4365..cddaaf57d364b38d92a58649a8abd27d
                  if (href && title && !href.includes('duckduckgo.com')) {
                      links.push({ title, url: href });
                  }
+diff --git a/dist/types.d.ts b/dist/types.d.ts
+index 8569cb55aaf0c3c13a7b0c0bb532f8efc7f8ce40..9be37b310d25bba86efb45b5841b14eb0b40c253 100644
+--- a/dist/types.d.ts
++++ b/dist/types.d.ts
+@@ -385,6 +385,8 @@ export interface AgentOptions {
+         }) => Promise<any>>;
+         timeout?: number;
+     }>>;
++    /** Sage extension: pre-loaded conversation history for stateless multi-turn bootstrap */
++    priorMessages?: import('./providers/types.js').NormalizedMessageParam[];
+ }
+ export interface QueryResult {
+     /** Final text output from the assistant */
+diff --git a/src/agent.ts b/src/agent.ts
+index dcf38ceb6adc387a27450e015a2092eebeaf95f0..9a11920f4d44390f045587a5dcea085b4773b6f9 100644
+--- a/src/agent.ts
++++ b/src/agent.ts
+@@ -62,11 +62,16 @@ export class Agent {
+   private hookRegistry: HookRegistry
+ 
+   constructor(options: AgentOptions = {}) {
+-    // Shallow copy to avoid mutating caller's object
+-    this.cfg = { ...options }
++   // Shallow copy to avoid mutating caller's object
++   this.cfg = { ...options }
+ 
+-    // Merge credentials from options.env map, direct options, and process.env
+-    this.apiCredentials = this.pickCredentials()
++    // Sage extension: inject prior conversation history for stateless multi-turn bootstrap
++    if ((options as any).priorMessages && Array.isArray((options as any).priorMessages)) {
++      this.history = (options as any).priorMessages as NormalizedMessageParam[]
++    }
++
++   // Merge credentials from options.env map, direct options, and process.env
++   this.apiCredentials = this.pickCredentials()
+     this.modelId = this.cfg.model ?? this.readEnv('CODEANY_MODEL') ?? 'claude-sonnet-4-6'
+     this.sid = this.cfg.sessionId ?? crypto.randomUUID()
+ 
 diff --git a/src/engine.ts b/src/engine.ts
 index 00f186a98049c69742dd89c4f44ddbd435763d64..2202b25d8586a4d1ce8c9a6921dcdaac0fe6a6cd 100644
 --- a/src/engine.ts
@@ -316,3 +369,17 @@ index d71eae56b0ee6da2f4c2e7b7605102d33d67b388..99219cb49def18553c287c8739526ad4
  
  // --------------------------------------------------------------------------
  // Provider Interface
+diff --git a/src/types.ts b/src/types.ts
+index c5890b5dda212b73e4e226364ec8dae589aeb275..73c4b9e942f409245f6a5f2c729f9edd5d194422 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -443,6 +443,9 @@ export interface AgentOptions {
+     hooks: Array<(input: any, toolUseId: string, context: { signal: AbortSignal }) => Promise<any>>
+     timeout?: number
+   }>>
++
++  /** Sage extension: pre-loaded conversation history for stateless multi-turn bootstrap */
++  priorMessages?: import('./providers/types.js').NormalizedMessageParam[]
+ }
+ 
+ export interface QueryResult {

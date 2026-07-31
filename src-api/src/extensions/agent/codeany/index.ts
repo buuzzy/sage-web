@@ -9,9 +9,12 @@ import { mkdir, writeFile } from 'fs/promises';
 import { homedir, platform } from 'os';
 import { join } from 'path';
 import {
-  query,
+ query,
 } from '@codeany/open-agent-sdk';
 import type { AgentOptions as SdkAgentOptions } from '@codeany/open-agent-sdk';
+
+import { createAgent as createSdkAgent } from '@codeany/open-agent-sdk';
+import { getOrCreateAgent, toNormalizedMessages, evictAgent } from './agent-pool';
 
 import { refreshSkillsForPrompt } from '@/shared/skills/predictor';
 
@@ -565,7 +568,7 @@ export class CodeAnyAgent extends BaseAgent {
       options?.cwd || this.config.workDir, prompt, options?.taskId
     );
     await ensureDir(sessionCwd);
-    logger.info(`[CodeAny ${session.id}] Working Directory: ${sessionCwd}`);
+    logger.info('[CodeAny ' + session.id + '] Working Directory: ' + sessionCwd);
 
     const sentTextHashes = new Set<string>();
     const sentToolIds = new Set<string>();
@@ -574,26 +577,18 @@ export class CodeAnyAgent extends BaseAgent {
       ? { enabled: true, image: options.sandbox.image, apiEndpoint: options.sandbox.apiEndpoint || SANDBOX_API_URL }
       : undefined;
 
-    // Save images to disk so they can be referenced in the text prompt
-    // (The SDK's query() accepts string only; multimodal arrays are not supported)
+    // Save images to disk (SDK query() accepts string only)
     let imagePaths: string[] = [];
     if (options?.images && options.images.length > 0) {
       imagePaths = await saveImagesToDisk(options.images, sessionCwd);
-      if (imagePaths.length > 0) {
-        logger.info(`[CodeAny] Saved ${imagePaths.length} image(s) to disk`);
-      }
     }
 
-    // Use taskId as persistent context key (stable across turns); fall back to session.id
-    const contextSessionId = options?.taskId || session.id;
-    const conversationContext = await this.buildConversationContext(contextSessionId, options?.conversation);
+    // Build the clean prompt: workspace instruction + language + current question only.
+    // Conversation history is NO LONGER flattened into the prompt — it goes through
+    // the SDK Agent's native message array via priorMessages or accumulated history.
     const languageInstruction = buildLanguageInstruction(options?.language, prompt);
     const baseSageSystemPrompt = await getSageSystemPrompt();
-    // Phase 3: prepend「身份记忆」 — persona snapshot + recent_threads。
-    // Agent 不再决策「要不要召回历史」，每次对话开始就已经认识用户。
     const personaSection = await buildPersonaSection(options?.userId, options?.accessToken);
-    // Phase 4: 仅 task 首轮（conversation 为空）做按当前 query 的主动召回。
-    // 后续 turn 已经看得到当轮上下文，无需重复注入。
     const recallSection = await buildActiveRecallSection({
       prompt,
       userId: options?.userId,
@@ -604,63 +599,69 @@ export class CodeAnyAgent extends BaseAgent {
       .filter((s) => s && s.length > 0)
       .join('\n');
 
-    // System prompt = dateContext + SOUL.md + AGENTS.md + persona snapshot + recent_threads.
-    // 长尾历史档案（>20 回合）仍由 mcp__memory__search_memory 工具按需取。
-    const textPrompt = getWorkspaceInstruction(sessionCwd, sandboxOpts) + conversationContext + languageInstruction + prompt;
-
-    // Build the final prompt: always a string (images referenced by file path)
-    let finalPrompt: string;
+    const workspacePrompt = getWorkspaceInstruction(sessionCwd, sandboxOpts);
+    let finalPrompt = workspacePrompt + languageInstruction + prompt;
     if (imagePaths.length > 0) {
-      finalPrompt = textPrompt + `\n\n[Attached image file(s) saved to disk: ${imagePaths.join(', ')}]`;
-      logger.info(`[CodeAny] Using text prompt with ${imagePaths.length} image path(s) appended`);
-    } else {
-      finalPrompt = textPrompt;
+      finalPrompt += '\n\n[Attached image file(s) saved to disk: ' + imagePaths.join(', ') + ']';
     }
 
-    // Load MCP servers (user-defined from ~/.sage/mcp.json + sage built-in memory)
+    // Load MCP servers
     const userMcpServers = await loadMcpServers(options?.mcpConfig as McpConfig | undefined);
-    const builtinMcpServers = this.buildBuiltinMcpServers(
-      options?.userId,
-      options?.accessToken
-    );
-    // Order matters: user can shadow built-in by naming their server `memory`
+    const builtinMcpServers = this.buildBuiltinMcpServers(options?.userId, options?.accessToken);
     const allMcpServers = { ...builtinMcpServers, ...userMcpServers };
 
+    // Dynamically swap in relevant skills
+    await refreshSkillsForPrompt(prompt);
+
+    // Build SDK options for this turn
     const sdkOpts = this.buildSdkOptions(sessionCwd, options, {
       abortController: options?.abortController || session.abortController,
     }, sageSystemPrompt);
 
     if (Object.keys(allMcpServers).length > 0) {
       sdkOpts.mcpServers = allMcpServers;
-      logger.info(`[CodeAny ${session.id}] MCP servers: ${Object.keys(allMcpServers).join(', ')}`);
     }
 
-    logger.info(`[CodeAny ${session.id}] ========== AGENT START ==========`);
-    logger.info(`[CodeAny ${session.id}] Model: ${this.config.model || '(default)'}`);
-    logger.info(`[CodeAny ${session.id}] Custom API: ${this.isUsingCustomApi()}`);
-    logger.info(`[CodeAny ${session.id}] Prompt length: ${finalPrompt.length} chars`);
-    logger.info(`[CodeAny ${session.id}] Images (disk): ${imagePaths.length > 0 ? `yes (${imagePaths.length} files)` : 'no'}`);
+    // Convert conversation history to structured messages for bootstrap
+    const priorMessages = options?.conversation && options.conversation.length > 0
+      ? toNormalizedMessages(options.conversation)
+      : undefined;
 
-    // Dynamically swap in only the skills relevant to this prompt
-    // so the model context stays lean each turn.
-    await refreshSkillsForPrompt(prompt);
+    const taskId = options?.taskId || session.id;
 
-    // ── Total run timeout ──────────────────────────────────────────────
-    // A single agent turn (run/plan/execute) must complete within a hard wall clock
-    // limit. Without this, a hung Bash tool (e.g. ECONNREFUSED on a TCP connect)
-    // can leave the frontend displaying "Running command..." for up to 600 seconds
-    // (the SDK's default Bash timeout). The user sees no progress and input is
-    // silently swallowed. 2 minutes is generous enough for multi-hop tool calls
-    // while short enough that the user hasn't already walked away.
+    logger.info('[CodeAny ' + session.id + '] ========== AGENT START (pooled) ==========');
+    logger.info('[CodeAny ' + session.id + '] Model: ' + (this.config.model || '(default)'));
+    logger.info('[CodeAny ' + session.id + '] Prompt: ' + finalPrompt.length + ' chars');
+    logger.info('[CodeAny ' + session.id + '] priorMessages: ' + (priorMessages?.length || 0));
+
+    // Total run timeout
     const TOTAL_RUN_TIMEOUT_MS = 2 * 60 * 1000;
     const timeoutTimer = setTimeout(() => {
-      logger.warn(
-        `[CodeAny ${session.id}] Total run timeout (${TOTAL_RUN_TIMEOUT_MS}ms) — aborting session`
-      );
+      logger.warn('[CodeAny ' + session.id + '] Total run timeout — aborting');
       session.abortController.abort();
     }, TOTAL_RUN_TIMEOUT_MS);
 
     try {
+      // Get or create a pooled SDK Agent instance.
+      // New agents get priorMessages injected; existing agents skip this
+      // because they already have history accumulated internally.
+      const { agent: sdkAgent, isNew } = await getOrCreateAgent({
+        taskId,
+        factory: () => {
+          const opts: any = { ...sdkOpts };
+          if (priorMessages && priorMessages.length > 0) {
+            opts.priorMessages = priorMessages;
+          }
+          return createSdkAgent(opts);
+        },
+      });
+
+      // For existing agents: apply this turn's overrides (abort, system prompt append)
+      if (!isNew) {
+        // The pooled agent already has conversation history in its internal state.
+        // We just need to pass the current prompt and any per-turn overrides.
+      }
+
       const MAX_TOOL_CALLS = 20;
       let totalToolCalls = 0;
       let warnedToolLimit = false;
@@ -668,7 +669,8 @@ export class CodeAnyAgent extends BaseAgent {
       let sawFinalTextAfterTool = false;
       let finalResultSubtype: string | undefined;
 
-      for await (const message of query({ prompt: finalPrompt, options: sdkOpts })) {
+      // Use the pooled agent's query() method instead of stateless query()
+      for await (const message of sdkAgent.query(finalPrompt, sdkOpts as any)) {
         if (session.abortController.signal.aborted) break;
         for (const msg of this.processMessage(message, session.id, sentTextHashes, sentToolIds)) {
           if (msg.type === 'tool_use') {
@@ -685,28 +687,24 @@ export class CodeAnyAgent extends BaseAgent {
           }
           yield msg;
         }
-        // SDK enforces termination via maxTurns; this is just an observability signal.
         if (totalToolCalls >= MAX_TOOL_CALLS && !warnedToolLimit) {
           warnedToolLimit = true;
-          logger.warn(`[CodeAny ${session.id}] Tool call limit (${MAX_TOOL_CALLS}) reached, SDK maxTurns will handle termination.`);
+          logger.warn('[CodeAny ' + session.id + '] Tool call limit reached');
         }
       }
 
       if (sawToolActivity && !sawFinalTextAfterTool) {
-        const reason =
-          finalResultSubtype && finalResultSubtype !== 'success'
-            ? `本轮执行结束状态：${finalResultSubtype}。`
-            : '本轮工具检索已经结束，但模型没有生成最终总结。';
+        const reason = finalResultSubtype && finalResultSubtype !== 'success'
+          ? '\u672c\u8f6e\u6267\u884c\u7ed3\u675f\u72b6\u6001\uff1a' + finalResultSubtype + '\u3002'
+          : '\u672c\u8f6e\u5de5\u5177\u68c0\u7d22\u5df2\u7ecf\u7ed3\u675f\uff0c\u4f46\u6a21\u578b\u6ca1\u6709\u751f\u6210\u6700\u7ec8\u603b\u7ed3\u3002';
         yield {
           type: 'text',
-          content:
-            `${reason}\n\n` +
-            '我已经停止继续调用工具，避免空转。你可以直接让我“基于已检索结果总结”，或把范围缩小后继续追问。',
+          content: reason + '\n\n\u6211\u5df2\u7ecf\u505c\u6b62\u7ee7\u7eed\u8c03\u7528\u5de5\u5177\uff0c\u907f\u514d\u7a7a\u8f6c\u3002\u4f60\u53ef\u4ee5\u76f4\u63a5\u8ba9\u6211\u201c\u57fa\u4e8e\u5df2\u68c0\u7d22\u7ed3\u679c\u603b\u7ed3\u201d\uff0c\u6216\u628a\u8303\u56f4\u7f29\u5c0f\u540e\u7ee7\u7eed\u8ffd\u95ee\u3002',
         };
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`[CodeAny ${session.id}] Error:`, { message: errorMessage });
+      logger.error('[CodeAny ' + session.id + '] Error:', { message: errorMessage });
 
       const noApiKeyConfigured = !this.config.apiKey;
       const usingCustomApi = this.isUsingCustomApi();
@@ -724,9 +722,9 @@ export class CodeAnyAgent extends BaseAgent {
       if (isApiKeyError) {
         yield { type: 'error', message: '__API_KEY_ERROR__' };
       } else if (isApiCompatibilityError) {
-        yield { type: 'error', message: `__CUSTOM_API_ERROR__|${this.config.baseUrl}|${LOG_FILE_PATH}` };
+        yield { type: 'error', message: '__CUSTOM_API_ERROR__|' + this.config.baseUrl + '|' + LOG_FILE_PATH };
       } else {
-        yield { type: 'error', message: `__INTERNAL_ERROR__|${LOG_FILE_PATH}` };
+        yield { type: 'error', message: '__INTERNAL_ERROR__|' + LOG_FILE_PATH };
       }
     } finally {
       clearTimeout(timeoutTimer);
@@ -735,244 +733,21 @@ export class CodeAnyAgent extends BaseAgent {
     }
   }
 
+  // plan() and execute() are deprecated — single-path architecture.
+  // Both delegate to run() which has full tools + conversation context.
   async *plan(prompt: string, options?: PlanOptions): AsyncGenerator<AgentMessage> {
-    const session = this.createSession('planning', {
-      id: options?.sessionId,
-      abortController: options?.abortController,
-    });
-    yield { type: 'session', sessionId: session.id };
-
-    const sessionCwd = getSessionWorkDir(
-      options?.cwd || this.config.workDir, prompt, options?.taskId
-    );
-    await ensureDir(sessionCwd);
-    logger.info(`[CodeAny ${session.id}] Planning started, cwd: ${sessionCwd}`);
-
-    const workspaceInstruction = `\n## CRITICAL: Output Directory\n**ALL files must be saved to: ${sessionCwd}**\n`;
-    const languageInstruction = buildLanguageInstruction(options?.language, prompt);
-    const baseSageSystemPrompt = await getSageSystemPrompt();
-    const planPersonaSection = await buildPersonaSection(options?.userId, options?.accessToken);
-    // Phase 4: plan 必首轮，强制启用主动召回
-    const planRecallSection = await buildActiveRecallSection({
-      prompt,
-      userId: options?.userId,
-      accessToken: options?.accessToken,
-      forceFirstTurn: true,
-    });
-    const sageSystemPrompt = [baseSageSystemPrompt, planPersonaSection, planRecallSection]
-      .filter((s) => s && s.length > 0)
-      .join('\n');
-    const contextSessionId = options?.taskId || session.id;
-    const conversationContext = await this.buildConversationContext(contextSessionId, options?.conversation);
-    const planningPrompt = workspaceInstruction + PLANNING_INSTRUCTION + conversationContext + languageInstruction + prompt;
-
-    let fullResponse = '';
-
-    const sdkOpts = this.buildSdkOptions(sessionCwd, options, {
-      abortController: options?.abortController || session.abortController,
-    }, sageSystemPrompt);
-
-    // Phase 2 关键修正：plan 阶段需要 search_memory 工具来调取历史上下文，
-    // 否则模型遇到「我之前问过 X 吗」这类问题只能凭空 direct_answer。
-    // - 仅允许 search_memory（pure read，无副作用），其他工具留给 execute
-    // - 必须同时注入 memory MCP server，否则工具名挂着也调不通
-    // 必须 override buildSdkOptions 里的 allowedTools 默认值（line 939
-    // 会用 ALLOWED_TOOLS 全集 fallback）。
-    const planMcpServers = this.buildBuiltinMcpServers(
-      options?.userId,
-      options?.accessToken
-    );
-    if (Object.keys(planMcpServers).length > 0) {
-      sdkOpts.mcpServers = planMcpServers;
-      sdkOpts.allowedTools = ['mcp__memory__search_memory'];
-      logger.info(`[CodeAny ${session.id}] Planning: enabled search_memory tool`);
-    } else {
-      sdkOpts.allowedTools = [];
-    }
-
-    // dedup sets shared with processMessage
-    const sentTextHashes = new Set<string>();
-    const sentToolIds = new Set<string>();
-
-    // ── Plan phase timeout (same protection as run) ──────────────────
-    const PLAN_TIMEOUT_MS = 2 * 60 * 1000;
-    const planTimeoutTimer = setTimeout(() => {
-      logger.warn(
-        `[CodeAny ${session.id}] Plan timeout (${PLAN_TIMEOUT_MS}ms) — aborting`
-      );
-      session.abortController.abort();
-    }, PLAN_TIMEOUT_MS);
-
-    try {
-      for await (const message of query({ prompt: planningPrompt, options: sdkOpts })) {
-        if (session.abortController.signal.aborted) break;
-
-        // 先把 assistant.text 的原文累积到 fullResponse，给 parsePlanningResponse 用。
-        // sanitizeText 会剥掉 MiniMax 的 <think>...</think>，但原文里可能藏着 JSON
-        // 之类的内容，因此 parser 必须看原文。
-        if ((message as any).type === 'assistant' && (message as any).message?.content) {
-          for (const block of (message as any).message.content as Array<Record<string, unknown>>) {
-            if ('text' in block) {
-              fullResponse += block.text as string;
-            }
-          }
-        }
-
-        // Delegate to processMessage so plan-phase tool calls (search_memory) and
-        // their results get yielded → frontend → messages-sync → supabase。
-        // 这是 Phase 2 P1 修复：之前 plan() 只 yield text，导致 mcp tool_use /
-        // tool_result 完全不可观测，回头查 supabase messages 表全是 text，看不到
-        // 工具调用了哪些 query、返回了什么。现在所有 plan 阶段的工具行为都会留痕。
-        for (const msg of this.processMessage(message, session.id, sentTextHashes, sentToolIds)) {
-          yield msg;
-        }
-      }
-
-      if (
-        !session.abortController.signal.aborted &&
-        fullResponse.trim().length === 0
-      ) {
-        logger.warn(
-          `[CodeAny ${session.id}] Planning finished with empty model response`
-        );
-        yield {
-          type: 'error',
-          message:
-            '模型没有返回有效内容。请检查当前模型配置、API Key 或切换到可用模型后重试。',
-        };
-        return;
-      }
-
-      const planningResult = parsePlanningResponse(fullResponse);
-
-      if (planningResult?.type === 'direct_answer') {
-        yield { type: 'direct_answer', content: planningResult.answer };
-      } else if (planningResult?.type === 'plan' && planningResult.plan.steps.length > 0) {
-        this.storePlan(planningResult.plan);
-        yield { type: 'plan', plan: planningResult.plan };
-      } else {
-        const plan = parsePlanFromResponse(fullResponse);
-        if (plan && plan.steps.length > 0) {
-          this.storePlan(plan);
-          yield { type: 'plan', plan };
-        } else {
-          // Fallback: 当 parser 识别不出任何结构化产物时，
-          // 上面的循环已经把 block.text 作为 text 消息流式 yield 给 UI 了，
-          // 这里如果再把 fullResponse 打包成 direct_answer，UI 会把同样内容
-          // 再追加一次（direct_answer 被渲染为 text）— 造成 transcript 里的
-          // "block 4 = block 1+2+3 合并" 重复问题（见 minimax 反馈日志）。
-          // 仅 yield done，让已经流式输出的 text 自己闭合。
-          logger.warn(
-            `[CodeAny ${session.id}] Planning produced unstructured response; ` +
-            `streamed as text already, skipping duplicate direct_answer fallback.`
-          );
-        }
-      }
-    } catch (error) {
-      logger.error(`[CodeAny ${session.id}] Planning error:`, error);
-      yield { type: 'error', message: error instanceof Error ? error.message : String(error) };
-    } finally {
-      clearTimeout(planTimeoutTimer);
-      yield { type: 'done' };
-    }
+    logger.info('[CodeAny] plan() delegated to run() (single-path architecture)');
+    yield* this.run(prompt, options as AgentOptions);
   }
 
   async *execute(options: ExecuteOptions): AsyncGenerator<AgentMessage> {
-    const session = this.createSession('executing', {
-      id: options.sessionId,
-      abortController: options.abortController,
-    });
-    yield { type: 'session', sessionId: session.id };
-
-    const plan = options.plan || this.getPlan(options.planId);
-    if (!plan) {
-      yield { type: 'error', message: `Plan not found: ${options.planId}` };
-      yield { type: 'done' };
-      return;
-    }
-
-    const sessionCwd = getSessionWorkDir(
-      options.cwd || this.config.workDir, options.originalPrompt, options.taskId
-    );
-    await ensureDir(sessionCwd);
-    logger.info(`[CodeAny ${session.id}] Executing plan: ${plan.id}, cwd: ${sessionCwd}`);
-
-    const sandboxOpts: SandboxOptions | undefined = options.sandbox?.enabled
-      ? { enabled: true, image: options.sandbox.image, apiEndpoint: options.sandbox.apiEndpoint || SANDBOX_API_URL }
-      : undefined;
-
-    const baseSageSystemPrompt = await getSageSystemPrompt();
-    const execPersonaSection = await buildPersonaSection(options.userId, options.accessToken);
-    // Phase 4: execute 跟随 plan 必首轮，用 originalPrompt 做主动召回
-    const execRecallSection = await buildActiveRecallSection({
-      prompt: options.originalPrompt,
-      userId: options.userId,
-      accessToken: options.accessToken,
-      forceFirstTurn: true,
-    });
-    const sageSystemPrompt = [baseSageSystemPrompt, execPersonaSection, execRecallSection]
-      .filter((s) => s && s.length > 0)
-      .join('\n');
-    const execContextSessionId = options.taskId || session.id;
-    const conversationContext = await this.buildConversationContext(execContextSessionId, options.conversation);
-   const executionPrompt =
-      formatPlanForExecution(plan, sessionCwd, sandboxOpts, options.language, options.originalPrompt) + conversationContext;
-
-    const sentTextHashes = new Set<string>();
-    const sentToolIds = new Set<string>();
-
-    const userMcpServers = await loadMcpServers(options.mcpConfig as McpConfig | undefined);
-    const builtinMcpServers = this.buildBuiltinMcpServers(
-      options.userId,
-      options.accessToken
-    );
-    const allMcpServers = { ...builtinMcpServers, ...userMcpServers };
-
-    const sdkOpts = this.buildSdkOptions(sessionCwd, options, {
-      abortController: options.abortController || session.abortController,
-    }, sageSystemPrompt);
-
-    if (Object.keys(allMcpServers).length > 0) {
-      sdkOpts.mcpServers = allMcpServers;
-      logger.info(`[CodeAny ${session.id}] MCP servers: ${Object.keys(allMcpServers).join(', ')}`);
-    }
-
-    // Dynamically swap in only the skills relevant to this plan's original prompt
-    if (options.originalPrompt) {
-      await refreshSkillsForPrompt(options.originalPrompt);
-    }
-
-    // ── Execute phase timeout (same protection as run) ──────────────────
-    const EXEC_TIMEOUT_MS = 2 * 60 * 1000;
-    const execTimeoutTimer = setTimeout(() => {
-      logger.warn(
-        `[CodeAny ${session.id}] Execute timeout (${EXEC_TIMEOUT_MS}ms) — aborting`
-      );
-      session.abortController.abort();
-    }, EXEC_TIMEOUT_MS);
-
-    try {
-      for await (const message of query({ prompt: executionPrompt, options: sdkOpts })) {
-        if (session.abortController.signal.aborted) break;
-        for (const msg of this.processMessage(message, session.id, sentTextHashes, sentToolIds)) {
-          yield msg;
-        }
-      }
-    } catch (error) {
-      logger.error(`[CodeAny ${session.id}] Execution error:`, error);
-      yield { type: 'error', message: error instanceof Error ? error.message : String(error) };
-    } finally {
-      clearTimeout(execTimeoutTimer);
-      this.deletePlan(options.planId);
-      this.sessions.delete(session.id);
-      yield { type: 'done' };
-    }
+    logger.info('[CodeAny] execute() delegated to run() (single-path architecture)');
+    yield* this.run(options.originalPrompt, options as AgentOptions);
   }
 }
 
 // ============================================================================
 // Factory & Plugin
-// ============================================================================
 
 export function createCodeAnyAgent(config: AgentConfig): CodeAnyAgent {
   return new CodeAnyAgent(config);
