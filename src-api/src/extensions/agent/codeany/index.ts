@@ -55,6 +55,9 @@ import {
   createWebSearchInterceptorHook,
 } from './tool-output-interceptor';
 import { createCanvasMcpServer, CANVAS_TOOL_FULL_NAME } from './canvas-tool';
+import { createChartMcpServer, CHART_TOOL_FULL_NAME } from './chart-tool';
+import { getCachedData } from './data-cache';
+import { generateChartHTML } from './chart-templates';
 import { createLogger, LOG_FILE_PATH } from '@/shared/utils/logger';
 import { stripHashSuffix } from '@/shared/utils/url';
 
@@ -188,6 +191,7 @@ const ALLOWED_TOOLS = [
   'mcp__memory__search_memory',
   // C-plan experiment: structured canvas delivery via tool call
   CANVAS_TOOL_FULL_NAME,
+  CHART_TOOL_FULL_NAME,
 ];
 
 // ============================================================================
@@ -270,6 +274,7 @@ export class CodeAnyAgent extends BaseAgent {
        url: minishareUrl,
      },
      canvas: createCanvasMcpServer(),
+     chart: createChartMcpServer(),
    };
  }
    const port = process.env.PORT || '2026';
@@ -294,6 +299,7 @@ export class CodeAnyAgent extends BaseAgent {
     servers.minishare = { type: 'sse', url: minishareUrl };
   }
   servers.canvas = createCanvasMcpServer();
+  servers.chart = createChartMcpServer();
   return servers;
 }
 
@@ -490,6 +496,32 @@ export class CodeAnyAgent extends BaseAgent {
              if (html && html.length > 10) {
                logger.info(`[processMessage] render_canvas intercepted: ${html.length} chars HTML, yielding as canvas text`);
                yield { type: 'text', content: '```canvas:html\n' + html + '\n```' };
+             }
+           }
+           // Structured chart: generate HTML server-side from cached data.
+           if (block.name === CHART_TOOL_FULL_NAME || block.name === 'render_chart') {
+             const chartInput = block.input as Record<string, unknown> | undefined;
+             const chartType = chartInput?.chart_type as string;
+             const dataKey = chartInput?.data_key as string;
+             const chartTitle = (chartInput?.title as string) || '数据图表';
+             const chartSubtitle = chartInput?.subtitle as string | undefined;
+             const chartSeries = chartInput?.series as string[] | undefined;
+
+             const cachedData = dataKey ? getCachedData(dataKey) : undefined;
+             if (cachedData) {
+               const html = generateChartHTML(chartType || 'table', cachedData, {
+                 title: chartTitle,
+                 ...(chartSubtitle ? { subtitle: chartSubtitle } : {}),
+                 ...(chartSeries ? { series: chartSeries } : {}),
+               });
+               logger.info(
+                 `[processMessage] render_chart: type=${chartType}, key=${dataKey}, ${html.length} chars HTML`
+               );
+               yield { type: 'text', content: '```canvas:html\n' + html + '\n```' };
+             } else {
+               logger.warn(
+                 `[processMessage] render_chart: data_key "${dataKey}" not found in cache`
+               );
              }
            }
          }
