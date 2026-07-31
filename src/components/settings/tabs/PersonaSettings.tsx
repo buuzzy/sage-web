@@ -226,7 +226,6 @@ export function PersonaSettings() {
   const hardRules = profile.explicit?.hard_rules ?? [];
   const declared = profile.explicit?.focus_universe?.declared ?? [];
   const exclusions = profile.explicit?.focus_universe?.exclusions ?? [];
-  const active = profile.implicit?.focus_universe?.active ?? [];
   const views = profile.implicit?.recent_views ?? [];
   const prefs = profile.implicit?.preferences ?? {};
   const behaviorSummary = (profile.implicit?.behavior_summary ?? '').trim();
@@ -236,7 +235,6 @@ export function PersonaSettings() {
   const noExplicit =
     hardRules.length === 0 && declared.length === 0 && exclusions.length === 0;
   const noImplicit =
-    active.length === 0 &&
     !profile.implicit?.risk_tolerance &&
     !profile.implicit?.capability_level &&
     Object.keys(prefs).length === 0 &&
@@ -464,30 +462,6 @@ export function PersonaSettings() {
                 </div>
               )}
             </div>
-
-            {/* Active focus */}
-            {active.length > 0 && (
-              <div>
-                <div className="text-muted-foreground mb-1.5 text-xs">
-                  {lang === 'zh' ? '近期常聊到的对象' : 'Frequently discussed'}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {active.slice(0, 12).map((a, idx) => (
-                    <span
-                      key={idx}
-                      className="border-border bg-muted/50 rounded-md border px-2 py-0.5 text-xs"
-                    >
-                      {a.name}
-                      {a.code ? (
-                        <span className="text-muted-foreground ml-1">
-                          ({a.code})
-                        </span>
-                      ) : null}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Phase 4 / L4-light 行为摘要 */}
             {behaviorSummary && (

@@ -32,13 +32,6 @@ export interface FocusUniverseExclusion {
   added_at: string;
 }
 
-export interface FocusUniverseActive {
-  type: 'stock' | 'fund' | 'sector' | 'topic';
-  code?: string;
-  name: string;
-  frequency_score: number;
-}
-
 export interface RecentView {
   topic: string;
   stance: string;
@@ -75,9 +68,6 @@ export interface PersonaExplicit {
 }
 
 export interface PersonaImplicit {
-  focus_universe: {
-    active: FocusUniverseActive[];
-  };
   risk_tolerance: RiskTolerance;
   capability_level: CapabilityLevel;
   preferences: PersonaPreferences;
@@ -116,7 +106,6 @@ export const EMPTY_PROFILE: PersonaProfile = {
     },
   },
   implicit: {
-    focus_universe: { active: [] },
     risk_tolerance: null,
     capability_level: null,
     preferences: {},

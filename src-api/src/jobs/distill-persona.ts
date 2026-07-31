@@ -65,12 +65,7 @@ const DISTILL_SYSTEM_PROMPT = `你是 Sage 数字分身的「记忆消化模块�
         ]
       }
     },
-    "implicit": {
-      "focus_universe": {
-        "active": [
-          { "type": "stock|fund|sector|topic", "code": "string|null", "name": "string", "frequency_score": 0.0 }
-        ]
-      },
+   "implicit": {
       "risk_tolerance": "conservative|moderate|aggressive|speculative|null",
       "capability_level": "novice|intermediate|advanced|professional|null",
       "preferences": {
@@ -114,9 +109,6 @@ const DISTILL_SYSTEM_PROMPT = `你是 Sage 数字分身的「记忆消化模块�
 
 基于行为综合判断。
 
-### implicit.focus_universe.active
-按对话提及频率排序的关注。frequency_score 范围 0.0-1.0。最多 20 个。
-
 ### implicit.risk_tolerance
 - conservative: 偏好分红、债券、稳健大盘股
 - moderate: 平衡仓位
@@ -142,7 +134,11 @@ const DISTILL_SYSTEM_PROMPT = `你是 Sage 数字分身的「记忆消化模块�
 
 ### implicit.behavior_summary（Phase 4 新增）
 基于 behavior_stats 表（最近 90 天的行为日志聚合）综合写出的「这位用户最近在做什么」一段自然语言摘要，最多 500 字。
-不是清单，是叙述。重要约束：不列出具体股票名称和查询次数，用板块/主题描述行为偏好。
+不是清单，是叙述。重要约束（必须严格遵守）：
+- 绝对不出现任何具体股票名称、股票代码或基金名称
+- 不出现具体查询次数
+- 只用板块/主题/行业描述行为偏好（如"消费"、"资源"、"科技"、"金融"等）
+- 如果 current_profile 中的旧 behavior_summary 包含股票名称，重写时必须全部清除
 例子：
 
 > "最近 30 天高频关注消费和周期板块，偶尔触及科技，几乎不再问医药。提问时段集中在周末和工作日晚上 21 点后，周中早盘提问几乎为零——风格上更像深度阅读型而非盘中操作型。"
@@ -447,7 +443,19 @@ async function callDistillLlm(
   const userPrompt = [
     '## current_profile（这位用户当前已有的画像，从中合并更新）',
     '',
-    JSON.stringify(currentProfile, null, 2),
+    // 清洗：behavior_summary 旧值可能含标的具体名称，喂给 LLM 会产生污染
+    // 置 null 让 LLM 从 behavior_stats + new_messages 重新生成干净的 summary
+    JSON.stringify(
+      {
+        ...currentProfile,
+        implicit: {
+          ...currentProfile.implicit,
+          behavior_summary: null,
+        },
+      },
+      null,
+      2
+    ),
     '',
     '## current_recent_threads（最近 20 个 user 提问的上一版摘要，仅供参考）',
     '',
@@ -455,7 +463,20 @@ async function callDistillLlm(
     '',
     '## behavior_stats（最近 90 天行为日志聚合，用于画像漂移和 behavior_summary）',
     '',
-    JSON.stringify(behaviorStats, null, 2),
+    // 清洗：top_assets 和 top_query_previews 含裸标的名，会污染 behavior_summary
+    // 只保留聚合计数和时序信号，不喂标的名给 LLM
+    JSON.stringify(
+      {
+        total_count: behaviorStats.total_count,
+        last_ts: behaviorStats.last_ts,
+        top_asset_count: behaviorStats.top_assets.length,
+        skill_distribution: behaviorStats.skill_distribution,
+        weekday_count: behaviorStats.weekday_count,
+        weekend_count: behaviorStats.weekend_count,
+      },
+      null,
+      2
+    ),
     '',
     '## new_messages（自上次蒸馏以来的新对话，时间正序）',
     '',
@@ -518,7 +539,7 @@ async function callDistillLlm(
 
   if (!finalResult.profile || !Array.isArray(finalResult.recent_threads)) {
     throw new Error(
-      `Distill LLM returned invalid structure: ${JSON.stringify(result).slice(0, 200)}`
+      `Distill LLM returned invalid structure: ${JSON.stringify(result).slice(0, 1000)}`
     );
   }
 

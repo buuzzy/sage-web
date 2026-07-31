@@ -37,15 +37,6 @@ export interface FocusUniverseExclusion {
   added_at: string;
 }
 
-/** 蒸馏推断的活跃关注（按对话频率） */
-export interface FocusUniverseActive {
-  type: 'stock' | 'fund' | 'sector' | 'topic';
-  code?: string;
-  name: string;
-  /** 0-1 范围的频率分数 */
-  frequency_score: number;
-}
-
 /** 蒸馏推断的近期观点 */
 export interface RecentView {
   topic: string;
@@ -92,9 +83,6 @@ export interface PersonaExplicit {
 
 /** 隐式字段集（蒸馏综合推断） */
 export interface PersonaImplicit {
-  focus_universe: {
-    active: FocusUniverseActive[];
-  };
   risk_tolerance: RiskTolerance;
   capability_level: CapabilityLevel;
   preferences: PersonaPreferences;
@@ -147,7 +135,6 @@ export const EMPTY_PROFILE: PersonaProfile = {
     },
   },
   implicit: {
-    focus_universe: { active: [] },
     risk_tolerance: null,
     capability_level: null,
     preferences: {},
