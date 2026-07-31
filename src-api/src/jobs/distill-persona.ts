@@ -486,6 +486,7 @@ async function callDistillLlm(
   });
 
   const content = extractContent(res);
+  console.log('[distill] DeepSeek response content (first 200 chars):', content.slice(0, 200));
   // 去掉 markdown 代码块包裹
   let parsed: unknown;
   const codeBlock = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
