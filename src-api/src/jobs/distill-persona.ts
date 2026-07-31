@@ -13,7 +13,7 @@
  * 详见 docs/memory/phase3-design.md §5.1 Sprint 2
  */
 
-import { mimoChatJson, MimoApiError } from '@/shared/llm/mimo';
+import { mimoChat, extractContent, MimoApiError } from '@/shared/llm/mimo';
 import { getServiceSupabase } from '@/shared/supabase/client';
 import {
   EMPTY_PROFILE,
@@ -474,7 +474,7 @@ async function callDistillLlm(
     '记住：implicit 字段允许根据 behavior_stats + new_messages 漂移；hard_rules 不漂移。',
   ].join('\n');
 
-  const result = await mimoChatJson<DistillResult>({
+  const res = await mimoChat({
     model: DISTILL_MODEL,
     messages: [
       { role: 'system', content: DISTILL_SYSTEM_PROMPT },
@@ -484,6 +484,17 @@ async function callDistillLlm(
     max_tokens: 8192,
     timeoutMs: DISTILL_TIMEOUT_MS,
   });
+
+  const content = extractContent(res);
+  // 去掉 markdown 代码块包裹
+  let parsed: unknown;
+  const codeBlock = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (codeBlock) {
+    parsed = JSON.parse(codeBlock[1]);
+  } else {
+    parsed = JSON.parse(content);
+  }
+  const result = parsed as DistillResult;
 
   // 容错：LLM 可能跳过外层 "profile" 包装，直接输出 profile 内容（以 "explicit" 开头）
   let finalResult = result;
