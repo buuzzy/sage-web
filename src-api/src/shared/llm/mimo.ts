@@ -119,6 +119,9 @@ export async function mimoChat(
 
     const json = (await res.json()) as MimoChatResponse;
     console.log('[mimoChat] Raw response structure:', JSON.stringify({ id: json.id, model: json.model, choicesCount: json.choices?.length, hasContent: !!json.choices?.[0]?.message?.content, firstChoiceKeys: json.choices?.[0] ? Object.keys(json.choices[0]) : 'none' }));
+    console.log('[mimoChat] message keys:', json.choices?.[0]?.message ? Object.keys(json.choices[0].message) : 'no message');
+    console.log('[mimoChat] finish_reason:', json.choices?.[0]?.finish_reason);
+    console.log('[mimoChat] usage:', JSON.stringify(json.usage));
     return json;
   } catch (e) {
     if (e instanceof MimoApiError) throw e;
