@@ -32,9 +32,8 @@ interface AuthContextType {
   dbReady: boolean;
   dbError: string | null;
   retryDbBind: () => Promise<void>;
-  signInWithGitHub: () => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
-  signInWithEmail: (email: string, password: string) => Promise<void>;
+  sendOtp: (email: string) => Promise<void>;
+  verifyOtp: (email: string, token: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -43,21 +42,6 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/**
- * Web-first OAuth strategy:
- * - 使用 Supabase in-page redirect 完成登录
- * - 回跳到 /login，由 AuthProvider 决定何时进入主界面
- */
-async function signInWithProvider(provider: 'github' | 'google') {
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider,
-    options: {
-      redirectTo: `${window.location.origin}/login`,
-    },
-  });
-  if (error) throw error;
-}
 
 /**
  * 从 localStorage 里 Supabase 缓存的 session token 中解析出 user.id。
@@ -227,19 +211,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signInWithGitHub = useCallback(async () => {
-    await signInWithProvider('github');
+  const sendOtp = useCallback(async (email: string) => {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/login`,
+      },
+    });
+    if (error) throw error;
   }, []);
 
-  const signInWithGoogle = useCallback(async () => {
-    await signInWithProvider('google');
-  }, []);
-
-  const signInWithEmail = useCallback(
-    async (email: string, password: string) => {
-      const { error } = await supabase.auth.signInWithPassword({
+  const verifyOtp = useCallback(
+    async (email: string, token: string) => {
+      const { error } = await supabase.auth.verifyOtp({
         email,
-        password,
+        token,
+        type: 'email',
       });
       if (error) throw error;
     },
@@ -279,9 +266,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         dbReady,
         dbError,
         retryDbBind,
-        signInWithGitHub,
-        signInWithGoogle,
-        signInWithEmail,
+        sendOtp,
+        verifyOtp,
         signOut,
       }}
     >
