@@ -411,6 +411,9 @@ async function ensureSchema(db: SqliteHandle): Promise<void> {
 export async function bindUserId(uid: string): Promise<void> {
   // IDB 模式（iOS / 浏览器 / 桶面端连接云端时）也要 track 当前 uid，让 createMessage 等能注入 user_id
   if (!USE_LOCAL_SQLITE || !isTauriSync()) {
+    if (currentUid && currentUid !== uid) {
+      await clearAllLocalData();
+    }
     currentUid = uid;
     notifyBindChange();
     return;
@@ -476,8 +479,35 @@ export async function bindUserId(uid: string): Promise<void> {
  * 解除 user 绑定。关闭当前连接，后续 `getSQLiteDatabase()` 返回 null。
  * 用于登出流程。
  */
+
+/**
+ * Clear all local IndexedDB data stores.
+ * Used when switching users to prevent data leakage between accounts.
+ */
+export async function clearAllLocalData(): Promise<void> {
+  if (USE_LOCAL_SQLITE && isTauriSync()) return; // SQLite uses per-user files
+
+  try {
+    const db = await getIndexedDB();
+    const storeNames = Array.from(db.objectStoreNames);
+    const tx = db.transaction(storeNames, 'readwrite');
+    for (const name of storeNames) {
+      tx.objectStore(name).clear();
+    }
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+    console.log('[IDB] All local stores cleared (user switch)');
+  } catch (err) {
+    console.warn('[IDB] Failed to clear stores:', err);
+  }
+}
+
 export async function unbindUser(): Promise<void> {
   if (!USE_LOCAL_SQLITE || !isTauriSync()) {
+    await clearAllLocalData();
     currentUid = null;
     notifyBindChange();
     return;
