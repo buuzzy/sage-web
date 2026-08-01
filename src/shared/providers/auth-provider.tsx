@@ -34,6 +34,7 @@ interface AuthContextType {
   retryDbBind: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string) => Promise<void>;
+  verifySignupOtp: (email: string, token: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -237,6 +238,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const verifySignupOtp = useCallback(
+    async (email: string, token: string) => {
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: 'signup',
+      });
+      if (error) throw error;
+    },
+    []
+  );
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
   }, []);
@@ -272,6 +285,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         retryDbBind,
         signInWithEmail,
         signUpWithEmail,
+        verifySignupOtp,
         signOut,
       }}
     >
