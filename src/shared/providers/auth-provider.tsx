@@ -223,14 +223,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const signUpWithEmail = useCallback(
-    async (email: string, password: string) => {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-      if (error) throw error;
-      // If Supabase requires email confirmation, session will be null
+ const signUpWithEmail = useCallback(
+   async (email: string, password: string) => {
+     const { data, error } = await supabase.auth.signUp({
+       email,
+       password,
+     });
+     if (error) throw error;
+      // Supabase silently returns existing user (no error) if email is already
+      // registered — identities[] will be empty in that case. Detect it and
+      // surface a clear error so the frontend can prompt "please log in".
+      if (data.user && data.user.identities?.length === 0) {
+        throw new Error('该邮箱已注册，请直接登录');
+      }
       if (!data.session && !data.user) {
         throw new Error('注册失败，请稍后重试');
       }
