@@ -153,7 +153,7 @@ function TaskDetailContent() {
       hasPersistedUserMessage ? '' : initialPrompt || task?.prompt || '',
       messages,
       {
-        maxConversationTurns: settings.maxConversationTurns || 20,
+        maxConversationTurns: settings.maxConversationTurns || 50,
         maxHistoryTokens: settings.maxHistoryTokens || 12000,
       }
     );

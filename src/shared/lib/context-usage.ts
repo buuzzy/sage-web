@@ -100,7 +100,7 @@ function buildConversationPayloadMessages(
     });
   }
 
-  const maxMessages = Math.max(1, maxConversationTurns || 20) * 2;
+  const maxMessages = Math.max(1, maxConversationTurns || 50) * 2;
   return history.length > maxMessages ? history.slice(-maxMessages) : history;
 }
 

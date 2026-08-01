@@ -7,6 +7,37 @@ import { getSettings } from '@/shared/db/settings';
 
 import type { AgentMessage, ConversationMessage } from './types';
 
+/**
+ * Data-rich MCP tools that return structured financial data (K-line,
+ * fundamentals, indicators). These get a higher truncation budget because
+ * the numbers matter for follow-up questions like "it's PE high?" after
+ * looking at daily data.
+ */
+const DATA_TOOL_PREFIXES = [
+  'minishare__daily',
+  'minishare__daily_basic',
+  'minishare__fina_indicator',
+  'minishare__income',
+  'minishare__balancesheet',
+  'minishare__cashflow',
+  'minishare__stock_basic',
+  'minishare__dividend',
+  'minishare__top_list',
+  'minishare__moneyflow',
+];
+
+const TEXT_TOOL_LIMIT = 800;
+const DATA_TOOL_LIMIT = 3000;
+
+function truncateToolOutput(toolName: string, output: string): string {
+  const isDataTool = DATA_TOOL_PREFIXES.some(
+    (p) => toolName.startsWith(p) || toolName.includes(p)
+  );
+  const limit = isDataTool ? DATA_TOOL_LIMIT : TEXT_TOOL_LIMIT;
+  if (output.length <= limit) return output;
+  return output.slice(0, limit) + '...';
+}
+
 function buildConversationHistory(
   initialPrompt: string,
   messages: AgentMessage[]
@@ -58,8 +89,7 @@ function buildConversationHistory(
         (msg.toolUseId && pendingToolNames.get(msg.toolUseId)) || 'tool';
       const output = msg.output || '';
       if (output) {
-        const truncated =
-          output.length > 800 ? output.slice(0, 800) + '...' : output;
+        const truncated = truncateToolOutput(toolName, output);
         currentAssistantContent += `[${toolName} result]: ${truncated}\n`;
       }
     }
@@ -73,9 +103,8 @@ function buildConversationHistory(
   }
 
   // Apply history length limit - keep only the most recent messages
-  // Get max conversation turns from settings, fallback to default
   const settings = getSettings();
-  const maxTurns = settings.maxConversationTurns || 20;
+  const maxTurns = settings.maxConversationTurns || 50;
   const maxMessages = maxTurns * 2; // 2 messages per turn (user + assistant)
 
   if (history.length > maxMessages) {

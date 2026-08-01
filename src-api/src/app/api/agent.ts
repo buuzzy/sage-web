@@ -16,8 +16,27 @@ import type { AgentRequest } from '@/shared/types/agent';
 import { matchSlashCommand, executeSlashCommand } from '@/core/channel/slash-commands';
 import { getDefaultProvider } from '@/shared/provider/user-store';
 import { getBuiltInModelConfig } from '@/shared/builtin-model';
+import { reconstructConversation } from '@/shared/services/conversation';
+
 
 const agent = new Hono();
+
+async function ensureConversation(
+  body: { conversation?: Array<{ role: 'user' | 'assistant'; content: string }>; taskId?: string; userId?: string }
+): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+  if (body.conversation && body.conversation.length > 0) return body.conversation;
+  if (!body.taskId || !body.userId) return [];
+  try {
+    const reconstructed = await reconstructConversation(body.taskId, body.userId);
+    if (reconstructed.length > 0) {
+      console.log('[AgentAPI] Reconstructed ' + reconstructed.length + ' messages from Supabase for task ' + body.taskId);
+    }
+    return reconstructed;
+  } catch (err) {
+    console.warn('[AgentAPI] Conversation reconstruction failed:', err);
+    return [];
+  }
+}
 
 /**
  * Web product: always use the built-in default model (MiniMax-M3).
@@ -249,8 +268,9 @@ agent.post('/chat', async (c) => {
 
   const abortController = new AbortController();
   const resolvedConfig = await resolveModelConfig(body.modelConfig, body.userId);
+  const conversation = await ensureConversation(body);
   const readable = createSSEStream(
-    runChat(body.prompt, resolvedConfig, body.language, body.conversation, abortController)
+    runChat(body.prompt, resolvedConfig, body.language, conversation, abortController)
   );
 
   return new Response(readable, { headers: SSE_HEADERS });
@@ -280,19 +300,20 @@ agent.post('/plan', async (c) => {
   const slashResponse = await handleSlashCommand(body);
   if (slashResponse) return slashResponse;
 
-  const session = createSession('plan');
-  const resolvedConfig = await resolveModelConfig(body.modelConfig, body.userId);
-  const readable = createSSEStream(
-    runPlanningPhase(
-      body.prompt,
-      session,
-      resolvedConfig,
-      body.language,
-      body.userId,
-      body.accessToken,
-      body.conversation
-    )
-  );
+ const session = createSession('plan');
+ const resolvedConfig = await resolveModelConfig(body.modelConfig, body.userId);
+ const planConversation = await ensureConversation(body);
+ const readable = createSSEStream(
+   runPlanningPhase(
+     body.prompt,
+     session,
+     resolvedConfig,
+     body.language,
+     body.userId,
+     body.accessToken,
+     planConversation
+   )
+ );
 
   return new Response(readable, { headers: SSE_HEADERS });
 });
@@ -346,11 +367,12 @@ agent.post('/execute', async (c) => {
     return c.json({ error: 'Plan not found or expired' }, 404);
   }
 
- const session = createSession('execute');
- const resolvedConfig = await resolveModelConfig(body.modelConfig, body.userId);
- const readable = createSSEStream(
-   runExecutionPhase(
-     body.planId,
+const session = createSession('execute');
+const resolvedConfig = await resolveModelConfig(body.modelConfig, body.userId);
+const execConversation = await ensureConversation(body);
+const readable = createSSEStream(
+  runExecutionPhase(
+    body.planId,
      session,
      body.prompt || '',
      body.workDir,
@@ -360,11 +382,11 @@ agent.post('/execute', async (c) => {
      body.skillsConfig,
      body.mcpConfig,
      body.language,
-     body.userId,
-     body.accessToken,
-     body.conversation
-   ),
-   body.taskId
+    body.userId,
+    body.accessToken,
+    execConversation
+  ),
+  body.taskId
  );
 
  return new Response(readable, { headers: SSE_HEADERS });
@@ -418,15 +440,16 @@ agent.post('/', async (c) => {
   const slashResponse = await handleSlashCommand(body);
   if (slashResponse) return slashResponse;
 
-  const session = createSession();
-  const taskId = body.taskId || session.id;
-  const resolvedConfig = await resolveModelConfig(body.modelConfig, body.userId);
-  const readable = createSSEStream(
-    runAgent(
-      prompt,
-      session,
-      body.conversation,
-      body.workDir,
+ const session = createSession();
+ const taskId = body.taskId || session.id;
+ const resolvedConfig = await resolveModelConfig(body.modelConfig, body.userId);
+ const conversation = await ensureConversation(body);
+ const readable = createSSEStream(
+   runAgent(
+     prompt,
+     session,
+     conversation,
+     body.workDir,
       body.taskId,
       resolvedConfig,
       body.sandboxConfig,
