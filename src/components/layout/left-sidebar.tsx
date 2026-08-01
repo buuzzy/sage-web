@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ImageLogo from '@/assets/logo.png';
 import type { Task } from '@/shared/db';
-import { isMobile } from '@/shared/lib/platform';
+import { isMobile, useIsMobile } from '@/shared/lib/platform';
 import { cn } from '@/shared/lib/utils';
 import { useAuth } from '@/shared/providers/auth-provider';
 import { useLanguage } from '@/shared/providers/language-provider';
@@ -140,6 +140,7 @@ export function LeftSidebar({
 }: LeftSidebarProps) {
   const navigate = useNavigate();
   const { leftOpen, toggleLeft, setLeftOpen } = useSidebar();
+  const mobile = useIsMobile();
   const { signOut } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { t } = useLanguage();
@@ -238,7 +239,7 @@ export function LeftSidebar({
   return (
     <TooltipProvider delayDuration={0}>
       {/* Mobile: overlay backdrop */}
-      {isMobile && leftOpen && (
+      {mobile && leftOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50 transition-opacity"
           onClick={() => setLeftOpen(false)}
@@ -249,12 +250,12 @@ export function LeftSidebar({
           'border-sidebar-border bg-sidebar flex h-full shrink-0 flex-col border-none transition-all duration-300',
           leftOpen ? 'w-72' : 'w-14',
           // Mobile: fixed overlay drawer
-          isMobile &&
+          mobile &&
             'fixed inset-y-0 left-0 z-50 w-[85vw] max-w-[320px] shadow-2xl',
-          isMobile && !leftOpen && '-translate-x-full',
-          isMobile && leftOpen && 'translate-x-0',
+          mobile && !leftOpen && '-translate-x-full',
+          mobile && leftOpen && 'translate-x-0',
           // Mobile: add safe area padding
-          isMobile && 'pt-[var(--safe-area-top)]'
+          mobile && 'pt-[var(--safe-area-top)]'
         )}
       >
         {leftOpen ? (
@@ -349,14 +350,14 @@ export function LeftSidebar({
                               className="flex size-6 shrink-0 items-center justify-center rounded transition-all"
                             >
                               {/* Show star when favorited (hide on hover), show menu icon on hover */}
-                              {task.favorite ? (
-                                <>
-                                  <Star className="size-4 fill-amber-400 text-amber-400 group-hover:hidden" />
-                                  <MoreHorizontal className="text-sidebar-foreground/40 hover:text-sidebar-foreground hidden size-4 group-hover:block" />
-                                </>
-                              ) : (
-                                <MoreHorizontal className="text-sidebar-foreground/40 hover:text-sidebar-foreground size-4 opacity-0 group-hover:opacity-100" />
-                              )}
+                             {task.favorite ? (
+                               <>
+                                  <Star className="size-4 fill-amber-400 text-amber-400 md:group-hover:hidden" />
+                                  <MoreHorizontal className="text-sidebar-foreground/40 hover:text-sidebar-foreground block size-4 md:hidden md:group-hover:block" />
+                               </>
+                             ) : (
+                                <MoreHorizontal className="text-sidebar-foreground/40 hover:text-sidebar-foreground size-4 opacity-100 md:opacity-0 md:group-hover:opacity-100" />
+                             )}
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent
@@ -606,14 +607,14 @@ export function LeftSidebar({
                                           className="flex size-6 shrink-0 items-center justify-center rounded transition-all"
                                         >
                                           {/* Show star when favorited (hide on hover), show menu icon on hover */}
-                                          {task.favorite ? (
-                                            <>
-                                              <Star className="size-4 fill-amber-400 text-amber-400 group-hover:hidden" />
-                                              <MoreHorizontal className="text-muted-foreground hover:text-foreground hidden size-4 group-hover:block" />
-                                            </>
-                                          ) : (
-                                            <MoreHorizontal className="text-muted-foreground hover:text-foreground size-4 opacity-0 group-hover:opacity-100" />
-                                          )}
+                                         {task.favorite ? (
+                                           <>
+                                              <Star className="size-4 fill-amber-400 text-amber-400 md:group-hover:hidden" />
+                                              <MoreHorizontal className="text-muted-foreground hover:text-foreground block size-4 md:hidden md:group-hover:block" />
+                                           </>
+                                         ) : (
+                                            <MoreHorizontal className="text-muted-foreground hover:text-foreground size-4 opacity-100 md:opacity-0 md:group-hover:opacity-100" />
+                                         )}
                                         </button>
                                       </DropdownMenuTrigger>
                                       <DropdownMenuContent

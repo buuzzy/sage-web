@@ -13,13 +13,15 @@ import {
   subscribeToBackgroundTasks,
   type BackgroundTask,
 } from '@/shared/lib/background-tasks';
-import { isMobile } from '@/shared/lib/platform';
+import { useIsMobile } from '@/shared/lib/platform';
 import { generateSessionId } from '@/shared/lib/session';
 import { cn } from '@/shared/lib/utils';
 import { useLanguage } from '@/shared/providers/language-provider';
 import { ArrowUpRight, Cog, FileText, FolderOpen } from 'lucide-react';
+import { PanelLeft } from 'lucide-react';
 
 import { LeftSidebar, SidebarProvider } from '@/components/layout';
+import { useSidebar } from '@/components/layout/sidebar-context';
 import { ChatInput, type ChatMode } from '@/components/shared/ChatInput';
 
 type CategoryKey = 'organizeFiles' | 'generateDocs' | 'automateTasks';
@@ -46,6 +48,8 @@ export function HomePage() {
 
 function HomeContent() {
   const { t } = useLanguage();
+  const mobile = useIsMobile();
+  const { toggleLeft } = useSidebar();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [backgroundTasks, setBackgroundTasks] = useState<BackgroundTask[]>([]);
   const [pendingPrompt, setPendingPrompt] = useState('');
@@ -155,10 +159,10 @@ function HomeContent() {
 
   return (
     <div
-      className={cn(
-        'bg-sidebar flex h-screen overflow-hidden',
-        isMobile && 'pt-[var(--safe-area-top)]'
-      )}
+        className={cn(
+          'bg-sidebar flex h-screen overflow-hidden',
+          mobile && 'pt-[var(--safe-area-top)]'
+        )}
     >
       {/* Left Sidebar */}
       <LeftSidebar
@@ -172,13 +176,21 @@ function HomeContent() {
 
       {/* Main Content */}
       <div
-        className={cn(
-          'bg-background flex min-w-0 flex-1 flex-col overflow-hidden',
-          isMobile ? 'rounded-none' : 'my-2 mr-2 rounded-2xl shadow-sm'
-        )}
+          className={cn(
+            'bg-background flex min-w-0 flex-1 flex-col overflow-hidden',
+            mobile ? 'rounded-none' : 'my-2 mr-2 rounded-2xl shadow-sm'
+          )}
       >
-        {/* Content Area - Vertically Centered */}
-        <div className="flex flex-1 flex-col items-center justify-center overflow-auto px-4">
+       {/* Content Area - Vertically Centered */}
+        <div className="relative flex flex-1 flex-col items-center justify-center overflow-auto px-4">
+          {/* Mobile sidebar toggle */}
+          <button
+            onClick={toggleLeft}
+            className="text-muted-foreground hover:bg-accent hover:text-foreground absolute top-4 left-4 z-10 flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-lg p-2 transition-colors md:hidden"
+          >
+            <PanelLeft className="size-5" />
+          </button>
+
           <div className="flex w-full max-w-2xl flex-col items-center gap-6">
             {/* Title */}
             <h1 className="text-foreground text-center font-serif text-4xl font-normal tracking-tight md:text-5xl">

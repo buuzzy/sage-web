@@ -25,45 +25,45 @@ function RunningIndicator({
   // Get description of current activity
   const getActivityText = () => {
     if (phase === 'planning') {
-      return 'Planning execution...';
+      return '正在规划执行方案…';
     }
 
     if (!lastToolUse?.name) {
-      return phase === 'executing' ? 'Executing...' : 'Thinking...';
+      return phase === 'executing' ? '执行中…' : '思考中…';
     }
 
     const input = lastToolUse.input as Record<string, unknown> | undefined;
 
     switch (lastToolUse.name) {
       case 'Bash':
-        return `Running command...`;
+        return `执行命令中…`;
       case 'Read':
         const readFile = input?.file_path
           ? String(input.file_path).split('/').pop()
           : '';
-        return `Reading ${readFile || 'file'}...`;
+        return `读取 ${readFile || '文件'}…`;
       case 'Write':
         const writeFile = input?.file_path
           ? String(input.file_path).split('/').pop()
           : '';
-        return `Writing ${writeFile || 'file'}...`;
+        return `写入 ${writeFile || '文件'}…`;
       case 'Edit':
         const editFile = input?.file_path
           ? String(input.file_path).split('/').pop()
           : '';
-        return `Editing ${editFile || 'file'}...`;
+        return `编辑 ${editFile || '文件'}…`;
       case 'Grep':
-        return 'Searching...';
+        return '搜索中…';
       case 'Glob':
-        return 'Finding files...';
+        return '查找文件…';
       case 'WebSearch':
-        return 'Searching web...';
+        return '搜索网络…';
       case 'WebFetch':
-        return 'Fetching page...';
+        return '获取页面…';
       case 'Task':
-        return 'Running subtask...';
+        return '执行子任务…';
       default:
-        return `${getMcpToolDisplayName(lastToolUse.name)}...`;
+        return `${getMcpToolDisplayName(lastToolUse.name)}…`;
     }
   };
 

@@ -18,7 +18,7 @@ import {
 import { useAgent, type MessageAttachment } from '@/shared/hooks/useAgent';
 import { extractAllCanvases } from '@/shared/lib/canvasExtract';
 import { estimateConversationContextTokens } from '@/shared/lib/context-usage';
-import { isMobile } from '@/shared/lib/platform';
+import { useIsMobile } from '@/shared/lib/platform';
 import { cn } from '@/shared/lib/utils';
 import { useLanguage } from '@/shared/providers/language-provider';
 import { ArrowDown, PanelLeft, Pencil } from 'lucide-react';
@@ -168,6 +168,7 @@ function TaskDetailContent() {
   const { toggleLeft } = useSidebar();
   const [hasStarted, setHasStarted] = useState(false);
   const isInitializingRef = useRef(false); // Prevent double initialization in Strict Mode
+  const mobile = useIsMobile();
   const [task, setTask] = useState<Task | null>(null);
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -592,7 +593,7 @@ function TaskDetailContent() {
       <div
         className={cn(
           'bg-sidebar flex h-screen overflow-hidden',
-          isMobile && 'pt-[var(--safe-area-top)]'
+          mobile && 'pt-[var(--safe-area-top)]'
         )}
       >
         {/* Left Sidebar */}
@@ -614,7 +615,7 @@ function TaskDetailContent() {
           ref={containerRef}
           className={cn(
             'bg-background flex min-w-0 flex-1 overflow-hidden',
-            isMobile ? 'rounded-none' : 'my-2 mr-2 rounded-2xl shadow-sm'
+            mobile ? 'rounded-none' : 'my-2 mr-2 rounded-2xl shadow-sm'
           )}
         >
           {/* Chat Panel */}
@@ -628,7 +629,7 @@ function TaskDetailContent() {
             <header className="border-border/50 bg-background z-10 flex shrink-0 items-center gap-2 border-none px-4 py-3">
               <button
                 onClick={toggleLeft}
-                className="text-muted-foreground hover:bg-accent hover:text-foreground flex cursor-pointer items-center justify-center rounded-lg p-2 transition-colors duration-200 md:hidden"
+                className="text-muted-foreground hover:bg-accent hover:text-foreground flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-lg p-2 transition-colors duration-200 md:hidden"
               >
                 <PanelLeft className="size-5" />
               </button>
@@ -657,7 +658,7 @@ function TaskDetailContent() {
               <button
                 onClick={() => setIsCanvasVisible(!isCanvasVisible)}
                 className={cn(
-                  'text-muted-foreground hover:bg-accent hover:text-foreground flex cursor-pointer items-center justify-center rounded-lg p-2 transition-colors',
+                  'text-muted-foreground hover:bg-accent hover:text-foreground flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-lg p-2 transition-colors',
                   isCanvasVisible && 'bg-accent/50'
                 )}
                 title={isCanvasVisible ? '隐藏画布' : '显示画布'}
@@ -671,7 +672,7 @@ function TaskDetailContent() {
               ref={messagesContainerRef}
               className="scrollbar-soft relative flex flex-1 justify-center overflow-x-hidden overflow-y-auto"
             >
-              <div className="w-full max-w-[800px] px-6 pt-4 pb-24">
+              <div className={cn('w-full max-w-[800px] pt-4 pb-24', mobile ? 'px-4' : 'px-6')}>
                 {isLoading ? (
                   <div className="flex min-h-[200px] items-center justify-center py-12">
                     <div className="text-muted-foreground flex items-center gap-3">
@@ -726,7 +727,7 @@ function TaskDetailContent() {
                   <ArrowDown className="size-4" />
                 </button>
               )}
-              <div className="w-full max-w-[800px] px-4 py-3">
+              <div className={cn('w-full max-w-[800px] px-4', mobile ? 'pb-[calc(8px+var(--safe-area-bottom))]' : 'py-3')}>
                 <ChatInput
                   variant="reply"
                   placeholder={t.home.reply}
@@ -742,45 +743,57 @@ function TaskDetailContent() {
             </div>
           </div>
 
-          {/* Resize handle + Canvas Panel */}
-          {isCanvasVisible && (
-            <>
-              <div
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  const startX = e.clientX;
-                  const startWidth = canvasWidth;
-                  const onMove = (ev: MouseEvent) => {
-                    const delta = startX - ev.clientX;
-                    const maxW = Math.min(800, window.innerWidth * 0.6);
-                    setCanvasWidth(
-                      Math.max(320, Math.min(maxW, startWidth + delta))
-                    );
-                  };
-                  const onUp = () => {
-                    document.removeEventListener('mousemove', onMove);
-                    document.removeEventListener('mouseup', onUp);
-                    document.body.style.cursor = '';
-                    document.body.style.userSelect = '';
-                  };
-                  document.addEventListener('mousemove', onMove);
-                  document.addEventListener('mouseup', onUp);
-                  document.body.style.cursor = 'col-resize';
-                  document.body.style.userSelect = 'none';
-                }}
-                className="hover:bg-primary/30 active:bg-primary/50 group/handle w-1 shrink-0 cursor-col-resize transition-colors"
-              />
-              <div
-                style={{ width: canvasWidth }}
-                className="bg-background flex shrink-0 flex-col overflow-hidden rounded-r-2xl"
-              >
-                <CanvasPanel
-                  canvases={canvases}
-                  onClose={() => setIsCanvasVisible(false)}
-                />
-              </div>
-            </>
-          )}
+         {/* Resize handle + Canvas Panel */}
+         {isCanvasVisible && (
+          <>
+               {mobile ? (
+                <div className="bg-background absolute inset-0 z-50 flex flex-col overflow-hidden">
+                  <CanvasPanel
+                    canvases={canvases}
+                    onClose={() => setIsCanvasVisible(false)}
+                  />
+                </div>
+              ) : (
+                <>
+                  {/* Desktop: resizable side panel */}
+                  <div
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      const startX = e.clientX;
+                      const startWidth = canvasWidth;
+                      const onMove = (ev: MouseEvent) => {
+                        const delta = startX - ev.clientX;
+                        const maxW = Math.min(800, window.innerWidth * 0.6);
+                        setCanvasWidth(
+                          Math.max(320, Math.min(maxW, startWidth + delta))
+                        );
+                      };
+                      const onUp = () => {
+                        document.removeEventListener('mousemove', onMove);
+                        document.removeEventListener('mouseup', onUp);
+                        document.body.style.cursor = '';
+                        document.body.style.userSelect = '';
+                      };
+                      document.addEventListener('mousemove', onMove);
+                      document.addEventListener('mouseup', onUp);
+                      document.body.style.cursor = 'col-resize';
+                      document.body.style.userSelect = 'none';
+                    }}
+                    className="hover:bg-primary/30 active:bg-primary/50 group/handle w-1 shrink-0 cursor-col-resize transition-colors"
+                  />
+                  <div
+                    style={{ width: canvasWidth }}
+                    className="bg-background flex shrink-0 flex-col overflow-hidden rounded-r-2xl"
+                  >
+                    <CanvasPanel
+                      canvases={canvases}
+                      onClose={() => setIsCanvasVisible(false)}
+                    />
+                  </div>
+                </>
+              )}
+           </>
+         )}
         </div>
       </div>
       {/* Rename dialog */}

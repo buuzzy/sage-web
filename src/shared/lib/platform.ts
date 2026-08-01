@@ -5,6 +5,8 @@
  * Tauri desktop and plain web environments.
  */
 
+import { useSyncExternalStore } from 'react';
+
 // ─── Platform Flags ─────────────────────────────────────────────────────────
 
 /** Running inside Tauri desktop shell */
@@ -20,6 +22,24 @@ export const isMobile =
 
 /** Running on a desktop platform (Tauri or wide web) */
 export const isDesktop = isTauri || !isMobile;
+
+// ─── Reactive viewport detection ────────────────────────────────────────────
+
+const MOBILE_BREAKPOINT = 768;
+
+function subscribeViewport(callback: () => void): () => void {
+  window.addEventListener('resize', callback);
+  return () => window.removeEventListener('resize', callback);
+}
+
+function getViewportIsMobile(): boolean {
+  return window.innerWidth < MOBILE_BREAKPOINT;
+}
+
+/** Reactive hook: returns true when viewport is mobile-sized (<768px). */
+export function useIsMobile(): boolean {
+  return useSyncExternalStore(subscribeViewport, getViewportIsMobile, () => false);
+}
 
 // ─── Platform Enum ──────────────────────────────────────────────────────────
 
