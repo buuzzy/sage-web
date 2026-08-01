@@ -17,25 +17,17 @@ import { useIsMobile } from '@/shared/lib/platform';
 import { generateSessionId } from '@/shared/lib/session';
 import { cn } from '@/shared/lib/utils';
 import { useLanguage } from '@/shared/providers/language-provider';
-import { ArrowUpRight, Cog, FileText, FolderOpen } from 'lucide-react';
-import { PanelLeft } from 'lucide-react';
+import { PanelLeft, Sparkles } from 'lucide-react';
 
 import { LeftSidebar, SidebarProvider } from '@/components/layout';
 import { useSidebar } from '@/components/layout/sidebar-context';
 import { ChatInput, type ChatMode } from '@/components/shared/ChatInput';
 
-type CategoryKey = 'organizeFiles' | 'generateDocs' | 'automateTasks';
-
-const categoryIcons: Record<CategoryKey, React.ReactNode> = {
-  organizeFiles: <FolderOpen className="size-4" />,
-  generateDocs: <FileText className="size-4" />,
-  automateTasks: <Cog className="size-4" />,
-};
-
-const categoryKeys: CategoryKey[] = [
-  'organizeFiles',
-  'generateDocs',
-  'automateTasks',
+// 临时写死，后续由每日 A 股热点 cron 生成，见 docs/daily-followups-plan.md
+const followOnPrompts = [
+  '紫金矿业最近的日 K 线怎么样？',
+  '今天 A 股有哪些值得关注的板块？',
+  '帮我看看昆仑万维当前的估值高不高？',
 ];
 
 export function HomePage() {
@@ -53,23 +45,10 @@ function HomeContent() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [backgroundTasks, setBackgroundTasks] = useState<BackgroundTask[]>([]);
   const [pendingPrompt, setPendingPrompt] = useState('');
-  const [activeCategory, setActiveCategory] = useState<CategoryKey | null>(
-    null
-  );
   const navigate = useNavigate();
-
-  const handleCategoryClick = (key: CategoryKey) => {
-    setActiveCategory((prev) => (prev === key ? null : key));
-    setPendingPrompt('');
-  };
 
   const handlePromptClick = (prompt: string) => {
     setPendingPrompt(prompt);
-  };
-
-  const handleCloseCategory = () => {
-    setActiveCategory(null);
-    setPendingPrompt('');
   };
 
   const handlePendingConsumed = useCallback(() => {
@@ -154,9 +133,6 @@ function HomeContent() {
     });
   };
 
-  const categories = t.home.examplePrompts.categories;
-  const activeCategoryData = activeCategory ? categories[activeCategory] : null;
-
   return (
     <div
         className={cn(
@@ -200,62 +176,41 @@ function HomeContent() {
             {/* Input Box */}
             <ChatInput
               variant="home"
-              placeholder={
-                activeCategoryData?.placeholder ?? t.home.inputPlaceholder
-              }
+              placeholder={t.home.inputPlaceholder}
               onSubmit={handleSubmit}
               className="w-full"
               autoFocus
               externalValue={pendingPrompt}
               onExternalValueConsumed={handlePendingConsumed}
-              categoryTag={
-                activeCategory && activeCategoryData
-                  ? {
-                      icon: categoryIcons[activeCategory],
-                      label: activeCategoryData.label,
-                      onClose: handleCloseCategory,
-                    }
-                  : undefined
-              }
             />
 
-            {/* Category Buttons / Prompt List */}
-            {activeCategory && activeCategoryData ? (
-              /* Expanded: show prompts for selected category */
-              <div className="w-full">
-                <div className="border-border divide-border divide-y rounded-xl border">
-                  {activeCategoryData.prompts.map((prompt, index) => (
-                    <button
-                      key={index}
-                      type="button"
-                      onClick={() => handlePromptClick(prompt)}
-                      className="text-foreground hover:bg-accent group flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left text-sm transition-colors first:rounded-t-xl last:rounded-b-xl"
-                    >
-                      <span className="truncate">{prompt}</span>
-                      <ArrowUpRight className="text-muted-foreground group-hover:text-foreground size-4 shrink-0 transition-colors" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              /* Default: show category buttons */
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                {categoryKeys.map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => handleCategoryClick(key)}
-                    className={cn(
-                      'border-border bg-background text-muted-foreground flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors',
-                      'hover:bg-accent hover:text-foreground'
-                    )}
-                  >
-                    {categoryIcons[key]}
-                    <span>{categories[key].label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* Follow-on questions */}
+            <div
+              className={cn(
+                'flex w-full gap-3',
+                mobile
+                  ? 'flex-col'
+                  : 'flex-row flex-wrap justify-center'
+              )}
+            >
+              {followOnPrompts.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => handlePromptClick(prompt)}
+                  className={cn(
+                    'border-border bg-background text-muted-foreground flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors',
+                    'hover:bg-accent hover:text-foreground',
+                    mobile
+                      ? 'min-h-11 w-full justify-start'
+                      : 'max-w-md'
+                  )}
+                >
+                  <Sparkles className="size-4 shrink-0" />
+                  <span className="truncate">{prompt}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
