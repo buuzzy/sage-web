@@ -19,7 +19,6 @@ export interface HardRule {
   source_quote?: string;
   created_at: string;
 }
-
 /** 用户主动声明加入关注的标的/主题 */
 export interface FocusUniverseDeclared {
   type: 'stock' | 'fund' | 'sector' | 'topic';
@@ -27,7 +26,6 @@ export interface FocusUniverseDeclared {
   name: string;
   added_at: string;
 }
-
 /** 用户主动声明排除的对象 */
 export interface FocusUniverseExclusion {
   type: 'category' | 'stock' | 'sector';
@@ -35,14 +33,6 @@ export interface FocusUniverseExclusion {
   /** 用户当时的原话（可选） */
   reason_quote?: string;
   added_at: string;
-}
-
-/** 蒸馏推断的近期观点 */
-export interface RecentView {
-  topic: string;
-  /** 用户的立场摘要 */
-  stance: string;
-  ts: string;
 }
 
 /** 风险偏好枚举 */
@@ -71,7 +61,6 @@ export interface PersonaPreferences {
   language?: string;
   [key: string]: string | undefined;
 }
-
 /** 显式字段集（用户主动声明，由蒸馏严格按原话填） */
 export interface PersonaExplicit {
   hard_rules: HardRule[];
@@ -80,15 +69,13 @@ export interface PersonaExplicit {
     exclusions: FocusUniverseExclusion[];
   };
 }
-
 /** 隐式字段集（蒸馏综合推断） */
 export interface PersonaImplicit {
   risk_tolerance: RiskTolerance;
   capability_level: CapabilityLevel;
-  preferences: PersonaPreferences;
-  recent_views: RecentView[];
-  /**
-   * Phase 4 / L4-light 行为摘要：蒸馏 cron 从 user_behavior 表 90 天滚动
+ preferences: PersonaPreferences;
+ /**
+  * Phase 4 / L4-light 行为摘要：蒸馏 cron 从 user_behavior 表 90 天滚动
    * 数据中聚合出的「最近这位用户在做什么」一段话。例如：
    *   "最近 30 天高频问消费板块（茅台/泸州老窖），偶尔触科技（英伟达），
    *    几乎不再问医药；周末提问频率明显高于工作日。"
@@ -97,13 +84,11 @@ export interface PersonaImplicit {
    */
   behavior_summary?: string | null;
 }
-
 /** 完整 profile JSONB schema */
 export interface PersonaProfile {
   explicit: PersonaExplicit;
   implicit: PersonaImplicit;
 }
-
 /** recent_threads 单条 */
 export interface RecentThread {
   user: string;
@@ -111,7 +96,6 @@ export interface RecentThread {
   agent_stance: string | null;
   ts: string;
 }
-
 /** persona_memory 表的完整 row（Phase 3 schema） */
 export interface PersonaMemoryRow {
   user_id: string;
@@ -124,7 +108,6 @@ export interface PersonaMemoryRow {
   /** Deprecated v1.2.x 字段，被 last_distilled_at 取代 */
   consolidated_at?: string | null;
 }
-
 /** 空 profile 骨架（新用户兜底） */
 export const EMPTY_PROFILE: PersonaProfile = {
   explicit: {
@@ -137,8 +120,7 @@ export const EMPTY_PROFILE: PersonaProfile = {
   implicit: {
     risk_tolerance: null,
     capability_level: null,
-    preferences: {},
-    recent_views: [],
-    behavior_summary: null,
+   preferences: {},
+   behavior_summary: null,
   },
 };

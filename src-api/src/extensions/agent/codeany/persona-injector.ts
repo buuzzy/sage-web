@@ -173,13 +173,6 @@ function renderProfile(profile: PersonaProfile): string {
     implicitLines.push(`- 沟通上：${prefBits.join('；')}`);
   }
 
-  const views = im.recent_views ?? [];
-  if (views.length > 0) {
-    implicitLines.push('- 你印象中他近期持有的观点（可能会变）：');
-    for (const v of views.slice(0, 5)) {
-      implicitLines.push(`    · 关于 ${v.topic}：${v.stance}`);
-    }
-  }
 
  // Phase 4 / L4-light: 行为摘要——蒸馏 cron 从 90 天行为日志聚合的一段叙述
  const behaviorSummary = (im.behavior_summary ?? '').trim();

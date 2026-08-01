@@ -71,12 +71,9 @@ const DISTILL_SYSTEM_PROMPT = `你是 Sage 数字分身的「记忆消化模块�
       "preferences": {
         "explanation_style": "string|null",
         "response_length": "string|null",
-        "language": "string|null"
-      },
-      "recent_views": [
-        { "topic": "string", "stance": "string", "ts": "ISO timestamp" }
-      ],
-      "behavior_summary": "string|null"
+       "language": "string|null"
+     },
+     "behavior_summary": "string|null"
     }
   },
   "recent_threads": [
@@ -94,7 +91,7 @@ const DISTILL_SYSTEM_PROMPT = `你是 Sage 数字分身的「记忆消化模块�
 用户明确说出的硬规则、禁忌、底线。识别信号：
 - "以后不要..."、"永远不要..."、"我不（再）..."、"我永远..."、"我从不..."、"我决不..."
 - "所有 X 都不能..."、"任何 X 都..."、"我的原则是..."、"我的底线..."
-不要把临时倾向当硬规则。"我现在不太想买" 是临时观点（→ recent_views），不是规则。
+不要把临时倾向当硬规则。"我现在不太想买" 是临时倾向，不是规则。
 
 ### explicit.focus_universe.declared
 用户明确说出要加入关注/常聊的对象。识别信号：
@@ -129,8 +126,6 @@ const DISTILL_SYSTEM_PROMPT = `你是 Sage 数字分身的「记忆消化模块�
 - language: 默认 "中文"
 每个字段允许 null。
 
-### implicit.recent_views
-用户当前对某个话题的观点（不是规则）。最多 10 条，按时间倒序。
 
 ### implicit.behavior_summary（Phase 4 新增）
 基于 behavior_stats 表（最近 90 天的行为日志聚合）综合写出的「这位用户最近在做什么」一段自然语言摘要，最多 500 字。
@@ -170,7 +165,6 @@ const DISTILL_SYSTEM_PROMPT = `你是 Sage 数字分身的「记忆消化模块�
 2. 漂移要有「最近 30 天行为支撑」（结合 new_messages + behavior_stats），
    单条偶发不要漂
 3. 直接覆盖旧值，不需要写 confidence score（schema 不支持）
-4. recent_views 永远更新到最新（与漂移正交）
 
 ## recent_threads 处理
 

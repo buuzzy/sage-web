@@ -32,12 +32,6 @@ export interface FocusUniverseExclusion {
   added_at: string;
 }
 
-export interface RecentView {
-  topic: string;
-  stance: string;
-  ts: string;
-}
-
 export type RiskTolerance =
   | 'conservative'
   | 'moderate'
@@ -70,9 +64,8 @@ export interface PersonaExplicit {
 export interface PersonaImplicit {
   risk_tolerance: RiskTolerance;
   capability_level: CapabilityLevel;
-  preferences: PersonaPreferences;
-  recent_views: RecentView[];
-  /** Phase 4 行为摘要（90 天滚动，蒸馏 LLM 综合 user_behavior 写出） */
+ preferences: PersonaPreferences;
+ /** Phase 4 行为摘要（90 天滚动，蒸馏 LLM 综合 user_behavior 写出） */
   behavior_summary?: string | null;
 }
 
@@ -108,8 +101,7 @@ export const EMPTY_PROFILE: PersonaProfile = {
   implicit: {
     risk_tolerance: null,
     capability_level: null,
-    preferences: {},
-    recent_views: [],
-    behavior_summary: null,
+   preferences: {},
+   behavior_summary: null,
   },
 };

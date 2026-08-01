@@ -3,7 +3,7 @@
  *
  * Phase 3 引入。展示从云端 persona_memory 蒸馏出的用户画像：
  *   · 显式字段（用户主动声明）：硬规则 / 主动关注 / 主动排除 — 用户可删除
- *   · 隐式字段（系统行为推断）：风险偏好 / 能力水平 / 近期观点 — 只读
+*   · 隐式字段（系统行为推断）：风险偏好 / 能力水平 — 只读
  *
  * 设计原则（决策 6 + 哲学）：
  *   · 画像由 AI 每天蒸馏自动更新，UI 不提供「添加规则」入口
@@ -224,10 +224,9 @@ export function PersonaSettings() {
   }
 
   const hardRules = profile.explicit?.hard_rules ?? [];
-  const declared = profile.explicit?.focus_universe?.declared ?? [];
-  const exclusions = profile.explicit?.focus_universe?.exclusions ?? [];
-  const views = profile.implicit?.recent_views ?? [];
-  const prefs = profile.implicit?.preferences ?? {};
+ const declared = profile.explicit?.focus_universe?.declared ?? [];
+ const exclusions = profile.explicit?.focus_universe?.exclusions ?? [];
+ const prefs = profile.implicit?.preferences ?? {};
   const behaviorSummary = (profile.implicit?.behavior_summary ?? '').trim();
   const riskLabels = lang === 'zh' ? RISK_LABELS_ZH : RISK_LABELS_EN;
   const capLabels = lang === 'zh' ? CAP_LABELS_ZH : CAP_LABELS_EN;
@@ -236,10 +235,9 @@ export function PersonaSettings() {
     hardRules.length === 0 && declared.length === 0 && exclusions.length === 0;
   const noImplicit =
     !profile.implicit?.risk_tolerance &&
-    !profile.implicit?.capability_level &&
-    Object.keys(prefs).length === 0 &&
-    views.length === 0 &&
-    !behaviorSummary;
+   !profile.implicit?.capability_level &&
+   Object.keys(prefs).length === 0 &&
+   !behaviorSummary;
 
   return (
     <div className="space-y-6">
@@ -475,31 +473,11 @@ export function PersonaSettings() {
                   {behaviorSummary}
                 </div>
               </div>
-            )}
+           )}
 
-            {/* Recent views */}
-            {views.length > 0 && (
-              <div>
-                <div className="text-muted-foreground mb-1.5 text-xs">
-                  {lang === 'zh'
-                    ? '近期观点（用户当前持有的看法，可能会变）'
-                    : 'Recent views (current opinions, may evolve)'}
-                </div>
-                <ul className="space-y-1 text-xs">
-                  {views.slice(0, 6).map((v, idx) => (
-                    <li key={idx}>
-                      <span className="text-muted-foreground">
-                        {lang === 'zh' ? '关于' : 'On'} {v.topic}：
-                      </span>
-                      {v.stance}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-      </section>
+         </div>
+       )}
+     </section>
 
       <p className="text-muted-foreground text-xs">
         {lang === 'zh'
