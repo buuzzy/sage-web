@@ -32,8 +32,8 @@ interface AuthContextType {
   dbReady: boolean;
   dbError: string | null;
   retryDbBind: () => Promise<void>;
-  sendOtp: (email: string) => Promise<void>;
-  verifyOtp: (email: string, token: string) => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -211,24 +211,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const sendOtp = useCallback(async (email: string) => {
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/login`,
-      },
-    });
-    if (error) throw error;
-  }, []);
-
-  const verifyOtp = useCallback(
-    async (email: string, token: string) => {
-      const { error } = await supabase.auth.verifyOtp({
+  const signInWithEmail = useCallback(
+    async (email: string, password: string) => {
+      const { error } = await supabase.auth.signInWithPassword({
         email,
-        token,
-        type: 'email',
+        password,
       });
       if (error) throw error;
+    },
+    []
+  );
+
+  const signUpWithEmail = useCallback(
+    async (email: string, password: string) => {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+      if (error) throw error;
+      // If Supabase requires email confirmation, session will be null
+      if (!data.session && !data.user) {
+        throw new Error('注册失败，请稍后重试');
+      }
     },
     []
   );
@@ -266,8 +270,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         dbReady,
         dbError,
         retryDbBind,
-        sendOtp,
-        verifyOtp,
+        signInWithEmail,
+        signUpWithEmail,
         signOut,
       }}
     >

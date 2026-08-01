@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Mail, ArrowLeft } from 'lucide-react';
+import { Mail, Lock } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { useAuth } from '@/shared/providers/auth-provider';
 
 export function LoginPage() {
-  const { status, sendOtp, verifyOtp } = useAuth();
-  const [step, setStep] = useState<'email' | 'code'>('email');
+  const { status, signInWithEmail, signUpWithEmail } = useAuth();
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
@@ -28,44 +28,32 @@ export function LoginPage() {
     return <Navigate to="/" replace />;
   }
 
-  const handleSendCode = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) return;
+    if (!email.trim() || !password) return;
     setLoading(true);
     setErrorMessage(null);
     setInfoMessage(null);
     try {
-      await sendOtp(email.trim());
-      setInfoMessage('验证码已发送到你的邮箱，请查收');
-      setStep('code');
+      if (mode === 'login') {
+        await signInWithEmail(email.trim(), password);
+      } else {
+        await signUpWithEmail(email.trim(), password);
+        setInfoMessage('注册成功！验证邮件已发送到你的邮箱，请点击邮件中的链接完成验证后登录。');
+        setMode('login');
+        setPassword('');
+      }
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : '发送验证码失败，请稍后重试'
+        error instanceof Error ? error.message : '操作失败，请稍后重试'
       );
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!code.trim()) return;
-    setLoading(true);
-    setErrorMessage(null);
-    try {
-      await verifyOtp(email.trim(), code.trim());
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : '验证码错误或已过期'
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleBack = () => {
-    setStep('email');
-    setCode('');
+  const switchMode = () => {
+    setMode(mode === 'login' ? 'register' : 'login');
     setErrorMessage(null);
     setInfoMessage(null);
   };
@@ -73,7 +61,6 @@ export function LoginPage() {
   return (
     <div className="bg-background flex min-h-svh flex-col items-center justify-center px-4">
       <div className="border-border/60 bg-card w-full max-w-xs rounded-2xl border p-8 shadow-lg">
-        {/* Logo + Brand */}
         <div className="mb-10 flex flex-col items-center gap-4">
           <div className="rounded-2xl bg-gradient-to-b from-white to-gray-50 p-3 shadow-sm ring-1 ring-black/5 dark:from-gray-800 dark:to-gray-900 dark:ring-white/10">
             <img
@@ -102,88 +89,68 @@ export function LoginPage() {
           </div>
         )}
 
-        {step === 'email' ? (
-          <form onSubmit={handleSendCode} className="flex flex-col gap-3">
-            <div className="relative">
-              <Mail className="text-muted-foreground pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2" />
-              <input
-                type="email"
-                inputMode="email"
-                autoFocus
-                autoComplete="email"
-                placeholder="输入邮箱地址"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className={cn(
-                  'border-border bg-background text-foreground placeholder:text-muted-foreground',
-                  'h-11 w-full rounded-xl border pl-10 pr-4 text-sm outline-none',
-                  'focus:border-primary focus:ring-1 focus:ring-primary transition-colors'
-                )}
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loading || !email.trim()}
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <div className="relative">
+            <Mail className="text-muted-foreground pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2" />
+            <input
+              type="email"
+              inputMode="email"
+              autoFocus
+              autoComplete="email"
+              placeholder="邮箱地址"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className={cn(
-                'bg-primary text-primary-foreground',
-                'inline-flex h-11 w-full items-center justify-center gap-2',
-                'rounded-xl px-4 text-sm font-medium transition-all',
-                'hover:opacity-90 active:scale-[0.98]',
-                'disabled:cursor-not-allowed disabled:opacity-50'
+                'border-border bg-background text-foreground placeholder:text-muted-foreground',
+                'h-11 w-full rounded-xl border pl-10 pr-4 text-sm outline-none',
+                'focus:border-primary focus:ring-1 focus:ring-primary transition-colors'
               )}
-            >
-              {loading ? (
-                <div className="border-primary-foreground/30 border-t-primary-foreground size-4 animate-spin rounded-full border-2" />
-              ) : null}
-              发送验证码
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleVerify} className="flex flex-col gap-3">
-            <div className="relative">
-              <input
-                type="text"
-                inputMode="numeric"
-                autoFocus
-                autoComplete="one-time-code"
-                placeholder="输入 6 位验证码"
-                maxLength={6}
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                className={cn(
-                  'border-border bg-background text-foreground placeholder:text-muted-foreground',
-                  'h-11 w-full rounded-xl border px-4 text-center text-lg tracking-[0.5em] outline-none',
-                  'focus:border-primary focus:ring-1 focus:ring-primary transition-colors'
-                )}
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loading || code.length < 6}
+            />
+          </div>
+
+          <div className="relative">
+            <Lock className="text-muted-foreground pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2" />
+            <input
+              type="password"
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+              placeholder="密码"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              minLength={6}
               className={cn(
-                'bg-primary text-primary-foreground',
-                'inline-flex h-11 w-full items-center justify-center gap-2',
-                'rounded-xl px-4 text-sm font-medium transition-all',
-                'hover:opacity-90 active:scale-[0.98]',
-                'disabled:cursor-not-allowed disabled:opacity-50'
+                'border-border bg-background text-foreground placeholder:text-muted-foreground',
+                'h-11 w-full rounded-xl border pl-10 pr-4 text-sm outline-none',
+                'focus:border-primary focus:ring-1 focus:ring-primary transition-colors'
               )}
-            >
-              {loading ? (
-                <div className="border-primary-foreground/30 border-t-primary-foreground size-4 animate-spin rounded-full border-2" />
-              ) : null}
-              验证并登录
-            </button>
-            <button
-              type="button"
-              onClick={handleBack}
-              disabled={loading}
-              className="text-muted-foreground hover:text-foreground inline-flex items-center justify-center gap-1.5 text-xs transition-colors"
-            >
-              <ArrowLeft className="size-3.5" />
-              换一个邮箱
-            </button>
-          </form>
-        )}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading || !email.trim() || !password}
+            className={cn(
+              'bg-primary text-primary-foreground',
+              'inline-flex h-11 w-full items-center justify-center gap-2',
+              'rounded-xl px-4 text-sm font-medium transition-all',
+              'hover:opacity-90 active:scale-[0.98]',
+              'disabled:cursor-not-allowed disabled:opacity-50'
+            )}
+          >
+            {loading ? (
+              <div className="border-primary-foreground/30 border-t-primary-foreground size-4 animate-spin rounded-full border-2" />
+            ) : null}
+            {mode === 'login' ? '登录' : '注册'}
+          </button>
+        </form>
+
+        <button
+          type="button"
+          onClick={switchMode}
+          disabled={loading}
+          className="text-muted-foreground hover:text-foreground mt-4 w-full text-center text-xs transition-colors"
+        >
+          {mode === 'login' ? '还没有账号？点击注册' : '已有账号？点击登录'}
+        </button>
       </div>
 
       <p className="text-muted-foreground mt-8 text-xs tracking-wide">
