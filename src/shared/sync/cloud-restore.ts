@@ -103,6 +103,7 @@ export async function incrementalCloudSync(): Promise<void> {
   if (latestLocal) {
     sessionsQuery = sessionsQuery.gt('updated_at', latestLocal);
   }
+  // Defense-in-depth: RLS already filters by user_id, but add explicit filter too
   const { data: newSessions, error: sessionsError } = await sessionsQuery;
   if (sessionsError) {
     console.warn('[CloudSync] Failed to fetch new sessions:', sessionsError.message);

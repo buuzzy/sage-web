@@ -190,6 +190,31 @@ type SqliteHandle = Awaited<
 
 let sqliteDb: SqliteHandle | null = null;
 export let currentUid: string | null = null;
+
+const LAST_UID_KEY = 'sage:lastBoundUid';
+
+/** Read the persisted uid from localStorage (survives page reload). */
+function getPersistedUid(): string | null {
+  try {
+    return localStorage.getItem(LAST_UID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Persist uid so the next page load can detect user switches. */
+function persistUid(uid: string | null): void {
+  try {
+    if (uid) {
+      localStorage.setItem(LAST_UID_KEY, uid);
+    } else {
+      localStorage.removeItem(LAST_UID_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 let bindInFlight: Promise<void> | null = null;
 // 监听器：供 settings 缓存失效 / UI 重新查询使用
 const bindListeners = new Set<(uid: string | null) => void>();
@@ -411,10 +436,15 @@ async function ensureSchema(db: SqliteHandle): Promise<void> {
 export async function bindUserId(uid: string): Promise<void> {
   // IDB 模式（iOS / 浏览器 / 桶面端连接云端时）也要 track 当前 uid，让 createMessage 等能注入 user_id
   if (!USE_LOCAL_SQLITE || !isTauriSync()) {
-    if (currentUid && currentUid !== uid) {
+    // Compare against BOTH in-memory uid and persisted uid (localStorage)
+    // so that page refresh (which resets currentUid to null) still detects
+    // a user switch and clears stale IDB data.
+    const prevUid = currentUid ?? getPersistedUid();
+    if (prevUid && prevUid !== uid) {
       await clearAllLocalData();
     }
     currentUid = uid;
+    persistUid(uid);
     notifyBindChange();
     return;
   }
@@ -509,6 +539,7 @@ export async function unbindUser(): Promise<void> {
   if (!USE_LOCAL_SQLITE || !isTauriSync()) {
     await clearAllLocalData();
     currentUid = null;
+    persistUid(null);
     notifyBindChange();
     return;
   }
@@ -527,6 +558,7 @@ export async function unbindUser(): Promise<void> {
       sqliteDb = null;
     }
     currentUid = null;
+    persistUid(null);
   })();
 
   try {
