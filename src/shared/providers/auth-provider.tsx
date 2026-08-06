@@ -6,9 +6,9 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { USE_LOCAL_SQLITE } from '@/config';
 import { bindUserId, unbindUser } from '@/shared/db/database';
 import { reloadSettingsForCurrentUser } from '@/shared/db/settings';
-import { USE_LOCAL_SQLITE } from '@/config';
 import { supabase, type Session, type User } from '@/shared/lib/supabase';
 import {
   startMessageSyncWorker,
@@ -34,7 +34,11 @@ interface AuthContextType {
   retryDbBind: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string) => Promise<void>;
-  verifySignupOtp: (email: string, token: string) => Promise<void>;
+  verifySignupOtp: (
+    email: string,
+    token: string,
+    inviteCode?: string
+  ) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -134,9 +138,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!USE_LOCAL_SQLITE) {
           try {
-            const { incrementalCloudSync } = await import(
-              '@/shared/sync/cloud-restore'
-            );
+            const { incrementalCloudSync } =
+              await import('@/shared/sync/cloud-restore');
             await incrementalCloudSync();
           } catch (err) {
             console.warn('[Auth] Cloud sync failed (non-blocking):', err);
@@ -223,13 +226,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
- const signUpWithEmail = useCallback(
-   async (email: string, password: string) => {
-     const { data, error } = await supabase.auth.signUp({
-       email,
-       password,
-     });
-     if (error) throw error;
+  const signUpWithEmail = useCallback(
+    async (email: string, password: string) => {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+      if (error) throw error;
       // Supabase silently returns existing user (no error) if email is already
       // registered — identities[] will be empty in that case. Detect it and
       // surface a clear error so the frontend can prompt "please log in".
@@ -244,13 +247,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const verifySignupOtp = useCallback(
-    async (email: string, token: string) => {
+    async (email: string, token: string, inviteCode?: string) => {
       const { error } = await supabase.auth.verifyOtp({
         email,
         token,
         type: 'signup',
       });
       if (error) throw error;
+
+      if (inviteCode) {
+        const { error: redeemError } = await supabase.rpc(
+          'redeem_invite_code',
+          { p_code: inviteCode }
+        );
+        if (redeemError) throw redeemError;
+      }
     },
     []
   );

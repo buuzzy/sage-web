@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Mail, Lock, ArrowLeft, KeyRound } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { useAuth } from '@/shared/providers/auth-provider';
+import { ArrowLeft, KeyRound, Lock, Mail, TicketIcon } from 'lucide-react';
 
 export function LoginPage() {
   const { status, signInWithEmail, signUpWithEmail, verifySignupOtp } =
@@ -12,6 +12,7 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
@@ -76,7 +77,7 @@ export function LoginPage() {
     setLoading(true);
     setErrorMessage(null);
     try {
-      await verifySignupOtp(email.trim(), code.trim());
+      await verifySignupOtp(email.trim(), code.trim(), inviteCode.trim());
       // verifyOtp with type 'signup' returns a session — onAuthStateChange fires
     } catch (error) {
       setErrorMessage(
@@ -92,6 +93,7 @@ export function LoginPage() {
     setRegStep('form');
     setCode('');
     setPassword('');
+    setInviteCode('');
     setErrorMessage(null);
     setInfoMessage(null);
   };
@@ -152,7 +154,7 @@ export function LoginPage() {
         {mode === 'login' && (
           <form onSubmit={handleLogin} className="flex flex-col gap-3">
             <div className="relative">
-              <Mail className="text-muted-foreground pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2" />
+              <Mail className="text-muted-foreground pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2" />
               <input
                 type="email"
                 inputMode="email"
@@ -165,7 +167,7 @@ export function LoginPage() {
               />
             </div>
             <div className="relative">
-              <Lock className="text-muted-foreground pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2" />
+              <Lock className="text-muted-foreground pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2" />
               <input
                 type="password"
                 autoComplete="current-password"
@@ -192,7 +194,7 @@ export function LoginPage() {
         {mode === 'register' && regStep === 'form' && (
           <form onSubmit={handleRegister} className="flex flex-col gap-3">
             <div className="relative">
-              <Mail className="text-muted-foreground pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2" />
+              <Mail className="text-muted-foreground pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2" />
               <input
                 type="email"
                 inputMode="email"
@@ -205,7 +207,7 @@ export function LoginPage() {
               />
             </div>
             <div className="relative">
-              <Lock className="text-muted-foreground pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2" />
+              <Lock className="text-muted-foreground pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2" />
               <input
                 type="password"
                 autoComplete="new-password"
@@ -233,7 +235,7 @@ export function LoginPage() {
         {mode === 'register' && regStep === 'code' && (
           <form onSubmit={handleVerifyCode} className="flex flex-col gap-3">
             <div className="relative">
-              <KeyRound className="text-muted-foreground pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2" />
+              <KeyRound className="text-muted-foreground pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2" />
               <input
                 type="text"
                 inputMode="numeric"
@@ -243,15 +245,26 @@ export function LoginPage() {
                 maxLength={8}
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                className={cn(
-                  inputCls,
-                  'text-center text-lg tracking-[0.4em]'
-                )}
+                className={cn(inputCls, 'text-center text-lg tracking-[0.4em]')}
+              />
+            </div>
+            <div className="relative">
+              <TicketIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2" />
+              <input
+                type="text"
+                inputMode="text"
+                autoComplete="off"
+                placeholder="兑换码"
+                value={inviteCode}
+                onChange={(e) =>
+                  setInviteCode(e.target.value.toUpperCase().slice(0, 20))
+                }
+                className={inputCls}
               />
             </div>
             <button
               type="submit"
-              disabled={loading || code.length < 6}
+              disabled={loading || code.length < 6 || !inviteCode.trim()}
               className={btnCls}
             >
               {loading ? (
