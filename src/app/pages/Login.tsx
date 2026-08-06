@@ -245,7 +245,7 @@ export function LoginPage() {
                 maxLength={8}
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                className={cn(inputCls, 'text-center text-lg tracking-[0.4em]')}
+                className={inputCls}
               />
             </div>
             <div className="relative">
