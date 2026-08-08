@@ -12,6 +12,7 @@ import { AntdThemeProvider } from './shared/providers/antd-theme-provider';
 import { AuthProvider } from './shared/providers/auth-provider';
 import { LanguageProvider } from './shared/providers/language-provider';
 import { ThemeProvider } from './shared/providers/theme-provider';
+import ImageLogo from '@/assets/logo.png';
 import {
   flushErrorQueue,
   ProfileProvider,
@@ -67,8 +68,15 @@ function BootstrapRoot() {
   }, [boot]);
 
   if (!settingsReady) {
-    // Brief blank screen while settings load (typically <50ms)
-    return null;
+    return (
+      <div className="flex min-h-svh items-center justify-center bg-background">
+        <img
+          src={ImageLogo}
+          alt="Sage"
+          className="size-12 animate-pulse rounded-xl"
+        />
+      </div>
+    );
   }
 
   return <AppProviders />;

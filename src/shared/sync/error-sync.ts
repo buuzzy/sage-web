@@ -129,9 +129,12 @@ async function insertToSupabase(row: ErrorRow): Promise<boolean> {
 
 // ─── Offline queue（~/.sage/error-queue.jsonl） ───────────────────────────────
 //
-// 上云失败时把 row 追加到 jsonl 文件。App 启动时 flushQueue 读出逐条重放。
+// 上云失败时把 row 追加到本地队列。启动时 flushQueue 逐条重放。
+// Web 环境：使用 localStorage（Tauri FS 插件在浏览器中不可用）。
+// Tauri 环境：回退到 ~/.sage/error-queue.jsonl（保持桌面端兼容）。
 
 const QUEUE_FILE_NAME = 'error-queue.jsonl';
+const LS_QUEUE_KEY = 'sage_error_queue';
 
 async function getQueueFilePath(): Promise<string | null> {
   try {
@@ -144,6 +147,23 @@ async function getQueueFilePath(): Promise<string | null> {
 }
 
 async function appendToQueue(row: ErrorRow): Promise<void> {
+  // Web 环境：localStorage
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const existing = localStorage.getItem(LS_QUEUE_KEY);
+      const lines = existing ? (JSON.parse(existing) as ErrorRow[]) : [];
+      lines.push(row);
+      localStorage.setItem(LS_QUEUE_KEY, JSON.stringify(lines));
+      return;
+    } catch (err) {
+      console.warn(
+        '[error-sync] failed to append to localStorage queue:',
+        err
+      );
+    }
+  }
+
+  // Tauri 环境：文件队列
   const path = await getQueueFilePath();
   if (!path) return;
   try {
@@ -169,6 +189,36 @@ async function appendToQueue(row: ErrorRow): Promise<void> {
  * 失败的行会写回文件，下次再试。
  */
 export async function flushErrorQueue(): Promise<void> {
+  // Web 环境：重放 localStorage 队列
+  if (typeof window !== 'undefined' && window.localStorage) {
+    let lines: ErrorRow[] = [];
+    try {
+      const raw = localStorage.getItem(LS_QUEUE_KEY);
+      if (raw) lines = JSON.parse(raw) as ErrorRow[];
+    } catch {
+      return; // 坏数据，清掉
+    }
+    if (lines.length === 0) return;
+
+    console.log(`[error-sync] flushing ${lines.length} queued errors`);
+    const leftover: ErrorRow[] = [];
+    for (const row of lines) {
+      const ok = await insertToSupabase(row);
+      if (!ok) leftover.push(row);
+    }
+
+    try {
+      localStorage.setItem(
+        LS_QUEUE_KEY,
+        leftover.length > 0 ? JSON.stringify(leftover) : '[]'
+      );
+    } catch {
+      /* localStorage 写失败，下次再试 */
+    }
+    return;
+  }
+
+  // Tauri 环境：重放文件队列
   const path = await getQueueFilePath();
   if (!path) return;
 

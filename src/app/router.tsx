@@ -9,6 +9,7 @@ import {
 
 import { AuthGuard } from '@/components/auth-guard';
 import { SetupGuard } from '@/components/setup-guard';
+import { RouteErrorElement } from '@/app/route-error-element';
 
 const routes = [
   {
@@ -51,4 +52,9 @@ const routes = [
   },
 ];
 
-export const router = createBrowserRouter(routes);
+export const router = createBrowserRouter([
+  {
+    errorElement: <RouteErrorElement />,
+    children: routes,
+  },
+]);
