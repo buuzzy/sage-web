@@ -183,15 +183,13 @@ export interface UseAgentReturn {
     prompt: string,
     existingTaskId?: string,
     sessionInfo?: SessionInfo,
-    attachments?: MessageAttachment[],
-    mode?: 'auto' | 'chat' | 'task'
+    attachments?: MessageAttachment[]
   ) => Promise<string>;
   approvePlan: () => Promise<void>;
   rejectPlan: () => void;
   continueConversation: (
     reply: string,
-    attachments?: MessageAttachment[],
-    mode?: 'auto' | 'chat' | 'task'
+    attachments?: MessageAttachment[]
   ) => Promise<void>;
   stopAgent: () => Promise<void>;
   clearMessages: () => void;

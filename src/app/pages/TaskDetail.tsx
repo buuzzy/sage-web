@@ -25,7 +25,7 @@ import { ArrowDown, PanelLeft, Pencil } from 'lucide-react';
 
 import { CanvasPanel } from '@/components/canvas/CanvasPanel';
 import { LeftSidebar, SidebarProvider, useSidebar } from '@/components/layout';
-import { ChatInput, type ChatMode } from '@/components/shared/ChatInput';
+import { ChatInput } from '@/components/shared/ChatInput';
 import { QuestionInput } from '@/components/task/QuestionInput';
 import {
   Dialog,
@@ -44,7 +44,6 @@ interface LocationState {
   sessionId?: string;
   taskIndex?: number;
   attachments?: MessageAttachment[];
-  mode?: ChatMode;
 }
 
 // Context for tool selection - allows child components to select tools
@@ -86,7 +85,6 @@ function TaskDetailContent() {
   const initialSessionId = state?.sessionId;
   const initialTaskIndex = state?.taskIndex || 1;
   const initialAttachments = state?.attachments;
-  const initialMode = state?.mode;
 
   const {
     messages,
@@ -512,8 +510,7 @@ function TaskDetailContent() {
           initialPrompt,
           taskId,
           sessionInfo,
-          initialAttachments,
-          initialMode
+          initialAttachments
         );
         const newTask = await loadTask(taskId);
         setTask(newTask);
@@ -531,8 +528,7 @@ function TaskDetailContent() {
   const handleReply = useCallback(
     async (
       text: string,
-      messageAttachments?: MessageAttachment[],
-      mode?: ChatMode
+      messageAttachments?: MessageAttachment[]
     ) => {
       if (
         (text.trim() ||
@@ -540,7 +536,7 @@ function TaskDetailContent() {
         !isRunning &&
         taskId
       ) {
-        await continueConversation(text.trim(), messageAttachments, mode);
+        await continueConversation(text.trim(), messageAttachments);
       }
     },
     [isRunning, taskId, continueConversation]
@@ -734,7 +730,6 @@ function TaskDetailContent() {
                   isRunning={isRunning}
                   onSubmit={handleReply}
                   onStop={stopAgent}
-                  defaultMode={initialMode}
                   currentTokens={calculateCurrentTokens()}
                   contextLimit={getContextLimit()}
                   showContextRing

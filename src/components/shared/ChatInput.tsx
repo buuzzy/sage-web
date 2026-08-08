@@ -11,44 +11,20 @@ import { cn } from '@/shared/lib/utils';
 import { useLanguage } from '@/shared/providers/language-provider';
 import {
   ArrowUp,
-  Cpu,
   FileText,
-  MessageCircle,
   Paperclip,
   Plus,
   Send,
-  Sparkles,
   Square,
   X,
 } from 'lucide-react';
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-
 import { ContextUsageRing } from './ContextUsageRing';
 
-export type ChatMode = 'auto' | 'chat' | 'task';
-
-// Attachment type for files and images
 export interface Attachment {
   id: string;
   file: File;
-  type: 'image' | 'file';
   preview?: string; // Data URL for image preview
-}
-
-export interface CategoryTag {
-  icon: React.ReactNode;
-  label: string;
-  onClose: () => void;
 }
 
 export interface ChatInputProps {
@@ -56,11 +32,10 @@ export interface ChatInputProps {
   placeholder?: string;
   /** Whether the agent is running */
   isRunning?: boolean;
-  /** Callback when submitting with text, attachments, and mode */
+  /** Callback when submitting with text and image attachments */
   onSubmit: (
     text: string,
-    attachments?: MessageAttachment[],
-    mode?: ChatMode
+    attachments?: MessageAttachment[]
   ) => Promise<void>;
   /** Callback when stop button is clicked */
   onStop?: () => void;
@@ -76,10 +51,6 @@ export interface ChatInputProps {
   externalValue?: string;
   /** Callback when external value is consumed */
   onExternalValueConsumed?: () => void;
-  /** Category tag shown next to the + button */
-  categoryTag?: CategoryTag;
-  /** Default mode for the mode selector */
-  defaultMode?: ChatMode;
   /** Current token usage for context window display */
   currentTokens?: number;
   /** Context window limit (default: 200000) */
@@ -94,19 +65,6 @@ const generateId = () =>
 
 // Module-level guard: prevent the same drop event from being handled by multiple ChatInput instances
 let lastDropTimestamp = 0;
-
-// Check if file is an image (by MIME type or file extension)
-const isImageFile = (file: File) => {
-  // Check MIME type first
-  if (file.type.startsWith('image/')) {
-    return true;
-  }
-  // Fallback: check file extension for common image formats
-  const ext = file.name.split('.').pop()?.toLowerCase();
-  return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(
-    ext || ''
-  );
-};
 
 // Create preview for image files with error handling
 const createImagePreview = (file: File): Promise<string> => {
@@ -136,15 +94,12 @@ export function ChatInput({
   autoFocus = false,
   externalValue,
   onExternalValueConsumed,
-  categoryTag,
-  defaultMode = 'auto',
   currentTokens = 0,
   contextLimit = 200000,
   showContextRing = variant === 'reply',
 }: ChatInputProps) {
   const { t } = useLanguage();
   const [value, setValue] = useState('');
-  const [chatMode, setChatMode] = useState<ChatMode>(defaultMode);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -184,42 +139,31 @@ export function ChatInput({
     prevIsRunningRef.current = isRunning;
   }, [isRunning]);
 
-  // Add files to attachments
-  // forceImage: when true, treat all files as images (e.g., from clipboard paste)
-  const addFiles = useCallback(
-    async (files: FileList | File[], forceImage = false) => {
+  // Add image attachments
+  const addImages = useCallback(
+    async (files: FileList | File[]) => {
       const fileArray = Array.from(files);
       const newAttachments: Attachment[] = [];
 
       console.log(
-        '[ChatInput] addFiles called with',
+        '[ChatInput] addImages called with',
         fileArray.length,
-        'files, forceImage:',
-        forceImage
+        'files'
       );
 
       for (const file of fileArray) {
-        const isImage = forceImage || isImageFile(file);
-        console.log(
-          `[ChatInput] Processing file: name=${file.name}, type=${file.type}, size=${file.size}, isImage=${isImage}`
-        );
-
         const attachment: Attachment = {
           id: generateId(),
           file,
-          type: isImage ? 'image' : 'file',
         };
 
-        if (isImage) {
-          try {
-            attachment.preview = await createImagePreview(file);
-            console.log(
-              `[ChatInput] Created preview for ${file.name}, previewLength=${attachment.preview?.length || 0}`
-            );
-          } catch (error) {
-            console.error('[ChatInput] Failed to create image preview:', error);
-            // Keep as image type but with empty preview - it will show file icon
-          }
+        try {
+          attachment.preview = await createImagePreview(file);
+          console.log(
+            `[ChatInput] Created preview for ${file.name}, previewLength=${attachment.preview?.length || 0}`
+          );
+        } catch (error) {
+          console.error('[ChatInput] Failed to create image preview:', error);
         }
 
         newAttachments.push(attachment);
@@ -238,7 +182,7 @@ export function ChatInput({
   // Handle file input change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      addFiles(e.target.files);
+      addImages(e.target.files);
       e.target.value = '';
     }
   };
@@ -261,26 +205,15 @@ export function ChatInput({
 
       if (imageFiles.length > 0) {
         e.preventDefault();
-        // Pass forceImage=true since we've already verified these are images
-        await addFiles(imageFiles, true);
+        await addImages(imageFiles);
       }
     },
-    [addFiles]
+    [addImages]
   );
 
   // Open file picker
   const openFilePicker = () => {
     fileInputRef.current?.click();
-  };
-
-  // Read a File object as base64 data URL
-  const readFileAsBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
   };
 
   // Convert attachments to MessageAttachment format
@@ -292,44 +225,19 @@ export function ChatInput({
     const result: MessageAttachment[] = [];
 
     for (const a of attachments) {
-      // For images, only include if preview exists and has data
-      if (a.type === 'image') {
-        if (!a.preview || a.preview.length === 0) {
-          console.warn(
-            `[ChatInput] Skipping image ${a.file.name}: no preview data`
-          );
-          continue;
-        }
-      }
-
-      // Determine mimeType
-      let mimeType = a.file.type;
-      if (!mimeType && a.type === 'image') {
-        mimeType = 'image/png';
-      }
-
-      // Read file content as base64 for file attachments
-      let data = a.preview || '';
-      if (a.type === 'file' && !data) {
-        try {
-          data = await readFileAsBase64(a.file);
-          console.log(
-            `[ChatInput] Read file ${a.file.name}: ${data.length} chars`
-          );
-        } catch (error) {
-          console.error(
-            `[ChatInput] Failed to read file ${a.file.name}:`,
-            error
-          );
-        }
+      if (!a.preview || a.preview.length === 0) {
+        console.warn(
+          `[ChatInput] Skipping image ${a.file.name}: no preview data`
+        );
+        continue;
       }
 
       result.push({
         id: a.id,
-        type: a.type,
+        type: 'image',
         name: a.file.name,
-        data,
-        mimeType,
+        data: a.preview,
+        mimeType: a.file.type || 'image/png',
       });
     }
 
@@ -351,7 +259,7 @@ export function ChatInput({
 
       setValue('');
       setAttachments([]);
-      await onSubmit(text, messageAttachments, chatMode);
+      await onSubmit(text, messageAttachments);
     }
   };
 
@@ -424,7 +332,7 @@ export function ChatInput({
         ref={fileInputRef}
         type="file"
         multiple
-        accept="image/*,.pdf,.doc,.docx,.txt,.md,.json,.csv,.xlsx,.xls,.pptx,.ppt"
+        accept="image/*"
         onChange={handleFileChange}
         className="hidden"
       />
@@ -437,7 +345,7 @@ export function ChatInput({
               key={attachment.id}
               className="group border-border/50 bg-muted/50 relative flex items-center gap-2 rounded-lg border px-3 py-2"
             >
-              {attachment.type === 'image' && attachment.preview ? (
+              {attachment.preview ? (
                 <img
                   src={attachment.preview}
                   alt={attachment.file.name}
@@ -495,104 +403,21 @@ export function ChatInput({
       >
         {/* Add Button + Category Tag */}
         <div className="flex items-center gap-2">
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger
-              disabled={isRunning || disabled}
-              className={cn(
-                'flex shrink-0 items-center justify-center transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-50',
-                isHome
-                  ? 'border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground size-8 rounded-full border'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground size-7 rounded-md'
-              )}
-            >
-              <Plus className={isHome ? 'size-4' : 'size-4'} />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="start"
-              sideOffset={8}
-              className="z-50 w-56"
-            >
-              <DropdownMenuItem
-                onSelect={openFilePicker}
-                className="cursor-pointer gap-3 py-2.5"
-              >
-                <Paperclip className="size-4" />
-                <span>{t.home.addFilesOrPhotos}</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Mode Selector */}
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger
-              disabled={isRunning || disabled}
-              className={cn(
-                'flex shrink-0 items-center gap-1 rounded-full border transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-50',
-                'border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground',
-                isHome ? 'h-8 px-2.5 text-xs' : 'h-7 px-2 text-xs'
-              )}
-            >
-              {chatMode === 'auto' && <Sparkles className="size-3.5" />}
-              {chatMode === 'chat' && <MessageCircle className="size-3.5" />}
-              {chatMode === 'task' && <Cpu className="size-3.5" />}
-              <span>
-                {chatMode === 'auto' && t.home.modeAuto}
-                {chatMode === 'chat' && t.home.modeChat}
-                {chatMode === 'task' && t.home.modeTask}
-              </span>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="start"
-              sideOffset={8}
-              className="z-50 w-48"
-            >
-              <DropdownMenuLabel>{t.home.modeLabel}</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuRadioGroup
-                value={chatMode}
-                onValueChange={(v) => setChatMode(v as ChatMode)}
-              >
-                <DropdownMenuRadioItem value="auto" className="cursor-pointer">
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles className="size-3.5" />
-                    <span>{t.home.modeAuto}</span>
-                  </div>
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="chat" className="cursor-pointer">
-                  <div className="flex items-center gap-1.5">
-                    <MessageCircle className="size-3.5" />
-                    <span>{t.home.modeChat}</span>
-                  </div>
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="task" className="cursor-pointer">
-                  <div className="flex items-center gap-1.5">
-                    <Cpu className="size-3.5" />
-                    <span>{t.home.modeTask}</span>
-                  </div>
-                </DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Category Tag */}
-          {categoryTag && (
-            <span
-              className={cn(
-                'bg-primary/10 text-primary inline-flex items-center gap-1.5 rounded-full font-medium',
-                isHome ? 'h-8 px-3 text-xs' : 'h-7 px-2.5 text-xs'
-              )}
-            >
-              {categoryTag.icon}
-              {categoryTag.label}
-              <button
-                type="button"
-                onClick={categoryTag.onClose}
-                className="text-primary/60 hover:text-primary -mr-0.5 rounded-full transition-colors"
-              >
-                <X className="size-3.5" />
-              </button>
-            </span>
-          )}
+          <button
+            type="button"
+            onClick={openFilePicker}
+            disabled={isRunning || disabled}
+            aria-label={t.home.addImagesOrPhotos}
+            title={t.home.addImagesOrPhotos}
+            className={cn(
+              'flex shrink-0 items-center justify-center transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-50',
+              isHome
+                ? 'border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground size-8 rounded-full border'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground size-7 rounded-md'
+            )}
+          >
+            <Plus className="size-4" />
+          </button>
         </div>
 
         {/* Context Usage Ring + Submit/Stop Button */}

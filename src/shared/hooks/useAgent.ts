@@ -1258,8 +1258,7 @@ export function useAgent(): UseAgentReturn {
       prompt: string,
       existingTaskId?: string,
       sessionInfo?: SessionInfo,
-      attachments?: MessageAttachment[],
-      _mode?: 'auto' | 'chat' | 'task'
+      attachments?: MessageAttachment[]
     ): Promise<string> => {
       // If there's already a running task, move it to background
       if (isRunning && abortControllerRef.current && taskId) {
@@ -2167,8 +2166,7 @@ export function useAgent(): UseAgentReturn {
   const continueConversation = useCallback(
     async (
       reply: string,
-      attachments?: MessageAttachment[],
-      _mode?: 'auto' | 'chat' | 'task'
+      attachments?: MessageAttachment[]
     ): Promise<void> => {
      if (!taskId) return;
 

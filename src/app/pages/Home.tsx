@@ -21,7 +21,7 @@ import { PanelLeft, Sparkles } from 'lucide-react';
 
 import { LeftSidebar, SidebarProvider } from '@/components/layout';
 import { useSidebar } from '@/components/layout/sidebar-context';
-import { ChatInput, type ChatMode } from '@/components/shared/ChatInput';
+import { ChatInput } from '@/components/shared/ChatInput';
 
 // 临时写死，后续由每日 A 股热点 cron 生成，见 docs/daily-followups-plan.md
 const followOnPrompts = [
@@ -99,8 +99,7 @@ function HomeContent() {
 
   const handleSubmit = async (
     text: string,
-    attachments?: MessageAttachment[],
-    mode?: ChatMode
+    attachments?: MessageAttachment[]
   ) => {
     if (!text.trim() && (!attachments || attachments.length === 0)) return;
 
@@ -128,7 +127,6 @@ function HomeContent() {
         sessionId,
         taskIndex: 1,
         attachments,
-        mode,
       },
     });
   };
