@@ -61,7 +61,7 @@ import { createCanvasMcpServer, CANVAS_TOOL_FULL_NAME } from './canvas-tool';
 import { createChartMcpServer, CHART_TOOL_FULL_NAME } from './chart-tool';
 import { getCachedData } from './data-cache';
 import { generateChartHTML } from './chart-templates';
-import { createLogger, LOG_FILE_PATH } from '@/shared/utils/logger';
+import { createLogger } from '@/shared/utils/logger';
 import { stripHashSuffix } from '@/shared/utils/url';
 
 const logger = createLogger('CodeAnyAgent');
@@ -458,6 +458,13 @@ export class CodeAnyAgent extends BaseAgent {
       return '__API_KEY_ERROR__';
     }
 
+    // Never leak server-internal paths to end users. When a model reports a
+    // filesystem problem it can echo its working directory verbatim, which
+    // exposes /root, user UUIDs, session naming, and the product codename.
+    sanitized = sanitized.replace(/\/root\/\.sage[^\s"'`]*/g, '[内部路径]');
+    sanitized = sanitized.replace(/~\/\.sage[^\s"'`]*/g, '[内部路径]');
+    sanitized = sanitized.replace(/\/root\/[^\s"'`]*/g, '[内部路径]');
+
     return sanitized;
   }
 
@@ -634,11 +641,21 @@ export class CodeAnyAgent extends BaseAgent {
     logger.info('[CodeAny ' + session.id + '] Prompt: ' + finalPrompt.length + ' chars');
     logger.info('[CodeAny ' + session.id + '] priorMessages: ' + (priorMessages?.length || 0));
 
-    // Total run timeout
-    const TOTAL_RUN_TIMEOUT_MS = 2 * 60 * 1000;
+    // Total run timeout. The previous 2-minute ceiling was too tight for
+    // multi-step tool retrieval (e.g. multi-round financial data pulls) plus
+    // the final summary turn — every such query was killed mid-summary and
+    // surfaced as the "tool retrieval ended, no summary" fallback. Override
+    // via SAGE_RUN_TIMEOUT_MS env if needed.
+    const TOTAL_RUN_TIMEOUT_MS = Number(process.env.SAGE_RUN_TIMEOUT_MS) || 4 * 60 * 1000;
     const timeoutTimer = setTimeout(() => {
       logger.warn('[CodeAny ' + session.id + '] Total run timeout — aborting');
       session.abortController.abort();
+      // Evict the pooled agent so the next turn starts clean. A timeout
+      // mid-tool-loop leaves the agent's internal conversation broken
+      // (dangling tool_use with no matched tool_result); reusing it
+      // corrupts the following turn — the "this looks like a new session"
+      // confusion in the incident.
+      evictAgent(taskId);
     }, TOTAL_RUN_TIMEOUT_MS);
 
     try {
@@ -701,12 +718,37 @@ export class CodeAnyAgent extends BaseAgent {
       }
 
       if (sawToolActivity && !sawFinalTextAfterTool) {
-        const reason = finalResultSubtype && finalResultSubtype !== 'success'
-          ? '\u672c\u8f6e\u6267\u884c\u7ed3\u675f\u72b6\u6001\uff1a' + finalResultSubtype + '\u3002'
-          : '\u672c\u8f6e\u5de5\u5177\u68c0\u7d22\u5df2\u7ecf\u7ed3\u675f\uff0c\u4f46\u6a21\u578b\u6ca1\u6709\u751f\u6210\u6700\u7ec8\u603b\u7ed3\u3002';
+        // Force a summary: the model finished its tool loop (data retrieved,
+        // charts rendered) but produced no final text. Query the same pooled
+        // agent — it still holds the tool results in conversation state — with
+        // a direct "answer now" prompt and no tool temptation.
+        if (!session.abortController.signal.aborted) {
+          logger.info('[CodeAny ' + session.id + '] No final text after tool activity — forcing summary');
+          const summaryPrompt = '请根据你刚才检索和获取的所有数据和信息，直接、完整地回答用户的问题。不要再调用任何工具，直接给出最终回答。';
+          try {
+            for await (const message of sdkAgent.query(summaryPrompt, queryOverrides)) {
+              if (session.abortController.signal.aborted) break;
+              for (const msg of this.processMessage(message, session.id, sentTextHashes, sentToolIds)) {
+                if (msg.type === 'text' && msg.content && !isArtifactBlock(msg.content)) {
+                  sawFinalTextAfterTool = true;
+                }
+                yield msg;
+              }
+            }
+          } catch (retryError) {
+            logger.warn('[CodeAny ' + session.id + '] Forced summary failed:', {
+              message: retryError instanceof Error ? retryError.message : String(retryError),
+            });
+          }
+        }
+      }
+
+      // Absolute last resort: timeout or forced summary both failed.
+      if (sawToolActivity && !sawFinalTextAfterTool) {
+        logger.warn('[CodeAny ' + session.id + '] Yielding timeout fallback (no text produced)');
         yield {
           type: 'text',
-          content: reason + '\n\n\u6211\u5df2\u7ecf\u505c\u6b62\u7ee7\u7eed\u8c03\u7528\u5de5\u5177\uff0c\u907f\u514d\u7a7a\u8f6c\u3002\u4f60\u53ef\u4ee5\u76f4\u63a5\u8ba9\u6211\u201c\u57fa\u4e8e\u5df2\u68c0\u7d22\u7ed3\u679c\u603b\u7ed3\u201d\uff0c\u6216\u628a\u8303\u56f4\u7f29\u5c0f\u540e\u7ee7\u7eed\u8ffd\u95ee\u3002',
+          content: '分析已超时，部分数据已获取但未能完成总结。请缩小问题范围后重试，或换个角度提问。',
         };
       }
     } catch (error) {
@@ -729,9 +771,9 @@ export class CodeAnyAgent extends BaseAgent {
       if (isApiKeyError) {
         yield { type: 'error', message: '__API_KEY_ERROR__' };
       } else if (isApiCompatibilityError) {
-        yield { type: 'error', message: '__CUSTOM_API_ERROR__|' + this.config.baseUrl + '|' + LOG_FILE_PATH };
+        yield { type: 'error', message: '__CUSTOM_API_ERROR__' };
       } else {
-        yield { type: 'error', message: '__INTERNAL_ERROR__|' + LOG_FILE_PATH };
+        yield { type: 'error', message: '__INTERNAL_ERROR__' };
       }
     } finally {
       clearTimeout(timeoutTimer);

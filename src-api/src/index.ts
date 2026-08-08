@@ -14,7 +14,6 @@ try {
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import { Hono } from 'hono';
-import { logger } from 'hono/logger';
 
 import {
   agentRoutes,
@@ -43,7 +42,16 @@ import { getPreviewManager } from '@/shared/services/preview';
 const app = new Hono();
 
 // Global middleware
-app.use('*', logger());
+// Redacting request logger. hono's built-in logger() prints the full request
+// URL including the query string, which leaks the Supabase access_token (a JWT
+// carrying email + user UUID) and user_id on every /mcp-memory health poll.
+// Log method + pathname + status + duration only.
+app.use('*', async (c, next) => {
+  const start = Date.now();
+  await next();
+  const ms = Date.now() - start;
+  console.log(`${c.req.method} ${c.req.path} ${c.res.status} ${ms}ms`);
+});
 app.use('*', corsMiddleware);
 
 // ---------------------------------------------------------------------------
