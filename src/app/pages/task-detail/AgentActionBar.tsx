@@ -122,22 +122,16 @@ function AgentActionBar({
             return false;
           return true;
         },
-      });
+     });
 
-      // Convert data URL → Uint8Array
-      const base64 = dataUrl.split(',')[1];
-      const binary = atob(base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+     const fileName = `sage-${ts}.png`;
 
-      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-      const fileName = `sage-${ts}.png`;
-
-      // Browser download
-        const a = document.createElement('a');
-        a.download = fileName;
-        a.href = dataUrl;
-        a.click();
+     // Browser download
+       const a = document.createElement('a');
+       a.download = fileName;
+       a.href = dataUrl;
+       a.click();
     } catch (err) {
       console.error('[ExportImage] failed:', err);
     } finally {
@@ -160,11 +154,7 @@ function AgentActionBar({
         category: bugCategory,
         description: bugDesc.trim() || null,
         messageCount: allMessages.length,
-      };
-      const line = JSON.stringify(report) + '\n';
-
-      // Web: skip local file backup. Bug reports are sent to cloud endpoint.
-      console.warn('[Bug Report] Web mode: skipping local backup');
+     };
 
       // ── 构造排查上下文 ──────────────────────────────────────────
       // 默认上报：轻量摘要（最近 3 条 user / 2 条 text，各截 240 字）+ 当前 provider/model

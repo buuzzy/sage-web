@@ -21,9 +21,9 @@ function serializeMessagesForCopy(msgs: AgentMessage[]): string {
               : JSON.stringify(msg.input, null, 2);
           return `[工具调用] ${msg.name || ''}\n${inputStr}`;
         }
-        case 'tool_result': {
-          const raw = msg.content || '';
-          const truncated =
+       case 'tool_result': {
+         const raw = msg.output || msg.content || '';
+         const truncated =
             raw.length > MAX_TOOL_RESULT_CHARS
               ? `${raw.slice(0, MAX_TOOL_RESULT_CHARS)}… [truncated ${raw.length - MAX_TOOL_RESULT_CHARS} chars]`
               : raw;
