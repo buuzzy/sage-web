@@ -31,15 +31,19 @@ declare module 'hono' {
   interface ContextVariableMap {
     /** Supabase user id, set by localOnlyMiddleware after JWT validation. */
     userId?: string;
+    /** How the current caller was authenticated. */
+    authKind?: 'service' | 'user' | 'local';
+    /** Verified Supabase JWT associated with authKind=user. */
+    authAccessToken?: string;
   }
 }
 
 const API_TOKEN = process.env.SAGE_API_TOKEN;
 
 // Supabase client for JWT verification (only needed in cloud mode)
-const supabaseUrl = process.env.SUPABASE_URL || 'https://wymqgwtagpsjuonsclye.supabase.co';
+const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const supabaseAdmin = supabaseServiceKey
+const supabaseAdmin = supabaseUrl && supabaseServiceKey
   ? createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null;
 
@@ -75,6 +79,7 @@ export async function localOnlyMiddleware(c: Context, next: Next): Promise<Respo
 
     // Priority 1: exact match with SAGE_API_TOKEN (server-to-server)
     if (token === API_TOKEN) {
+      c.set('authKind', 'service');
       await next();
       return;
     }
@@ -84,8 +89,26 @@ export async function localOnlyMiddleware(c: Context, next: Next): Promise<Respo
       try {
         const { data, error } = await supabaseAdmin.auth.getUser(token);
         if (!error && data.user) {
-          // Valid Supabase user — expose id to downstream routes (user-scoped APIs)
+          const { data: profile, error: profileError } = await supabaseAdmin
+            .from('profiles')
+            .select('is_activated')
+            .eq('id', data.user.id)
+            .maybeSingle();
+
+          if (profileError) {
+            console.warn('[Security] Profile activation check failed');
+            return c.json({ error: 'Unauthorized' }, 401);
+          }
+
+          if (!profile?.is_activated) {
+            return c.json({ error: 'Account is not activated' }, 403);
+          }
+
+          // Valid, activated Supabase user. Routes must prefer this verified
+          // identity over any user id supplied by the request body.
+          c.set('authKind', 'user');
           c.set('userId', data.user.id);
+          c.set('authAccessToken', token);
           await next();
           return;
         }
@@ -124,5 +147,6 @@ export async function localOnlyMiddleware(c: Context, next: Next): Promise<Respo
     );
   }
 
+  c.set('authKind', 'local');
   await next();
 }

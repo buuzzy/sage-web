@@ -1,20 +1,9 @@
-// Load .env from project root for local dev (Railway injects env directly).
-// Must run before any module that reads process.env.
-try {
-  process.loadEnvFile();
-} catch {
-  // .env not found in CWD — try project root (monorepo)
-  try {
-    process.loadEnvFile('../.env');
-  } catch {
-    // No .env — rely on process.env (production / Railway)
-  }
-}
-
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import { Hono } from 'hono';
+import type { Context, Next } from 'hono';
 
+import '@/config/env';
 import {
   agentRoutes,
   cronRoutes,
@@ -58,24 +47,34 @@ app.use('*', corsMiddleware);
 // Route registration
 // ---------------------------------------------------------------------------
 
+const desktopRoutesDisabledInCloud = async (c: Context, next: Next) => {
+  if (process.env.SAGE_API_TOKEN) {
+    return c.json({ error: 'Not Found' }, 404);
+  }
+  await next();
+};
+
 // ── Execution-capable routes (local-only: Tauri desktop UI only) ────────────
 // These routes can execute shell commands, read/write files, invoke tools, etc.
 // They must never be exposed to remote callers.
 app.use('/agent/*', localOnlyMiddleware);
-app.use('/sandbox/*', localOnlyMiddleware);
-app.use('/preview/*', localOnlyMiddleware);
-app.use('/files/*', localOnlyMiddleware);
-app.use('/mcp/*', localOnlyMiddleware);
+app.use('/sandbox/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
+app.use('/preview/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
+app.use('/files/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
+app.use('/mcp/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
 app.use('/mcp-memory/*', localOnlyMiddleware);
 app.use('/persona/*', localOnlyMiddleware);
+app.use('/skills/config/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
+app.use('/skills/toggle/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
 app.use('/skills/*', localOnlyMiddleware);
 
 // ── Management routes (local-only: config, cron — no external access) ─
 // These routes expose sensitive configuration and internal state.
 // In production the sidecar binds 127.0.0.1 so external access is already
 // blocked at TCP level; this is defence-in-depth for dev mode (0.0.0.0).
-app.use('/providers/*', localOnlyMiddleware);
-app.use('/cron/*', localOnlyMiddleware);
+app.use('/providers/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
+app.use('/cron/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
+app.use('/user-providers/*', localOnlyMiddleware);
 
 // Routes
 app.route('/health', healthRoutes);

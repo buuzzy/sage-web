@@ -12,12 +12,17 @@ const MAX_POOL_SIZE = 50;
 interface PoolEntry {
   agent: any;
   taskId: string;
+  ownerId: string;
   lastUsed: number;
   abortController: AbortController;
 }
 
 const pool = new Map<string, PoolEntry>();
 let evictionTimer: NodeJS.Timeout | null = null;
+
+function poolKey(ownerId: string, taskId: string): string {
+  return `${ownerId}:${taskId}`;
+}
 
 function ensureEvictionTimer(): void {
   if (evictionTimer) return;
@@ -62,6 +67,7 @@ export function toNormalizedMessages(
 
 export interface GetOrCreateParams {
   taskId: string;
+  ownerId: string;
   factory: () => any;
 }
 
@@ -70,7 +76,8 @@ export async function getOrCreateAgent(
 ): Promise<{ agent: any; isNew: boolean; abortController: AbortController }> {
   ensureEvictionTimer();
 
-  const existing = pool.get(params.taskId);
+  const key = poolKey(params.ownerId, params.taskId);
+  const existing = pool.get(key);
   if (existing) {
     existing.lastUsed = Date.now();
     logger.info('[AgentPool] Reusing agent for ' + params.taskId + ' (pool size: ' + pool.size + ')');
@@ -80,9 +87,10 @@ export async function getOrCreateAgent(
   const abortController = new AbortController();
   const agent = params.factory();
 
-  pool.set(params.taskId, {
+  pool.set(key, {
     agent,
     taskId: params.taskId,
+    ownerId: params.ownerId,
     lastUsed: Date.now(),
     abortController,
   });
@@ -91,11 +99,12 @@ export async function getOrCreateAgent(
   return { agent, isNew: true, abortController };
 }
 
-export function evictAgent(taskId: string): void {
-  const entry = pool.get(taskId);
+export function evictAgent(taskId: string, ownerId: string): void {
+  const key = poolKey(ownerId, taskId);
+  const entry = pool.get(key);
   if (entry) {
     entry.abortController.abort();
-    pool.delete(taskId);
+    pool.delete(key);
     logger.info('[AgentPool] Manually evicted agent for ' + taskId);
   }
 }

@@ -407,7 +407,12 @@ class ProviderManagerImpl {
       this.config.agent = { category: 'agent', type: agentType };
     }
 
-    console.log('[ProviderManager] Initialized with config:', this.config);
+    console.log(
+      '[ProviderManager] Initialized with providers:',
+      Object.entries(this.config).flatMap(([category, config]) =>
+        config ? [{ category, type: config.type }] : []
+      )
+    );
   }
 
   /**

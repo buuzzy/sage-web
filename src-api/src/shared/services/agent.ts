@@ -34,10 +34,13 @@ const serviceLogger = createLogger('AgentService');
 let globalAgent: IAgent | null = null;
 
 // Store active sessions for backward compatibility
-const activeSessions = new Map<string, { abortController: AbortController }>();
+const activeSessions = new Map<
+  string,
+  { ownerId: string; abortController: AbortController }
+>();
 
 // Global plan store (shared across all agent instances)
-const globalPlanStore = new Map<string, TaskPlan>();
+const globalPlanStore = new Map<string, { ownerId: string; plan: TaskPlan }>();
 
 /**
  * Get or create the global agent instance
@@ -85,7 +88,8 @@ export async function getAgent(config?: Partial<AgentConfig>): Promise<IAgent> {
  * Create a new agent session
  */
 export function createSession(
-  phase: 'plan' | 'execute' = 'plan'
+  phase: 'plan' | 'execute' = 'plan',
+  ownerId = 'local'
 ): AgentSession {
   const session: AgentSession = {
     id: nanoid(),
@@ -95,6 +99,7 @@ export function createSession(
     abortController: new AbortController(),
   };
   activeSessions.set(session.id, {
+    ownerId,
     abortController: session.abortController,
   });
   return session;
@@ -103,9 +108,13 @@ export function createSession(
 /**
  * Get an existing session
  */
-export function getSession(sessionId: string): AgentSession | undefined {
+export function getSession(
+  sessionId: string,
+  ownerId?: string
+): AgentSession | undefined {
   const session = activeSessions.get(sessionId);
   if (!session) return undefined;
+  if (ownerId && session.ownerId !== ownerId) return undefined;
 
   return {
     id: sessionId,
@@ -119,8 +128,10 @@ export function getSession(sessionId: string): AgentSession | undefined {
 /**
  * Delete a session
  */
-export function deleteSession(sessionId: string): boolean {
+export function deleteSession(sessionId: string, ownerId?: string): boolean {
   const session = activeSessions.get(sessionId);
+  if (!session || (ownerId && session.ownerId !== ownerId)) return false;
+
   if (session) {
     session.abortController.abort();
     activeSessions.delete(sessionId);
@@ -132,22 +143,27 @@ export function deleteSession(sessionId: string): boolean {
 /**
  * Get a stored plan from global store
  */
-export function getPlan(planId: string): TaskPlan | undefined {
-  return globalPlanStore.get(planId);
+export function getPlan(planId: string, ownerId?: string): TaskPlan | undefined {
+  const entry = globalPlanStore.get(planId);
+  if (!entry) return undefined;
+  if (ownerId && entry.ownerId !== ownerId) return undefined;
+  return entry.plan;
 }
 
 /**
  * Save a plan to global store
  */
-export function savePlan(plan: TaskPlan): void {
-  globalPlanStore.set(plan.id, plan);
+export function savePlan(plan: TaskPlan, ownerId = 'local'): void {
+  globalPlanStore.set(plan.id, { ownerId, plan });
   console.log(`[AgentService] Plan saved to global store: ${plan.id}`);
 }
 
 /**
  * Delete a plan from global store
  */
-export function deletePlan(planId: string): boolean {
+export function deletePlan(planId: string, ownerId?: string): boolean {
+  const entry = globalPlanStore.get(planId);
+  if (!entry || (ownerId && entry.ownerId !== ownerId)) return false;
   const deleted = globalPlanStore.delete(planId);
   if (deleted) {
     console.log(`[AgentService] Plan deleted from global store: ${planId}`);
@@ -167,6 +183,7 @@ export async function* runPlanningPhase(
   accessToken?: string,
   conversation?: ConversationMessage[]
 ): AsyncGenerator<AgentMessage> {
+  const ownerId = userId ?? 'local';
   const agent = await getAgent(modelConfig as Partial<AgentConfig>);
 
   for await (const message of agent.plan(prompt, {
@@ -179,7 +196,7 @@ export async function* runPlanningPhase(
   })) {
     // Intercept plan messages and save to global store
     if (message.type === 'plan' && message.plan) {
-      savePlan(message.plan);
+      savePlan(message.plan, ownerId);
     }
     yield message;
   }
@@ -203,11 +220,12 @@ export async function* runExecutionPhase(
   accessToken?: string,
   conversation?: ConversationMessage[]
 ): AsyncGenerator<AgentMessage> {
+  const ownerId = userId ?? 'local';
   const agent = await getAgent(modelConfig);
 
   // Get the plan from global store to pass to agent
   // This is necessary because each agent instance has its own plan store
-  const plan = getPlan(planId);
+  const plan = getPlan(planId, ownerId);
   if (!plan) {
     yield { type: 'error', message: `Plan not found: ${planId}` };
     yield { type: 'done' };

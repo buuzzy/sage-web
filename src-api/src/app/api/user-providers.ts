@@ -6,6 +6,7 @@
  */
 
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 
 import {
   listProviders,
@@ -34,26 +35,10 @@ const userProvidersRoutes = new Hono();
 // Middleware: 提取 user_id from JWT
 // ============================================================================
 
-async function getUserId(c: any): Promise<string | null> {
-  // 从 Authorization header 解析 JWT 获取 user_id
-  // Railway 模式下，中间件已验证 token，user_id 在 c.get('userId') 或需要解 JWT
-  const userId = c.get('userId') as string | undefined;
-  if (userId) return userId;
-
-  // fallback: 从 JWT payload 解析
-  const authHeader = c.req.header('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-
-  const token = authHeader.slice(7);
-  try {
-    // 解析 JWT payload（不验签，验签由上游中间件完成）
-    const payload = JSON.parse(
-      Buffer.from(token.split('.')[1], 'base64').toString()
-    );
-    return payload.sub || null;
-  } catch {
-    return null;
-  }
+function getUserId(c: Context): string | null {
+  // Only a verified Supabase JWT may access user-scoped provider data.
+  // Never decode an unverified JWT payload here.
+  return c.get('authKind') === 'user' ? c.get('userId') ?? null : null;
 }
 
 // ============================================================================
@@ -61,7 +46,7 @@ async function getUserId(c: any): Promise<string | null> {
 // ============================================================================
 
 userProvidersRoutes.get('/', async (c) => {
-  const userId = await getUserId(c);
+  const userId = getUserId(c);
   if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
   try {
@@ -78,7 +63,7 @@ userProvidersRoutes.get('/', async (c) => {
 // ============================================================================
 
 userProvidersRoutes.post('/', async (c) => {
-  const userId = await getUserId(c);
+  const userId = getUserId(c);
   if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
   try {
@@ -106,7 +91,7 @@ userProvidersRoutes.post('/', async (c) => {
 // ============================================================================
 
 userProvidersRoutes.patch('/:id', async (c) => {
-  const userId = await getUserId(c);
+  const userId = getUserId(c);
   if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
   const providerId = c.req.param('id');
@@ -126,7 +111,7 @@ userProvidersRoutes.patch('/:id', async (c) => {
 // ============================================================================
 
 userProvidersRoutes.delete('/:id', async (c) => {
-  const userId = await getUserId(c);
+  const userId = getUserId(c);
   if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
   const providerId = c.req.param('id');
@@ -145,7 +130,7 @@ userProvidersRoutes.delete('/:id', async (c) => {
 // ============================================================================
 
 userProvidersRoutes.post('/:id/default', async (c) => {
-  const userId = await getUserId(c);
+  const userId = getUserId(c);
   if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
   const providerId = c.req.param('id');
@@ -164,7 +149,7 @@ userProvidersRoutes.post('/:id/default', async (c) => {
 // ============================================================================
 
 userProvidersRoutes.post('/:id/test', async (c) => {
-  const userId = await getUserId(c);
+  const userId = getUserId(c);
   if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
   const providerId = c.req.param('id');

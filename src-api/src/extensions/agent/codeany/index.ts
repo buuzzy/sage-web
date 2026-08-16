@@ -635,6 +635,7 @@ export class CodeAnyAgent extends BaseAgent {
       : undefined;
 
     const taskId = options?.taskId || session.id;
+    const ownerId = options?.userId || 'local';
 
     logger.info('[CodeAny ' + session.id + '] ========== AGENT START (pooled) ==========');
     logger.info('[CodeAny ' + session.id + '] Model: ' + (this.config.model || '(default)'));
@@ -655,7 +656,7 @@ export class CodeAnyAgent extends BaseAgent {
       // (dangling tool_use with no matched tool_result); reusing it
       // corrupts the following turn — the "this looks like a new session"
       // confusion in the incident.
-      evictAgent(taskId);
+      evictAgent(taskId, ownerId);
     }, TOTAL_RUN_TIMEOUT_MS);
 
     try {
@@ -664,6 +665,7 @@ export class CodeAnyAgent extends BaseAgent {
       // because they already have history accumulated internally.
       const { agent: sdkAgent, isNew } = await getOrCreateAgent({
         taskId,
+        ownerId,
         factory: () => {
           const opts: any = { ...sdkOpts };
           if (priorMessages && priorMessages.length > 0) {

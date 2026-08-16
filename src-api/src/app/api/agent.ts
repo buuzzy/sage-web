@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 
 import type { SandboxConfig } from '@/core/agent/types';
 import {
@@ -20,6 +21,34 @@ import { reconstructConversation } from '@/shared/services/conversation';
 
 
 const agent = new Hono();
+
+function applyVerifiedIdentity<T extends { userId?: string; accessToken?: string }>(
+  c: Context,
+  body: T
+): string {
+  const authKind = c.get('authKind');
+  if (authKind === 'user') {
+    const userId = c.get('userId');
+    if (!userId) throw new Error('Unauthorized');
+
+    body.userId = userId;
+    body.accessToken = c.get('authAccessToken');
+    return userId;
+  }
+
+  if (authKind === 'service') {
+    return body.userId || '__service__';
+  }
+
+  return body.userId || 'local';
+}
+
+function accessOwner(c: Context, bodyUserId?: string): string {
+  const authKind = c.get('authKind');
+  if (authKind === 'user') return c.get('userId') || '__user__';
+  if (authKind === 'service') return bodyUserId || '__service__';
+  return bodyUserId || 'local';
+}
 
 async function ensureConversation(
   body: { conversation?: Array<{ role: 'user' | 'assistant'; content: string }>; taskId?: string; userId?: string }
@@ -86,12 +115,16 @@ async function resolveModelConfig(
  * If the HTTP connection closes (e.g. iOS goes to background),
  * the generator continues to run and events are still buffered.
  */
-function createSSEStream(generator: AsyncGenerator<unknown>, taskId?: string) {
+function createSSEStream(
+  generator: AsyncGenerator<unknown>,
+  taskId?: string,
+  ownerId = 'local'
+) {
   const encoder = new TextEncoder();
 
   // Initialize event buffer for this task
   if (taskId) {
-    initTaskBuffer(taskId);
+    initTaskBuffer(taskId, ownerId);
   }
 
  return new ReadableStream({
@@ -112,7 +145,7 @@ function createSSEStream(generator: AsyncGenerator<unknown>, taskId?: string) {
         for await (const message of generator) {
           // Store event in buffer (for reconnection)
           if (taskId) {
-            appendEvent(taskId, message);
+            appendEvent(taskId, message, ownerId);
           }
 
           // Write to SSE stream (may fail if client disconnected)
@@ -130,7 +163,7 @@ function createSSEStream(generator: AsyncGenerator<unknown>, taskId?: string) {
           message: error instanceof Error ? error.message : String(error),
         };
         if (taskId) {
-          appendEvent(taskId, errorEvent);
+          appendEvent(taskId, errorEvent, ownerId);
         }
         try {
           const errorData = `data: ${JSON.stringify(errorEvent)}\n\n`;
@@ -142,7 +175,7 @@ function createSSEStream(generator: AsyncGenerator<unknown>, taskId?: string) {
         clearInterval(heartbeat);
         // Mark task as complete in buffer
         if (taskId) {
-          markTaskComplete(taskId);
+          markTaskComplete(taskId, ownerId);
         }
         try {
           controller.close();
@@ -255,6 +288,7 @@ async function handleSlashCommand(body: AgentRequest): Promise<Response | null> 
 // Lightweight chat endpoint (bypasses Agent SDK for simple queries)
 agent.post('/chat', async (c) => {
   const body = await c.req.json<AgentRequest>();
+  const ownerId = applyVerifiedIdentity(c, body);
 
   console.log('[AgentAPI] POST /chat received:', {
     hasPrompt: !!body.prompt,
@@ -270,7 +304,9 @@ agent.post('/chat', async (c) => {
   const resolvedConfig = await resolveModelConfig(body.modelConfig, body.userId);
   const conversation = await ensureConversation(body);
   const readable = createSSEStream(
-    runChat(body.prompt, resolvedConfig, body.language, conversation, abortController)
+    runChat(body.prompt, resolvedConfig, body.language, conversation, abortController),
+    body.taskId,
+    ownerId
   );
 
   return new Response(readable, { headers: SSE_HEADERS });
@@ -279,6 +315,7 @@ agent.post('/chat', async (c) => {
 // Phase 1: Create a plan (no execution)
 agent.post('/plan', async (c) => {
   const body = await c.req.json<AgentRequest>();
+  const ownerId = applyVerifiedIdentity(c, body);
 
   console.log('[AgentAPI] POST /plan received:', {
     hasPrompt: !!body.prompt,
@@ -300,7 +337,7 @@ agent.post('/plan', async (c) => {
   const slashResponse = await handleSlashCommand(body);
   if (slashResponse) return slashResponse;
 
- const session = createSession('plan');
+ const session = createSession('plan', ownerId);
  const resolvedConfig = await resolveModelConfig(body.modelConfig, body.userId);
  const planConversation = await ensureConversation(body);
  const readable = createSSEStream(
@@ -312,7 +349,9 @@ agent.post('/plan', async (c) => {
      body.userId,
      body.accessToken,
      planConversation
-   )
+   ),
+   body.taskId,
+   ownerId
  );
 
   return new Response(readable, { headers: SSE_HEADERS });
@@ -344,6 +383,7 @@ agent.post('/execute', async (c) => {
     accessToken?: string;
     conversation?: Array<{ role: 'user' | 'assistant'; content: string }>;
   }>();
+  const ownerId = applyVerifiedIdentity(c, body);
 
   console.log('[AgentAPI] POST /execute received:', {
     planId: body.planId,
@@ -362,12 +402,12 @@ agent.post('/execute', async (c) => {
     return c.json({ error: 'planId is required' }, 400);
   }
 
-  const plan = getPlan(body.planId);
+  const plan = getPlan(body.planId, ownerId);
   if (!plan) {
     return c.json({ error: 'Plan not found or expired' }, 404);
   }
 
-const session = createSession('execute');
+const session = createSession('execute', ownerId);
 const resolvedConfig = await resolveModelConfig(body.modelConfig, body.userId);
 const execConversation = await ensureConversation(body);
 const readable = createSSEStream(
@@ -386,7 +426,8 @@ const readable = createSSEStream(
     body.accessToken,
     execConversation
   ),
-  body.taskId
+  body.taskId,
+  ownerId
  );
 
  return new Response(readable, { headers: SSE_HEADERS });
@@ -395,6 +436,7 @@ const readable = createSSEStream(
 // Legacy: Direct execution (plan + execute in one call)
 agent.post('/', async (c) => {
   const body = await c.req.json<AgentRequest>();
+  const ownerId = applyVerifiedIdentity(c, body);
 
   console.log('[AgentAPI] POST / received:', {
     hasPrompt: !!body.prompt,
@@ -440,7 +482,7 @@ agent.post('/', async (c) => {
   const slashResponse = await handleSlashCommand(body);
   if (slashResponse) return slashResponse;
 
- const session = createSession();
+ const session = createSession('plan', ownerId);
  const taskId = body.taskId || session.id;
  const resolvedConfig = await resolveModelConfig(body.modelConfig, body.userId);
  const conversation = await ensureConversation(body);
@@ -450,7 +492,7 @@ agent.post('/', async (c) => {
      session,
      conversation,
      body.workDir,
-      body.taskId,
+      taskId,
       resolvedConfig,
       body.sandboxConfig,
       body.images,
@@ -460,7 +502,8 @@ agent.post('/', async (c) => {
       body.userId,
       body.accessToken
     ),
-    taskId
+    taskId,
+    ownerId
   );
 
   return new Response(readable, { headers: SSE_HEADERS });
@@ -474,6 +517,7 @@ agent.post('/title', async (c) => {
     language?: string;
     userId?: string;
   }>();
+  applyVerifiedIdentity(c, body);
 
   console.log('[AgentAPI] POST /title received:', {
     promptLength: body.prompt?.length,
@@ -495,20 +539,21 @@ agent.post('/title', async (c) => {
 // Stop a running agent
 agent.post('/stop/:sessionId', async (c) => {
   const sessionId = c.req.param('sessionId');
-  const session = getSession(sessionId);
+  const ownerId = accessOwner(c);
+  const session = getSession(sessionId, ownerId);
 
   if (!session) {
     return c.json({ error: 'Session not found' }, 404);
   }
 
-  deleteSession(sessionId);
+  deleteSession(sessionId, ownerId);
   return c.json({ status: 'stopped' });
 });
 
 // Get session status
 agent.get('/session/:sessionId', async (c) => {
   const sessionId = c.req.param('sessionId');
-  const session = getSession(sessionId);
+  const session = getSession(sessionId, accessOwner(c));
 
   if (!session) {
     return c.json({ error: 'Session not found' }, 404);
@@ -525,7 +570,7 @@ agent.get('/session/:sessionId', async (c) => {
 // Get plan by ID
 agent.get('/plan/:planId', async (c) => {
   const planId = c.req.param('planId');
-  const plan = getPlan(planId);
+  const plan = getPlan(planId, accessOwner(c));
 
   if (!plan) {
     return c.json({ error: 'Plan not found' }, 404);
@@ -552,8 +597,9 @@ agent.get('/task/:taskId/events', (c) => {
   const taskId = c.req.param('taskId');
   const afterParam = c.req.query('after');
   const afterSeq = afterParam ? parseInt(afterParam, 10) : -1;
+  const ownerId = accessOwner(c, c.req.query('user_id'));
 
-  const result = getEvents(taskId, afterSeq);
+  const result = getEvents(taskId, afterSeq, ownerId);
   if (!result) {
     return c.json({ error: 'Task not found', events: [], isComplete: true }, 404);
   }
@@ -568,7 +614,7 @@ agent.get('/task/:taskId/events', (c) => {
  */
 agent.get('/task/:taskId/status', (c) => {
   const taskId = c.req.param('taskId');
-  return c.json(getTaskStatus(taskId));
+  return c.json(getTaskStatus(taskId, accessOwner(c, c.req.query('user_id'))));
 });
 
 export default agent;

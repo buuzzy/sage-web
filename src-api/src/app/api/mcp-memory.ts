@@ -285,7 +285,9 @@ mcpMemoryRoutes.post('/', async (c) => {
     );
   }
 
-  const userId = c.req.query('user_id');
+  const authKind = c.get('authKind');
+  const userId =
+    authKind === 'user' ? c.get('userId') : c.req.query('user_id');
   if (
     !userId ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
@@ -306,7 +308,8 @@ mcpMemoryRoutes.post('/', async (c) => {
   //   - 桌面端 sidecar 模式：buildBuiltinMcpServers 会带上前端透传的 JWT
   //   - Railway 模式：service role 已配置时不需要（provider 会 fallback）
   // 长度上限 4096 防止日志膨胀；JWT 一般 ~1KB
-  const rawAccessToken = c.req.query('access_token');
+  const rawAccessToken =
+    authKind === 'user' ? c.get('authAccessToken') : c.req.query('access_token');
   const accessToken =
     rawAccessToken && rawAccessToken.length > 0 && rawAccessToken.length <= 4096
       ? rawAccessToken

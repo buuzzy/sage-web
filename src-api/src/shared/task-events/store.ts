@@ -21,6 +21,7 @@ export interface StoredEvent {
 
 interface TaskEventBuffer {
   taskId: string;
+  ownerId: string;
   events: StoredEvent[];
   createdAt: number;
   isComplete: boolean; // agent 执行完毕后标记为 true
@@ -29,27 +30,34 @@ interface TaskEventBuffer {
 // 内存存储
 const store = new Map<string, TaskEventBuffer>();
 
+function storeKey(taskId: string, ownerId: string): string {
+  return `${ownerId}:${taskId}`;
+}
+
 // 配置
 const MAX_AGE_MS = 10 * 60 * 1000; // 10 分钟后自动清理
 const CLEANUP_INTERVAL_MS = 60 * 1000; // 每分钟检查一次
 
 // 自动清理定时器
-setInterval(() => {
+const cleanupTimer = setInterval(() => {
   const now = Date.now();
-  for (const [taskId, buffer] of store) {
+  for (const [key, buffer] of store) {
     if (now - buffer.createdAt > MAX_AGE_MS) {
-      store.delete(taskId);
+      store.delete(key);
     }
   }
 }, CLEANUP_INTERVAL_MS);
+cleanupTimer.unref?.();
 
 /**
  * 初始化一个 task 的事件缓冲区
  */
-export function initTaskBuffer(taskId: string): void {
-  if (!store.has(taskId)) {
-    store.set(taskId, {
+export function initTaskBuffer(taskId: string, ownerId = 'local'): void {
+  const key = storeKey(taskId, ownerId);
+  if (!store.has(key)) {
+    store.set(key, {
       taskId,
+      ownerId,
       events: [],
       createdAt: Date.now(),
       isComplete: false,
@@ -60,11 +68,16 @@ export function initTaskBuffer(taskId: string): void {
 /**
  * 追加一个事件到 task 缓冲区
  */
-export function appendEvent(taskId: string, data: unknown): number {
-  let buffer = store.get(taskId);
+export function appendEvent(
+  taskId: string,
+  data: unknown,
+  ownerId = 'local'
+): number {
+  const key = storeKey(taskId, ownerId);
+  let buffer = store.get(key);
   if (!buffer) {
-    initTaskBuffer(taskId);
-    buffer = store.get(taskId)!;
+    initTaskBuffer(taskId, ownerId);
+    buffer = store.get(key)!;
   }
   const seq = buffer.events.length;
   buffer.events.push({
@@ -78,8 +91,8 @@ export function appendEvent(taskId: string, data: unknown): number {
 /**
  * 标记 task 执行完毕
  */
-export function markTaskComplete(taskId: string): void {
-  const buffer = store.get(taskId);
+export function markTaskComplete(taskId: string, ownerId = 'local'): void {
+  const buffer = store.get(storeKey(taskId, ownerId));
   if (buffer) {
     buffer.isComplete = true;
   }
@@ -90,9 +103,14 @@ export function markTaskComplete(taskId: string): void {
  * @param taskId - 任务 ID
  * @param afterSeq - 返回 seq > afterSeq 的事件（-1 返回全部）
  */
-export function getEvents(taskId: string, afterSeq: number = -1): { events: StoredEvent[]; isComplete: boolean } | null {
-  const buffer = store.get(taskId);
+export function getEvents(
+  taskId: string,
+  afterSeq = -1,
+  ownerId?: string
+): { events: StoredEvent[]; isComplete: boolean } | null {
+  const buffer = store.get(storeKey(taskId, ownerId ?? 'local'));
   if (!buffer) return null;
+  if (ownerId && buffer.ownerId !== ownerId) return null;
 
   const events = afterSeq < 0
     ? buffer.events
@@ -107,15 +125,19 @@ export function getEvents(taskId: string, afterSeq: number = -1): { events: Stor
 /**
  * 检查 task 是否存在
  */
-export function hasTask(taskId: string): boolean {
-  return store.has(taskId);
+export function hasTask(taskId: string, ownerId?: string): boolean {
+  const buffer = store.get(storeKey(taskId, ownerId ?? 'local'));
+  return !!buffer && (!ownerId || buffer.ownerId === ownerId);
 }
 
 /**
  * 获取 task 状态
  */
-export function getTaskStatus(taskId: string): { exists: boolean; eventCount: number; isComplete: boolean } {
-  const buffer = store.get(taskId);
+export function getTaskStatus(
+  taskId: string,
+  ownerId?: string
+): { exists: boolean; eventCount: number; isComplete: boolean } {
+  const buffer = store.get(storeKey(taskId, ownerId ?? 'local'));
   if (!buffer) return { exists: false, eventCount: 0, isComplete: false };
   return { exists: true, eventCount: buffer.events.length, isComplete: buffer.isComplete };
 }
