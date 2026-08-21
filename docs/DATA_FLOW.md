@@ -8,7 +8,7 @@
 User Browser
   │  HTTPS
   ▼
-app.nakocai.com (sage-web-frontend, Next.js)
+app.nakocai.com (sage-web-frontend, Vite + React 19 SPA)
   │  SSE stream (chat messages, tool calls, canvas)
   ▼
 sage.nakocai.com (sage-web-api, Node.js)
@@ -29,7 +29,7 @@ Tushare data API (quotes, financials, news, announcements, fund data)
 ## Request lifecycle
 
 1. User sends a message in the chat UI at `app.nakocai.com`.
-2. Frontend opens an SSE stream to `sage.nakocai.com/agent` (or `/agent/plan` for planning).
+2. Frontend opens an SSE stream to `sage.nakocai.com/agent` (single-path direct execution).
 3. Backend (`sage-web-api`) receives the message, loads conversation history from Supabase, constructs a system prompt from `AGENTS.md` + `SOUL.md`, and starts the Agent loop.
 4. Agent (MiniMax-M3) decides whether to call MCP tools (e.g., `fina_indicator`, `daily`, `anns_d`).
 5. Each tool call flows: Agent SDK → MCP SSE client → `minishare-mcp` service → Tushare API → formatted text response.

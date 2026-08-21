@@ -1,5 +1,7 @@
 # Sage Web 登录与认证方案
 
+> ⚠️ **本文档已过时（2026-08）**：实际实现已改为 **邮箱+密码登录 / 邮箱+密码+验证码注册 / 邀请码激活**（见 `src/app/pages/Login.tsx`、`supabase/migrations/20260806120000_invite_code_system.sql`）。OAuth 与 deep-link 相关描述仅作历史参考，勿按本文档配置 Supabase OAuth Redirect URLs。
+
 ## 目标
 
 Web 版只保留浏览器原生 OAuth 登录链路，不再使用 macOS deep-link。

@@ -1,6 +1,6 @@
 # extensions/agent/codeany/ — CodeAny SDK Agent 适配器
 
-Sage 的 Agent 大脑（桌面端 + 历史 iOS 共用；iOS 归档不影响本模块）。把 `@codeany/open-agent-sdk` 包装成 Sage 的 IAgent 接口，加入记忆注入、工具拦截、artifact 生成等产品能力。
+Sage 的 Agent 大脑（web 产品核心执行引擎）。把 `@codeany/open-agent-sdk` 包装成 Sage 的 IAgent 接口，加入记忆注入、工具拦截、artifact 生成等产品能力。
 
 ## 请求完整流程
 
@@ -24,7 +24,7 @@ Sage 的 Agent 大脑（桌面端 + 历史 iOS 共用；iOS 归档不影响本�
 
 | 文件 | 职责 | 稳定度 |
 |------|------|--------|
-| index.ts | Agent 适配器主类（plan / run / processMessage / buildSystemPrompt） | ⚠️ 核心，谨慎修改 |
+| index.ts | Agent 适配器主类（run / processMessage / buildSystemPrompt，单路径无 plan 阶段） | ⚠️ 核心，谨慎修改 |
 | tool-output-interceptor.ts | PostToolUse hook 工厂（URL 检测 + JSON 结构检测 → summary + artifact） | 🔧 可扩展新拦截规则 |
 | persona-injector.ts | Phase 3 画像注入（从 Supabase persona_memory 拉取） | 🔒 接口稳定 |
 | active-recall.ts | Phase 4 主动召回（FTS top-2 相关历史片段） | 🔒 接口稳定 |
@@ -34,9 +34,7 @@ Sage 的 Agent 大脑（桌面端 + 历史 iOS 共用；iOS 归档不影响本�
 ```
 ARTIFACT_TYPE_MAP        — (skill, action) → artifact component type 映射表
 class CodeAnyAgent       — implements IAgent
-  plan()                 — 规划阶段（生成 TaskPlan）
-  run()                  — 直接执行（跳过 plan）
-  execute()              — 执行已批准 plan
+  run()                  — 直接执行（单路径架构，plan/execute 已移除）
   buildSystemPrompt()    — 组装完整 system prompt
   processMessage()       — 解析 SDK 输出 → SSE events（text/tool/artifact/done）
 ```

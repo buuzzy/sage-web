@@ -41,7 +41,7 @@ railway up --project d5dd1df3-18e9-48e3-9cdb-a6334927cc6e \
 
 | Field | Value |
 |---|---|
-| Purpose | Sage Web frontend (Next.js) |
+| Purpose | Sage Web frontend (Vite + React 19 SPA) |
 | Repository | `buuzzy/sage-web` |
 | Branch | `main` |
 | Public URL | `https://app.nakocai.com` |
@@ -135,7 +135,7 @@ Check that the output contains the expected fields (e.g., "流动比率" and "�
 
 ### 2026-07-29: `sage-web-api` overwritten with MCP code
 
-**Symptom**: Frontend showed "无法连接到服务". All API endpoints (`/agent/plan`, `/agent/title`, `/providers/settings/sync`) returned 404.
+**Symptom**: Frontend showed "无法连接到服务". All API endpoints (`/agent`, `/agent/title`) returned 404.
 
 **Root cause**: While fixing MCP tools in `/private/tmp/tushare_MCP`, a `railway up` was run with the CLI still linked to the `sage` project. The MCP code deployed to `sage-web-api`, replacing the Sage Web API backend. The MCP server (FastMCP on port 8080) responded to HTTP requests but had no knowledge of `/agent/*` or `/providers/*` routes.
 

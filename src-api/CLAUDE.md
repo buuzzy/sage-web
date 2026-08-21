@@ -1,6 +1,6 @@
 # src-api/ — Hono HTTP 后端
 
-独立 pnpm workspace 包（`"sage-api"`）。桌面端作为 Tauri sidecar 运行在 localhost:2026，Railway 作为云端服务运行。
+独立 pnpm workspace 包（`"sage-api"`）。Railway 云端服务（web 产品唯一后端；桌面 Tauri sidecar 形态已冻结）。
 
 ## 架构分层
 
@@ -18,28 +18,20 @@ index.ts (Hono server 入口)
 
 ## API 路由一览（app/api/）
 
-> `/mobile/*` 路由（mobile.ts）为历史 iOS 投资对讲机契约保留；当前主线为桌面端，新功能请走 `/agent/*`。路由仍可访问但不再迭代。
 | 路由 | 文件 | 方法 | 说明 |
 |------|------|------|------|
-| /agent | agent.ts | POST | Agent 直接执行（SSE stream） |
-| /agent/plan | agent.ts | POST | Agent 规划阶段（SSE stream） |
-| /agent/execute | agent.ts | POST | 执行已批准计划（SSE stream） |
+| /agent | agent.ts | POST | Agent 直接执行（单路径，SSE stream） |
 | /agent/title | agent.ts | POST | 异步生成对话标题 |
 | /mcp/memory | mcp-memory.ts | POST | MCP search_memory 工具 |
 | /persona/memory | persona.ts | GET | 当前用户 persona_memory 读取 |
-| /updater/latest.json | updater.ts | GET | Tauri updater manifest |
 | /health | health.ts | GET | 健康检查 |
 | /skills | skills.ts | GET/POST | 技能管理 |
 | /providers | providers.ts | GET/POST | 模型 provider 配置（旧，本地模式） |
-| /user-providers | user-providers.ts | GET/POST/PATCH/DELETE | 云端 provider CRUD + Vault 加密 |
-| /user-providers/:id/default | user-providers.ts | POST | 设为默认 provider |
-| /user-providers/:id/test | user-providers.ts | POST | 服务端代测连通性 |
 | /cron | cron.ts | GET/POST/DELETE | 定时任务管理 |
 | /files | files.ts | GET/POST | 文件管理 + GitHub skill 导入 |
 | /sandbox | sandbox.ts | POST | 沙箱执行 |
 | /preview | preview.ts | GET | Vite 预览 |
 | /internal/distill | internal-distill.ts | POST | 手动触发蒸馏 |
-| /wechat | wechat.ts | POST | 微信消息回调 |
 | /mcp | mcp.ts | POST | 通用 MCP 端点 |
 
 ## 子目录详细文档

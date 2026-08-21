@@ -25,10 +25,8 @@
 
 ## useAgent.ts 核心概念（修改前必读）
 
-1. **classifyAgentExecutionStrategy()** — 7 种执行路由：
-   - `image` / `openai_provider` / `conversation` / `memory_recall` / `simple_lookup` → direct
-   - `multi_target` / `complex_task` → plan
-2. **SSE stream 事件类型**: `text` / `tool` / `plan` / `error` / `done` / `direct_answer`
+1. **classifyAgentExecutionStrategy()** — 单路径架构：所有查询一律 direct 执行，分类仅用于检测多目标查询并附加 batching 提示
+2. **SSE stream 事件类型**: `text` / `tool` / `plan`(历史消息展示) / `error` / `done` / `direct_answer`
 3. **标题生成**: 异步 POST `/agent/title`，结果绑定 taskId，过滤低质量标题
 4. **错误分类器**: 8 类结构化错误 → `ClassifiedAgentError`
 5. **背景任务**: `addBackgroundTask()` / `removeBackgroundTask()` / `subscribeToBackgroundTasks()`
@@ -58,7 +56,6 @@
 | behavior-sync.ts | 用户行为日志同步 |
 | error-sync.ts | 错误日志上报 |
 | cloud-restore.ts | 云端数据恢复（拉取 sessions/tasks/messages/files） |
-| cloud-cleanup.ts | 云端数据清理 |
 | sync-status.ts | 同步状态管理 |
 | session-dirty-queue.ts | session 脏标记队列 |
 
@@ -66,7 +63,7 @@
 
 | 文件 | 职责 |
 |------|------|
-| platform.ts | 平台检测（isTauri / isWeb / isMobile 窄屏 Web viewport / isDesktop = isTauri || !isMobile）；原生 iOS 不在本目录检测范围 |
+| platform.ts | 平台检测（isTauri / isMobile 窄屏 Web viewport）；原生 iOS 不在本目录检测范围 |
 | supabase.ts | Supabase client 初始化（isTauri 分叉 detectSessionInUrl/flowType） |
 | attachments.ts | 附件存储/加载 |
 | background-tasks.ts | 背景任务生命周期管理 |

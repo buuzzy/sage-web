@@ -30,7 +30,6 @@
 | P2 | 记忆 | persona / behavior / profile 展示 | `src/shared/sync/*`、`src-api/src/jobs/distill-persona.ts` | 让用户感受到“它记得我” |
 | P2 | 金融 | 核心图表与行情卡片 | `src/components/htui/*` | 先保留高频组件 |
 | P2 | 设置 | 模型、数据、关于页可用 | `src/components/settings/*` | 确保 web 也能配置 provider |
-| P2 | 导出 | 浏览器下载导出 JSON | `src/components/settings/tabs/DataSettings.tsx` | 替代桌面文件保存 |
 | P2 | 埋点 | 关键行为上报 | `src/shared/sync/behavior-sync.ts` | 验证 PMF 必需 |
 
 ## P3 - 后置能力

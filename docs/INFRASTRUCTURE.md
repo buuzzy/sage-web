@@ -61,6 +61,8 @@ Sage Web currently reuses shared core tables:
 - `user_providers`
 - `sync_state`
 - `user_notes`
+- `invite_codes` / `code_redemptions` (invite-code activation gate, 2026-08)
+- `error_logs`
 
 Legacy/mobile tables are documented but retained.
 
