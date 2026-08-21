@@ -1,8 +1,8 @@
+import { USE_LOCAL_SQLITE } from '@/config';
 import {
   ensureUserDirs,
   getUserDbConnString,
 } from '@/shared/lib/user-scoped-paths';
-import { USE_LOCAL_SQLITE } from '@/config';
 
 export interface BackupImportData {
   sessions?: unknown[];

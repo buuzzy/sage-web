@@ -13,15 +13,9 @@ import { useSyncExternalStore } from 'react';
 export const isTauri =
   typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
-/** Running in a plain browser (not wrapped by native shell) */
-export const isWeb = !isTauri;
-
 /** Running on a mobile-sized viewport */
 export const isMobile =
   typeof window !== 'undefined' && window.innerWidth < 768;
-
-/** Running on a desktop platform (Tauri or wide web) */
-export const isDesktop = isTauri || !isMobile;
 
 // ─── Reactive viewport detection ────────────────────────────────────────────
 
@@ -38,14 +32,9 @@ function getViewportIsMobile(): boolean {
 
 /** Reactive hook: returns true when viewport is mobile-sized (<768px). */
 export function useIsMobile(): boolean {
-  return useSyncExternalStore(subscribeViewport, getViewportIsMobile, () => false);
-}
-
-// ─── Platform Enum ──────────────────────────────────────────────────────────
-
-export type Platform = 'tauri' | 'web';
-
-export function getPlatform(): Platform {
-  if (isTauri) return 'tauri';
-  return 'web';
+  return useSyncExternalStore(
+    subscribeViewport,
+    getViewportIsMobile,
+    () => false
+  );
 }

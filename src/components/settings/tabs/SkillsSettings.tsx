@@ -1,5 +1,3 @@
-import { useLanguage } from '@/shared/providers/language-provider';
-
 import { CURATED_SKILLS } from '@/shared/lib/skillLabels';
 
 /**
@@ -7,8 +5,6 @@ import { CURATED_SKILLS } from '@/shared/lib/skillLabels';
  * enabled. Users cannot search, add, toggle, or delete them.
  */
 export function SkillsSettings() {
-  const { t } = useLanguage();
-
   return (
     <div className="-m-6 h-[calc(100%+48px)] overflow-y-auto p-6">
       <div className="grid grid-cols-2 gap-4">

@@ -55,7 +55,3 @@ export function parseToolMetadata(
 export function serializeToolMetadata(metadata: ToolMetadata): string {
   return JSON.stringify(metadata);
 }
-
-export function getRegisteredArtifactTypes(): ArtifactType[] {
-  return [];
-}

@@ -25,21 +25,11 @@ export interface AIProvider {
   canDelete?: boolean;
 }
 
-export interface MCPServer {
-  id: string;
-  name: string;
-  type: 'stdio' | 'http';
-  command?: string;
-  args?: string[];
-  url?: string;
-  enabled: boolean;
-}
-
 // ============================================================================
 // Sandbox Provider Settings
 // ============================================================================
 
-export type SandboxProviderType =
+type SandboxProviderType =
   | 'docker'
   | 'native'
   | 'e2b'
@@ -55,7 +45,7 @@ export interface SandboxProviderSetting {
   config: Record<string, unknown>;
 }
 
-export const defaultSandboxProviders: SandboxProviderSetting[] = [
+const defaultSandboxProviders: SandboxProviderSetting[] = [
   {
     id: 'codex',
     type: 'codex',
@@ -81,7 +71,7 @@ export const defaultSandboxProviders: SandboxProviderSetting[] = [
 // Agent Runtime Settings
 // ============================================================================
 
-export type AgentRuntimeType = 'codeany' | 'custom';
+type AgentRuntimeType = 'codeany' | 'custom';
 
 export interface AgentRuntimeSetting {
   id: string;
@@ -97,7 +87,7 @@ export interface AgentRuntimeSetting {
   };
 }
 
-export const defaultAgentRuntimes: AgentRuntimeSetting[] = [
+const defaultAgentRuntimes: AgentRuntimeSetting[] = [
   {
     id: 'codeany',
     type: 'codeany',
@@ -236,7 +226,7 @@ export interface Settings {
 // ============================================================================
 
 // Default providers with full configuration
-export const defaultProviders: AIProvider[] = [
+const defaultProviders: AIProvider[] = [
   {
     id: 'openrouter',
     name: 'OpenRouter',
@@ -343,60 +333,6 @@ export const defaultProviders: AIProvider[] = [
   },
 ];
 
-// Default provider IDs that cannot be deleted (derived from defaultProviders)
-export const defaultProviderIds = defaultProviders
-  .filter((p) => p.canDelete === false)
-  .map((p) => p.id);
-
-// Popular models for each provider (derived from defaultProviders + extra providers)
-export const providerDefaultModels: Record<string, string[]> = {
-  // Auto-generate from defaultProviders
-  ...Object.fromEntries(defaultProviders.map((p) => [p.id, p.models])),
-  // Extra providers not in defaultProviders
-  anthropic: ['claude-sonnet-4-5-20250514', 'claude-opus-4-5-20250514'],
-  openai: ['gpt-4o', 'gpt-4o-mini', 'o1-preview'],
-  // Fallback for unknown providers
-  default: [],
-};
-
-// Model suggestions for custom providers (matched by name pattern)
-export const customProviderModels: Record<string, string[]> = {
-  火山: [
-    'doubao-1-5-pro-256k-250115',
-    'doubao-1-5-lite-32k-250115',
-    'deepseek-v3-250324',
-  ],
-  volcengine: [
-    'doubao-1-5-pro-256k-250115',
-    'doubao-1-5-lite-32k-250115',
-    'deepseek-v3-250324',
-  ],
-  deepseek: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'],
-  kimi: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
-  moonshot: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
-  zhipu: ['glm-4-plus', 'glm-4-flash', 'glm-4-long'],
-  qwen: ['qwen-max', 'qwen-plus', 'qwen-turbo'],
-  siliconflow: [
-    'deepseek-ai/DeepSeek-V3',
-    'deepseek-ai/DeepSeek-V3.1-Terminus',
-    'deepseek-ai/DeepSeek-V3.2',
-    'deepseek-ai/DeepSeek-R1',
-    'Pro/deepseek-ai/DeepSeek-V3',
-    'Pro/deepseek-ai/DeepSeek-V3.1-Terminus',
-    'Pro/deepseek-ai/DeepSeek-V3.2',
-    'Pro/deepseek-ai/DeepSeek-R1',
-    'Qwen/Qwen3-235B-A22B-Instruct-2507',
-    'Qwen/Qwen3-235B-A22B-Thinking-2507',
-    'Qwen/Qwen3-Coder-480B-A35B-Instruct',
-    'moonshotai/Kimi-K2-Instruct-0905',
-    'moonshotai/Kimi-K2-Thinking',
-    'Pro/moonshotai/Kimi-K2-Instruct-0905',
-    'Pro/moonshotai/Kimi-K2-Thinking',
-    'Pro/MiniMaxAI/MiniMax-M2.1',
-    'Pro/zai-org/GLM-4.7',
-  ],
-};
-
 // Default settings
 // Note: Path values are placeholders that get resolved at initialization
 // to platform-specific paths (e.g., ~/.sage on macOS/Linux)
@@ -462,12 +398,6 @@ function normalizeSettingsProviders(settings: Settings): void {
   Object.assign(minimaxProvider, MINIMAX_ANTHROPIC_CONFIG);
 }
 
-// Legacy shared-DB connection string — kept here only as a reference constant,
-// no longer used to open connections directly (settings reuse the user-scoped
-// connection from database.ts via getDatabase()).
-const DB_NAME = 'sqlite:sage.db';
-void DB_NAME;
-
 // Check if running in Tauri environment synchronously
 function isTauriSync(): boolean {
   if (typeof window === 'undefined') {
@@ -510,7 +440,7 @@ async function getDatabase() {
 }
 
 // Get settings from database (async version)
-export async function getSettingsAsync(): Promise<Settings> {
+async function getSettingsAsync(): Promise<Settings> {
   // Return cached settings if available
   if (settingsCache) {
     console.log('[Settings] getSettingsAsync returning cached settings:', {
@@ -635,7 +565,7 @@ export function getSettings(): Settings {
 }
 
 // Save settings to database (async version)
-export async function saveSettingsAsync(settings: Settings): Promise<void> {
+async function saveSettingsAsync(settings: Settings): Promise<void> {
   settingsCache = settings;
 
   const database = await getDatabase();
@@ -797,99 +727,16 @@ export async function reloadSettingsForCurrentUser(): Promise<Settings> {
   return getSettingsAsync();
 }
 
-// Update a single AI provider
-export function updateProvider(
-  providerId: string,
-  updates: Partial<AIProvider>
-): Settings {
-  const settings = getSettings();
-  const providerIndex = settings.providers.findIndex(
-    (p) => p.id === providerId
-  );
-  if (providerIndex !== -1) {
-    settings.providers[providerIndex] = {
-      ...settings.providers[providerIndex],
-      ...updates,
-    };
-    saveSettings(settings);
-  }
-  return settings;
-}
-
-// ============================================================================
-// Sandbox Provider Management
-// ============================================================================
-
-// Update a sandbox provider
-export function updateSandboxProvider(
-  providerId: string,
-  updates: Partial<SandboxProviderSetting>
-): Settings {
-  const settings = getSettings();
-  const providerIndex = settings.sandboxProviders.findIndex(
-    (p) => p.id === providerId
-  );
-  if (providerIndex !== -1) {
-    settings.sandboxProviders[providerIndex] = {
-      ...settings.sandboxProviders[providerIndex],
-      ...updates,
-    };
-    saveSettings(settings);
-  }
-  return settings;
-}
-
-// Set default sandbox provider
-export function setDefaultSandboxProvider(providerId: string): Settings {
-  const settings = getSettings();
-  settings.defaultSandboxProvider = providerId;
-  saveSettings(settings);
-  return settings;
-}
-
 // Get the current default sandbox provider
-export function getDefaultSandboxProvider():
-  | SandboxProviderSetting
-  | undefined {
+function getDefaultSandboxProvider(): SandboxProviderSetting | undefined {
   const settings = getSettings();
   return settings.sandboxProviders.find(
     (p) => p.id === settings.defaultSandboxProvider
   );
 }
 
-// ============================================================================
-// Agent Runtime Management
-// ============================================================================
-
-// Update an agent runtime
-export function updateAgentRuntime(
-  runtimeId: string,
-  updates: Partial<AgentRuntimeSetting>
-): Settings {
-  const settings = getSettings();
-  const runtimeIndex = settings.agentRuntimes.findIndex(
-    (r) => r.id === runtimeId
-  );
-  if (runtimeIndex !== -1) {
-    settings.agentRuntimes[runtimeIndex] = {
-      ...settings.agentRuntimes[runtimeIndex],
-      ...updates,
-    };
-    saveSettings(settings);
-  }
-  return settings;
-}
-
-// Set default agent runtime
-export function setDefaultAgentRuntime(runtimeId: string): Settings {
-  const settings = getSettings();
-  settings.defaultAgentRuntime = runtimeId;
-  saveSettings(settings);
-  return settings;
-}
-
 // Get the current default agent runtime
-export function getDefaultAgentRuntime(): AgentRuntimeSetting | undefined {
+function getDefaultAgentRuntime(): AgentRuntimeSetting | undefined {
   const settings = getSettings();
   return settings.agentRuntimes.find(
     (r) => r.id === settings.defaultAgentRuntime
@@ -899,20 +746,9 @@ export function getDefaultAgentRuntime(): AgentRuntimeSetting | undefined {
 /**
  * Get the current default AI provider (for model configuration)
  */
-export function getDefaultAIProvider(): AIProvider | undefined {
+function getDefaultAIProvider(): AIProvider | undefined {
   const settings = getSettings();
   return settings.providers.find((p) => p.id === settings.defaultProvider);
-}
-
-/**
- * Check if a model provider with API key is configured.
- * Returns true if a non-default provider with an API key is selected.
- * Auto-fixes: if defaultProvider is unset but a valid provider exists, selects it.
- */
-export function isModelConfigured(): boolean {
-  // Web product: the backend always has a built-in default model.
-  // Users never need to configure an API key — login and start using.
-  return true;
 }
 
 /**
@@ -985,80 +821,4 @@ export async function syncSettingsWithBackend(): Promise<void> {
     // Backend might not be running, ignore error
     console.warn('[Settings] Could not sync with backend:', error);
   }
-}
-
-/**
- * Save settings and sync with backend
- */
-export async function saveSettingsWithSync(settings: Settings): Promise<void> {
-  saveSettings(settings);
-  await syncSettingsWithBackend();
-}
-
-// ============================================================================
-// Individual Setting Items (for flags like setupCompleted)
-// ============================================================================
-
-/**
- * Save a single setting item (for simple key-value flags)
- */
-export async function saveSettingItem(
-  key: string,
-  value: string
-): Promise<void> {
-  const database = await getDatabase();
-
-  if (database) {
-    try {
-      await database.execute(
-        `INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ($1, $2, datetime('now'))`,
-        [key, JSON.stringify(value)]
-      );
-    } catch (error) {
-      console.error(`[Settings] Failed to save ${key} to database:`, error);
-    }
-  }
-
-  // Also save to localStorage
-  try {
-    localStorage.setItem(`sage_${key}`, value);
-  } catch (error) {
-    console.error(`[Settings] Failed to save ${key} to localStorage:`, error);
-  }
-}
-
-/**
- * Get a single setting item
- */
-export async function getSettingItem(key: string): Promise<string | null> {
-  const database = await getDatabase();
-
-  if (database) {
-    try {
-      const result = await database.select<{ value: string }>(
-        'SELECT value FROM settings WHERE key = $1',
-        [key]
-      );
-      if (result.length > 0) {
-        return JSON.parse(result[0].value);
-      }
-    } catch (error) {
-      console.error(`[Settings] Failed to get ${key} from database:`, error);
-    }
-  }
-
-  // Fallback to localStorage
-  try {
-    return localStorage.getItem(`sage_${key}`);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Check if setup has been completed
- */
-export async function isSetupCompleted(): Promise<boolean> {
-  const value = await getSettingItem('setupCompleted');
-  return value === 'true';
 }

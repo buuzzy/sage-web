@@ -37,9 +37,6 @@ export const remove = async (): Promise<void> => {};
 export const openUrl = async (): Promise<void> => {};
 export const openPath = async (): Promise<void> => {};
 
-// ── @tauri-apps/plugin-shell ──────────────────────────────────────
-export const open = async (): Promise<void> => {};
-
 // ── @tauri-apps/plugin-sql (default export) ───────────────────────
 class TauriSqliteStub {
   static async load(): Promise<TauriSqliteStub> {

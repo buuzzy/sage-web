@@ -1,20 +1,17 @@
 import { useEffect, useState } from 'react';
 import { cn } from '@/shared/lib/utils';
-import type { Artifact } from './types';
 import JSZip from 'jszip';
 import { ExternalLink, FileSpreadsheet, Loader2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-import { FileTooLarge } from './FileTooLarge';
 import type { ExcelSheet, PreviewComponentProps } from './types';
-import { isRemoteUrl, MAX_PREVIEW_SIZE, openFileExternal } from './utils';
+import { isRemoteUrl, openFileExternal } from './utils';
 
 export function ExcelPreview({ artifact }: PreviewComponentProps) {
   const [sheets, setSheets] = useState<ExcelSheet[]>([]);
   const [activeSheet, setActiveSheet] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [fileTooLarge, setFileTooLarge] = useState<number | null>(null);
 
   const handleOpenExternal = () => {
     if (artifact.path) {
@@ -146,17 +143,6 @@ export function ExcelPreview({ artifact }: PreviewComponentProps) {
         <Loader2 className="text-muted-foreground size-8 animate-spin" />
         <p className="text-muted-foreground mt-4 text-sm">Loading Excel...</p>
       </div>
-    );
-  }
-
-  if (fileTooLarge !== null) {
-    return (
-      <FileTooLarge
-        artifact={artifact}
-        fileSize={fileTooLarge}
-        icon={FileSpreadsheet}
-        onOpenExternal={handleOpenExternal}
-      />
     );
   }
 

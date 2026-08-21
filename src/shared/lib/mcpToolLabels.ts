@@ -43,12 +43,15 @@ const MCP_TOOL_LABELS: Record<string, string> = {
   research_report: '研报搜索',
   anns_d: '公告查询',
   irm_qa: '互动问答',
- npr: '法规查询',
+  npr: '法规查询',
 };
 
 export function getMcpToolDisplayName(toolName: string): string {
   if (!toolName) return '工具调用';
-  if (toolName === 'render_canvas' || toolName === 'mcp__canvas__render_canvas') {
+  if (
+    toolName === 'render_canvas' ||
+    toolName === 'mcp__canvas__render_canvas'
+  ) {
     return '渲染画布';
   }
   if (toolName.startsWith('mcp__')) {

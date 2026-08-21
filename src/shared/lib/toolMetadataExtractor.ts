@@ -3,7 +3,7 @@
  *
  * Legacy utility — extracts tool_metadata from the old Skill tool.
  * MCP-based tools do not populate this field; new conversations use canvas:html.
-*/
+ */
 
 import type { ToolMetadata } from '@/shared/config/artifactMapping';
 
@@ -60,58 +60,6 @@ export function extractToolMetadata(
         error
       );
     }
-    return null;
-  }
-}
-
-/**
- * Extract metadata from a tool result message
- *
- * @param toolName - Name of the tool
- * @param toolOutput - Tool output string
- * @returns Metadata object or null
- */
-export function extractMetadataFromToolResult(
-  toolName: string | undefined,
-  toolOutput: string | undefined
-): ToolMetadata | null {
-  // Only attempt extraction for Skill tool
-  if (toolName !== 'Skill') {
-    return null;
-  }
-
-  return extractToolMetadata(toolOutput, toolName);
-}
-
-/**
- * Serialize metadata for storage in database
- */
-export function serializeMetadata(
-  metadata: ToolMetadata | null
-): string | null {
-  if (!metadata) return null;
-  try {
-    return JSON.stringify(metadata);
-  } catch (error) {
-    console.error(
-      '[toolMetadataExtractor] Failed to serialize metadata:',
-      error
-    );
-    return null;
-  }
-}
-
-/**
- * Parse metadata from database storage
- */
-export function parseMetadata(
-  metadataJson: string | null | undefined
-): ToolMetadata | null {
-  if (!metadataJson) return null;
-  try {
-    return JSON.parse(metadataJson) as ToolMetadata;
-  } catch (error) {
-    console.error('[toolMetadataExtractor] Failed to parse metadata:', error);
     return null;
   }
 }

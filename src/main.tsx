@@ -3,6 +3,7 @@ import '@ant-design/v5-patch-for-react-19';
 import React, { useCallback, useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
+import ImageLogo from '@/assets/logo.png';
 
 import { router } from './app/router';
 import { ErrorBoundary } from './components/error-boundary';
@@ -12,7 +13,6 @@ import { AntdThemeProvider } from './shared/providers/antd-theme-provider';
 import { AuthProvider } from './shared/providers/auth-provider';
 import { LanguageProvider } from './shared/providers/language-provider';
 import { ThemeProvider } from './shared/providers/theme-provider';
-import ImageLogo from '@/assets/logo.png';
 import {
   flushErrorQueue,
   ProfileProvider,
@@ -36,9 +36,9 @@ function AppProviders() {
           <AuthProvider>
             <ProfileProvider>
               <SettingsSyncProvider>
-              <SessionSyncProvider>
-                <RouterProvider router={router} />
-              </SessionSyncProvider>
+                <SessionSyncProvider>
+                  <RouterProvider router={router} />
+                </SessionSyncProvider>
               </SettingsSyncProvider>
             </ProfileProvider>
           </AuthProvider>
@@ -69,7 +69,7 @@ function BootstrapRoot() {
 
   if (!settingsReady) {
     return (
-      <div className="flex min-h-svh items-center justify-center bg-background">
+      <div className="bg-background flex min-h-svh items-center justify-center">
         <img
           src={ImageLogo}
           alt="Sage"

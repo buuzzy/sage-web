@@ -1,12 +1,5 @@
 export default {
-  title: '资源库',
-  files: '文件',
   noFiles: '暂无文件',
-  upload: '上传',
-  download: '下载',
-  delete: '删除',
-  rename: '重命名',
-  openFolder: '打开文件夹',
   // Search & List
   searchPlaceholder: '搜索对话...',
   chatsCount: '{count} 个对话',
@@ -20,7 +13,7 @@ export default {
   startNewTask: '开始新任务来创建对话',
   untitled: '无标题',
   lastMessage: '最后消息',
-  // Relative time
+  // 相对时间
   justNow: '刚刚',
   minuteAgo: '{count} 分钟前',
   minutesAgo: '{count} 分钟前',

@@ -43,7 +43,6 @@ export function SettingsModal({
   }, [initialCategory, open]);
   const { t } = useLanguage();
 
-
   // Category list
   const categories: SettingsCategory[] = [
     'account',
@@ -139,9 +138,7 @@ export function SettingsModal({
                 />
               )}
 
-              {activeCategory === 'skills' && (
-                <SkillsSettings />
-              )}
+              {activeCategory === 'skills' && <SkillsSettings />}
 
               {activeCategory === 'persona' && <PersonaSettings />}
 

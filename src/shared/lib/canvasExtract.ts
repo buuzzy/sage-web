@@ -8,7 +8,8 @@
  */
 
 import type { AgentMessage } from '@/shared/hooks/useAgent';
-import { extractArtifacts, hasIncompleteBlock } from './artifactParser';
+
+import { extractArtifacts } from './artifactParser';
 
 export interface CanvasItem {
   id: string;

@@ -416,7 +416,7 @@ const CHINESE_KEYWORDS: Record<string, string> = {
  * - Joins with hyphens
  * - Limits length
  */
-export function promptToSlug(prompt: string, maxLength: number = 50): string {
+function promptToSlug(prompt: string, maxLength: number = 50): string {
   let text = prompt;
 
   // Replace Chinese characters with English equivalents
@@ -473,62 +473,4 @@ export function generateSessionId(prompt: string): string {
   const timestamp = generateTimestamp();
   const slug = promptToSlug(prompt);
   return `${timestamp}_${slug}`;
-}
-
-/**
- * Generate a task folder name within a session
- * Format: task-01, task-02, etc.
- */
-export function generateTaskFolderName(taskIndex: number): string {
-  return `task-${String(taskIndex).padStart(2, '0')}`;
-}
-
-/**
- * Parse session ID to extract timestamp and slug
- */
-export function parseSessionId(sessionId: string): {
-  timestamp: string;
-  slug: string;
-  date: Date;
-} {
-  const parts = sessionId.split('_');
-  const timestamp = parts[0] || '';
-  const slug = parts.slice(1).join('_');
-
-  // Parse timestamp to Date
-  let date = new Date();
-  if (timestamp.length === 14) {
-    const year = parseInt(timestamp.substring(0, 4), 10);
-    const month = parseInt(timestamp.substring(4, 6), 10) - 1;
-    const day = parseInt(timestamp.substring(6, 8), 10);
-    const hours = parseInt(timestamp.substring(8, 10), 10);
-    const minutes = parseInt(timestamp.substring(10, 12), 10);
-    const seconds = parseInt(timestamp.substring(12, 14), 10);
-    date = new Date(year, month, day, hours, minutes, seconds);
-  }
-
-  return { timestamp, slug, date };
-}
-
-/**
- * Get session display name from session ID
- */
-export function getSessionDisplayName(sessionId: string): string {
-  const { slug, date } = parseSessionId(sessionId);
-
-  // Format date for display
-  const dateStr = date.toLocaleDateString('zh-CN', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
-  // Convert slug to title case
-  const title = slug
-    .split('-')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-
-  return `${title} (${dateStr})`;
 }

@@ -64,8 +64,8 @@ export interface PersonaExplicit {
 export interface PersonaImplicit {
   risk_tolerance: RiskTolerance;
   capability_level: CapabilityLevel;
- preferences: PersonaPreferences;
- /** Phase 4 行为摘要（90 天滚动，蒸馏 LLM 综合 user_behavior 写出） */
+  preferences: PersonaPreferences;
+  /** Phase 4 行为摘要（90 天滚动，蒸馏 LLM 综合 user_behavior 写出） */
   behavior_summary?: string | null;
 }
 
@@ -101,7 +101,7 @@ export const EMPTY_PROFILE: PersonaProfile = {
   implicit: {
     risk_tolerance: null,
     capability_level: null,
-   preferences: {},
-   behavior_summary: null,
+    preferences: {},
+    behavior_summary: null,
   },
 };

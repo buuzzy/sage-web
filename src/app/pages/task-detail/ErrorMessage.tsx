@@ -4,9 +4,9 @@
  */
 
 import { useState } from 'react';
+import { useLanguage } from '@/shared/providers/language-provider';
 
 import { SettingsModal } from '@/components/settings';
-import { useLanguage } from '@/shared/providers/language-provider';
 
 function ErrorMessage({ message }: { message: string }) {
   const { t } = useLanguage();

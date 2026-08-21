@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/shared/lib/utils';
-import type { Artifact } from './types';
 import { Loader2, Music, Pause, Play } from 'lucide-react';
 
 import type { PreviewComponentProps } from './types';
-import { getAudioMimeType, isRemoteUrl } from './utils';
+import { isRemoteUrl } from './utils';
 
 export function AudioPreview({ artifact }: PreviewComponentProps) {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);

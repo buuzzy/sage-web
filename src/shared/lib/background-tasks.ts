@@ -62,15 +62,8 @@ export function getBackgroundTask(taskId: string): BackgroundTask | undefined {
 /**
  * Get all background tasks
  */
-export function getAllBackgroundTasks(): BackgroundTask[] {
+function getAllBackgroundTasks(): BackgroundTask[] {
   return Array.from(backgroundTasks.values());
-}
-
-/**
- * Get count of running background tasks
- */
-export function getRunningTaskCount(): number {
-  return Array.from(backgroundTasks.values()).filter((t) => t.isRunning).length;
 }
 
 /**
@@ -94,26 +87,6 @@ export function updateBackgroundTaskStatus(
 }
 
 /**
- * Check if a task is running in background
- */
-export function isTaskRunningInBackground(taskId: string): boolean {
-  const task = backgroundTasks.get(taskId);
-  return task?.isRunning ?? false;
-}
-
-/**
- * Stop a background task
- */
-export function stopBackgroundTask(taskId: string): void {
-  const task = backgroundTasks.get(taskId);
-  if (task) {
-    task.abortController.abort();
-    task.isRunning = false;
-    removeBackgroundTask(taskId);
-  }
-}
-
-/**
  * Subscribe to background task changes
  */
 export function subscribeToBackgroundTasks(
@@ -126,15 +99,4 @@ export function subscribeToBackgroundTasks(
   return () => {
     listeners.delete(listener);
   };
-}
-
-/**
- * Clear all background tasks
- */
-export function clearAllBackgroundTasks(): void {
-  backgroundTasks.forEach((task) => {
-    task.abortController.abort();
-  });
-  backgroundTasks.clear();
-  notifyListeners();
 }

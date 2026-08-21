@@ -1,16 +1,33 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useTheme } from '@/shared/providers/theme-provider';
-
 // Inline echarts runtime (~1.1MB, loaded once at module level).
 import echartsSource from 'echarts/dist/echarts.min.js?raw';
 
 const THEME_VARS = [
-  '--background', '--foreground', '--card', '--card-foreground',
-  '--primary', '--primary-foreground', '--secondary', '--secondary-foreground',
-  '--muted', '--muted-foreground', '--accent', '--accent-foreground',
-  '--destructive', '--destructive-foreground', '--border', '--input',
-  '--ring', '--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5',
-  '--font-sans', '--radius',
+  '--background',
+  '--foreground',
+  '--card',
+  '--card-foreground',
+  '--primary',
+  '--primary-foreground',
+  '--secondary',
+  '--secondary-foreground',
+  '--muted',
+  '--muted-foreground',
+  '--accent',
+  '--accent-foreground',
+  '--destructive',
+  '--destructive-foreground',
+  '--border',
+  '--input',
+  '--ring',
+  '--chart-1',
+  '--chart-2',
+  '--chart-3',
+  '--chart-4',
+  '--chart-5',
+  '--font-sans',
+  '--radius',
 ];
 
 function readThemeVars(): string {
@@ -26,16 +43,18 @@ function readThemeVars(): string {
 
 /** Deterministic oklch → rgb conversion (no browser dependency). */
 function oklchToRgb(L: number, C: number, H: number): string {
-  const hRad = H * Math.PI / 180;
+  const hRad = (H * Math.PI) / 180;
   const a = C * Math.cos(hRad);
   const b = C * Math.sin(hRad);
   const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
   const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
-  const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
-  const l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+  const s_ = L - 0.0894841775 * a - 1.291485548 * b;
+  const l = l_ * l_ * l_,
+    m = m_ * m_ * m_,
+    s = s_ * s_ * s_;
   const r = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
   const g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
-  const bl = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+  const bl = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s;
   const gam = (c: number) =>
     c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
   const to255 = (c: number) =>
@@ -64,7 +83,9 @@ function convertColor(val: string): string {
       const resolved = getComputedStyle(probe).color;
       document.body.removeChild(probe);
       if (/^rgb/i.test(resolved)) return resolved;
-    } catch { /* passthrough */ }
+    } catch {
+      /* passthrough */
+    }
   }
 
   return val;
@@ -250,7 +271,9 @@ ${html}
     const triggerResize = () => {
       try {
         iframe.contentWindow?.dispatchEvent(new Event('resize'));
-      } catch { /* cross-origin guard */ }
+      } catch {
+        /* cross-origin guard */
+      }
     };
 
     const ro = new ResizeObserver(() => triggerResize());

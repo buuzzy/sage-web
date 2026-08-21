@@ -1,8 +1,8 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite";
-import path from "path";
-import { readFileSync } from "fs";
+import { readFileSync } from 'fs';
+import path from 'path';
+import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -11,27 +11,27 @@ const buildDate = new Date().toISOString().slice(0, 10).replace(/-/g, '.');
 
 // Read app version from package.json for runtime reporting (profile/error logs)
 const pkg = JSON.parse(
-  readFileSync(path.resolve(__dirname, "./package.json"), "utf-8")
+  readFileSync(path.resolve(__dirname, './package.json'), 'utf-8')
 );
 
-  // https://vite.dev/config/
-  export default defineConfig(async () => ({
-    plugins: [react(), tailwindcss()],
+// https://vite.dev/config/
+export default defineConfig(async () => ({
+  plugins: [react(), tailwindcss()],
 
-    // Load .env files from configs/env/ (matches .env.development / .env.production)
-    envDir: path.resolve(__dirname, "./configs/env"),
+  // Load .env files from configs/env/ (matches .env.development / .env.production)
+  envDir: path.resolve(__dirname, './configs/env'),
 
-    define: {
+  define: {
     __BUILD_DATE__: JSON.stringify(buildDate),
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
 
   resolve: {
     alias: [
-      { find: "@", replacement: path.resolve(__dirname, "./src") },
+      { find: '@', replacement: path.resolve(__dirname, './src') },
       {
         find: /^@tauri-apps\/.+/,
-        replacement: path.resolve(__dirname, "./src/shared/lib/tauri-stub.ts"),
+        replacement: path.resolve(__dirname, './src/shared/lib/tauri-stub.ts'),
       },
     ],
   },
@@ -61,7 +61,7 @@ const pkg = JSON.parse(
     // ERR_CONNECTION_REFUSED on OAuth callbacks.
     host: host || true,
     watch: {
-      ignored: ["**/node_modules/**", "**/src-tauri/**"],
+      ignored: ['**/node_modules/**', '**/src-tauri/**'],
     },
   },
 }));

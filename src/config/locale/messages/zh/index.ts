@@ -4,7 +4,6 @@ import library from './library';
 import nav from './nav';
 import preview from './preview';
 import settings from './settings';
-import setup from './setup';
 import task from './task';
 
 export default {
@@ -15,5 +14,4 @@ export default {
   preview,
   settings,
   library,
-  setup,
 };

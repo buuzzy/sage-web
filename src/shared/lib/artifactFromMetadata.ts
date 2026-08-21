@@ -72,30 +72,3 @@ export function generateArtifactFromMetadata(
     data: artifactData,
   };
 }
-
-/**
- * Generate artifacts from a message that has tool metadata
- *
- * Typically called for tool_result messages to create implicit artifacts
- *
- * @param message - Message object with tool metadata fields
- * @returns Array of generated artifacts (0 or 1 items)
- */
-export function generateArtifactsFromMessage(message: {
-  type: string;
-  tool_name?: string | null;
-  tool_output?: string | null;
-  tool_metadata?: string | null;
-}): Artifact[] {
-  if (message.type !== 'tool_result') {
-    return [];
-  }
-
-  const artifact = generateArtifactFromMetadata(
-    message.tool_name,
-    message.tool_output,
-    message.tool_metadata
-  );
-
-  return artifact ? [artifact] : [];
-}

@@ -350,14 +350,14 @@ export function LeftSidebar({
                               className="flex size-6 shrink-0 items-center justify-center rounded transition-all"
                             >
                               {/* Show star when favorited (hide on hover), show menu icon on hover */}
-                             {task.favorite ? (
-                               <>
+                              {task.favorite ? (
+                                <>
                                   <Star className="size-4 fill-amber-400 text-amber-400 md:group-hover:hidden" />
                                   <MoreHorizontal className="text-sidebar-foreground/40 hover:text-sidebar-foreground block size-4 md:hidden md:group-hover:block" />
-                               </>
-                             ) : (
+                                </>
+                              ) : (
                                 <MoreHorizontal className="text-sidebar-foreground/40 hover:text-sidebar-foreground size-4 opacity-100 md:opacity-0 md:group-hover:opacity-100" />
-                             )}
+                              )}
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent
@@ -607,14 +607,14 @@ export function LeftSidebar({
                                           className="flex size-6 shrink-0 items-center justify-center rounded transition-all"
                                         >
                                           {/* Show star when favorited (hide on hover), show menu icon on hover */}
-                                         {task.favorite ? (
-                                           <>
+                                          {task.favorite ? (
+                                            <>
                                               <Star className="size-4 fill-amber-400 text-amber-400 md:group-hover:hidden" />
                                               <MoreHorizontal className="text-muted-foreground hover:text-foreground block size-4 md:hidden md:group-hover:block" />
-                                           </>
-                                         ) : (
+                                            </>
+                                          ) : (
                                             <MoreHorizontal className="text-muted-foreground hover:text-foreground size-4 opacity-100 md:opacity-0 md:group-hover:opacity-100" />
-                                         )}
+                                          )}
                                         </button>
                                       </DropdownMenuTrigger>
                                       <DropdownMenuContent
@@ -702,9 +702,9 @@ export function LeftSidebar({
                         className="size-full object-cover"
                         iconClassName="text-sidebar-foreground/70 size-4"
                       />
-                      </AvatarStatusBadge>
-                    </button>
-                  </DropdownMenuTrigger>
+                    </AvatarStatusBadge>
+                  </button>
+                </DropdownMenuTrigger>
                 <DropdownMenuContent
                   className="min-w-56 rounded-lg"
                   side="right"

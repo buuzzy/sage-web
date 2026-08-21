@@ -31,7 +31,6 @@ function getModelConfig():
   return undefined;
 }
 
-
 // Helper to get sandbox configuration from settings
 function getSandboxConfig():
   | { enabled: boolean; provider?: string; apiEndpoint?: string }

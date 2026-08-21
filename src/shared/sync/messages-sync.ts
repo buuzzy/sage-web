@@ -254,10 +254,3 @@ export function stopMessageSyncWorker(): void {
   }
   console.log('[messages-sync] worker stopped');
 }
-
-/**
- * 手动触发一次同步（用于 UI "立即同步"按钮、或 smoke test）。
- */
-export async function syncNow(): Promise<void> {
-  await tick();
-}

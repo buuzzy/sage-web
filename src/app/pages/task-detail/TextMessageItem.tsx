@@ -70,7 +70,11 @@ function TextMessageItem({
                       try {
                         window.open(href, '_blank', 'noopener,noreferrer');
                       } catch (e) {
-                        console.error('[TextMessageItem] failed to open', href, e);
+                        console.error(
+                          '[TextMessageItem] failed to open',
+                          href,
+                          e
+                        );
                       }
                     }
                   }}

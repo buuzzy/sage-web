@@ -125,6 +125,3 @@ export function enqueueUserBehavior(msg: Message): void {
     }
   })();
 }
-
-/** 单元测试用 export — 不在生产代码使用 */
-export const __testables = { extractAssetMentions, sha256Hex16 };

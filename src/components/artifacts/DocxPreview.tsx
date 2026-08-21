@@ -1,18 +1,15 @@
 import { useEffect, useState } from 'react';
 import { cn } from '@/shared/lib/utils';
-import type { Artifact } from './types';
 import JSZip from 'jszip';
 import { ExternalLink, FileText, Loader2 } from 'lucide-react';
 
-import { FileTooLarge } from './FileTooLarge';
 import type { DocxParagraph, PreviewComponentProps } from './types';
-import { isRemoteUrl, MAX_PREVIEW_SIZE, openFileExternal } from './utils';
+import { isRemoteUrl, openFileExternal } from './utils';
 
 export function DocxPreview({ artifact }: PreviewComponentProps) {
   const [paragraphs, setParagraphs] = useState<DocxParagraph[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [fileTooLarge, setFileTooLarge] = useState<number | null>(null);
 
   const handleOpenExternal = () => {
     if (artifact.path) {
@@ -147,17 +144,6 @@ export function DocxPreview({ artifact }: PreviewComponentProps) {
           Loading document...
         </p>
       </div>
-    );
-  }
-
-  if (fileTooLarge !== null) {
-    return (
-      <FileTooLarge
-        artifact={artifact}
-        fileSize={fileTooLarge}
-        icon={FileText}
-        onOpenExternal={handleOpenExternal}
-      />
     );
   }
 

@@ -117,76 +117,6 @@ export function parseCSV(content: string): string[][] {
   });
 }
 
-// Simple markdown to HTML converter
-export function markdownToHtml(markdown: string): string {
-  let html = markdown;
-
-  // Escape HTML
-  html = html
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-
-  // Headers
-  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-  html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-  html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
-
-  // Bold and italic
-  html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  html = html.replace(/___(.+?)___/g, '<strong><em>$1</em></strong>');
-  html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
-  html = html.replace(/_(.+?)_/g, '<em>$1</em>');
-
-  // Inline code
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-  // Code blocks
-  html = html.replace(/```[\w]*\n([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-
-  // Links
-  html = html.replace(
-    /\[([^\]]+)\]\(([^)]+)\)/g,
-    '<a href="$2" target="_blank" rel="noopener">$1</a>'
-  );
-
-  // Images
-  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" />');
-
-  // Blockquotes
-  html = html.replace(/^\> (.*$)/gim, '<blockquote>$1</blockquote>');
-
-  // Unordered lists
-  html = html.replace(/^\s*[-*+] (.*$)/gim, '<li>$1</li>');
-
-  // Ordered lists
-  html = html.replace(/^\s*\d+\. (.*$)/gim, '<li>$1</li>');
-
-  // Wrap consecutive list items
-  html = html.replace(/(<li>.*<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`);
-
-  // Horizontal rules
-  html = html.replace(/^[-*_]{3,}$/gim, '<hr />');
-
-  // Paragraphs
-  html = html.replace(/\n\n+/g, '</p><p>');
-  html = `<p>${html}</p>`;
-  html = html.replace(/<p><\/p>/g, '');
-  html = html.replace(/<p>(<h[1-6]>)/g, '$1');
-  html = html.replace(/(<\/h[1-6]>)<\/p>/g, '$1');
-  html = html.replace(/<p>(<pre>)/g, '$1');
-  html = html.replace(/(<\/pre>)<\/p>/g, '$1');
-  html = html.replace(/<p>(<ul>)/g, '$1');
-  html = html.replace(/(<\/ul>)<\/p>/g, '$1');
-  html = html.replace(/<p>(<blockquote>)/g, '$1');
-  html = html.replace(/(<\/blockquote>)<\/p>/g, '$1');
-  html = html.replace(/<p>(<hr \/>)/g, '$1');
-
-  return html;
-}
-
 // Inline CSS and JS into HTML content
 export function inlineAssets(html: string, allArtifacts: Artifact[]): string {
   let result = html;
@@ -238,37 +168,6 @@ export async function openFileExternal(path: string): Promise<void> {
   } catch (err) {
     console.error('[Preview] Failed to open file:', err);
   }
-}
-
-// Get MIME type for image files
-export function getImageMimeType(ext: string): string {
-  const mimeTypes: Record<string, string> = {
-    png: 'image/png',
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    gif: 'image/gif',
-    webp: 'image/webp',
-    svg: 'image/svg+xml',
-    bmp: 'image/bmp',
-    ico: 'image/x-icon',
-  };
-  return mimeTypes[ext] || 'image/png';
-}
-
-// Get MIME type for audio files
-export function getAudioMimeType(ext: string): string {
-  const mimeTypes: Record<string, string> = {
-    mp3: 'audio/mpeg',
-    wav: 'audio/wav',
-    ogg: 'audio/ogg',
-    m4a: 'audio/mp4',
-    aac: 'audio/aac',
-    flac: 'audio/flac',
-    wma: 'audio/x-ms-wma',
-    aiff: 'audio/aiff',
-    aud: 'audio/basic',
-  };
-  return mimeTypes[ext] || 'audio/mpeg';
 }
 
 // Get MIME type for video files
@@ -329,9 +228,4 @@ export function parseFrontmatter(content: string): {
     frontmatter: Object.keys(frontmatter).length > 0 ? frontmatter : null,
     content: remainingContent,
   };
-}
-
-// Strip YAML frontmatter from markdown content (legacy, kept for compatibility)
-export function stripFrontmatter(content: string): string {
-  return parseFrontmatter(content).content;
 }

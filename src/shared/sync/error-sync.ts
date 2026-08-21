@@ -156,10 +156,7 @@ async function appendToQueue(row: ErrorRow): Promise<void> {
       localStorage.setItem(LS_QUEUE_KEY, JSON.stringify(lines));
       return;
     } catch (err) {
-      console.warn(
-        '[error-sync] failed to append to localStorage queue:',
-        err
-      );
+      console.warn('[error-sync] failed to append to localStorage queue:', err);
     }
   }
 

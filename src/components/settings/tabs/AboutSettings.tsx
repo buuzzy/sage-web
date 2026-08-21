@@ -1,4 +1,3 @@
-
 import ImageLogo from '@/assets/logo.png';
 import { useLanguage } from '@/shared/providers/language-provider';
 
@@ -19,9 +18,7 @@ export function AboutSettings() {
         <img src={ImageLogo} alt="Sage" className="size-16 rounded-xl" />
         <div>
           <h2 className="text-foreground text-xl font-bold">Sage</h2>
-          <p className="text-muted-foreground text-sm">
-            {t.settings.tagline}
-          </p>
+          <p className="text-muted-foreground text-sm">{t.settings.tagline}</p>
         </div>
       </div>
 

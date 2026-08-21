@@ -1,22 +1,13 @@
 import { useEffect, useState } from 'react';
-import type { Artifact } from './types';
 import { FileText, Loader2 } from 'lucide-react';
 
-import { FileTooLarge } from './FileTooLarge';
 import type { PreviewComponentProps } from './types';
-import { isRemoteUrl, MAX_PREVIEW_SIZE, openFileExternal } from './utils';
+import { isRemoteUrl } from './utils';
 
 export function PdfPreview({ artifact }: PreviewComponentProps) {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [fileTooLarge, setFileTooLarge] = useState<number | null>(null);
-
-  const handleOpenExternal = () => {
-    if (artifact.path) {
-      openFileExternal(artifact.path);
-    }
-  };
 
   useEffect(() => {
     let blobUrl: string | null = null;
@@ -89,17 +80,6 @@ export function PdfPreview({ artifact }: PreviewComponentProps) {
         <Loader2 className="text-muted-foreground size-8 animate-spin" />
         <p className="text-muted-foreground mt-4 text-sm">Loading PDF...</p>
       </div>
-    );
-  }
-
-  if (fileTooLarge !== null) {
-    return (
-      <FileTooLarge
-        artifact={artifact}
-        fileSize={fileTooLarge}
-        icon={FileText}
-        onOpenExternal={handleOpenExternal}
-      />
     );
   }
 

@@ -14,7 +14,6 @@ import {
   getIndexedDB,
   getSQLiteDatabase,
   idbRequest,
-  isTauriSync,
   nullableJsonString,
   nullableStr,
   str,
@@ -383,13 +382,21 @@ export async function updateTaskFromMessage(
 ): Promise<void> {
   if (messageType === 'result') {
     const provider_usage =
-      cost !== undefined || duration !== undefined || (usage && typeof usage.input_tokens === 'number')
+      cost !== undefined ||
+      duration !== undefined ||
+      (usage && typeof usage.input_tokens === 'number')
         ? JSON.stringify({
             source: 'agent_result',
             cost_usd: cost ?? null,
             duration_ms: duration ?? null,
-            input_tokens: usage && typeof usage.input_tokens === 'number' ? usage.input_tokens : null,
-            output_tokens: usage && typeof usage.output_tokens === 'number' ? usage.output_tokens : null,
+            input_tokens:
+              usage && typeof usage.input_tokens === 'number'
+                ? usage.input_tokens
+                : null,
+            output_tokens:
+              usage && typeof usage.output_tokens === 'number'
+                ? usage.output_tokens
+                : null,
             captured_at: new Date().toISOString(),
           })
         : undefined;
@@ -427,11 +434,6 @@ export async function updateTaskFromMessage(
   } else if (messageType === 'error') {
     await updateTask(taskId, { status: 'error' });
   }
-}
-
-// Export utility to check environment
-export function isDatabaseAvailable(): boolean {
-  return isTauriSync();
 }
 
 // ============ Library File Operations ============

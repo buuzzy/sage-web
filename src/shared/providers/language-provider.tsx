@@ -88,9 +88,3 @@ export function useLanguage() {
   }
   return context;
 }
-
-// Shorthand hook for just translations
-export function useTranslation() {
-  const { t, tt } = useLanguage();
-  return { t, tt };
-}

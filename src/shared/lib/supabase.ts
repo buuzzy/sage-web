@@ -26,19 +26,6 @@ const SUPABASE_ANON_KEY =
   import.meta.env.VITE_SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5bXFnd3RhZ3BzanVvbnNjbHllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3NTczNjEsImV4cCI6MjA5MjMzMzM2MX0.2MmvzN_EJYBtAZdcny8fqs9K5UoBLE8KsXU1NEwH94U';
 
-/**
- * 提供给诊断 UI 使用的元数据（如 AboutSettings 底部显示当前环境）。
- * `env` 通过 MODE 判断：dev build = 'dev'，release build = 'prod'，其他视为 'other'。
- */
-export const supabaseMeta = {
-  url: SUPABASE_URL,
-  env: import.meta.env.DEV
-    ? ('dev' as const)
-    : import.meta.env.PROD
-      ? ('prod' as const)
-      : ('other' as const),
-};
-
 const isTauri =
   typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
