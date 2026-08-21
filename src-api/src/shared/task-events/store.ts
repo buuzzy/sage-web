@@ -123,14 +123,6 @@ export function getEvents(
 }
 
 /**
- * 检查 task 是否存在
- */
-export function hasTask(taskId: string, ownerId?: string): boolean {
-  const buffer = store.get(storeKey(taskId, ownerId ?? 'local'));
-  return !!buffer && (!ownerId || buffer.ownerId === ownerId);
-}
-
-/**
  * 获取 task 状态
  */
 export function getTaskStatus(

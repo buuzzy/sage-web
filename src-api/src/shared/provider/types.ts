@@ -79,17 +79,6 @@ export interface ProviderMetadata {
 // Provider Configuration
 // ============================================================================
 
-export interface ProviderConfig {
-  /** Provider type identifier */
-  type: string;
-  /** Human-readable name */
-  name: string;
-  /** Whether this provider is enabled */
-  enabled: boolean;
-  /** Provider-specific configuration */
-  config: Record<string, unknown>;
-}
-
 export interface ProviderSelectionConfig {
   /** Category of provider */
   category: 'sandbox' | 'agent';
@@ -106,13 +95,6 @@ export interface ProvidersConfig {
   agent?: ProviderSelectionConfig;
   /** Allow dynamic category access */
   [key: string]: ProviderSelectionConfig | undefined;
-}
-
-export interface ProviderSelection {
-  /** Selected sandbox provider type */
-  sandbox?: string;
-  /** Selected agent provider type */
-  agent?: string;
 }
 
 // ============================================================================
@@ -194,23 +176,6 @@ export interface ProviderPlugin<
   onDestroy?: () => Promise<void>;
 }
 
-/**
- * Type guard to check if an object is a valid ProviderPlugin
- */
-export function isProviderPlugin(obj: unknown): obj is ProviderPlugin {
-  if (typeof obj !== 'object' || obj === null) {
-    return false;
-  }
-  const plugin = obj as Record<string, unknown>;
-  return (
-    typeof plugin.metadata === 'object' &&
-    plugin.metadata !== null &&
-    typeof (plugin.metadata as Record<string, unknown>).type === 'string' &&
-    typeof (plugin.metadata as Record<string, unknown>).name === 'string' &&
-    typeof plugin.factory === 'function'
-  );
-}
-
 // ============================================================================
 // Provider Registry Interface
 // ============================================================================
@@ -271,20 +236,4 @@ export interface IProviderRegistry<
    * Remove event listener
    */
   off(listener: ProviderEventListener): void;
-}
-
-// ============================================================================
-// Helper to define plugins
-// ============================================================================
-
-/**
- * Helper function to define a provider plugin with type inference
- */
-export function defineProviderPlugin<
-  TProvider extends IProvider = IProvider,
-  TConfig = Record<string, unknown>,
->(
-  plugin: ProviderPlugin<TProvider, TConfig>
-): ProviderPlugin<TProvider, TConfig> {
-  return plugin;
 }

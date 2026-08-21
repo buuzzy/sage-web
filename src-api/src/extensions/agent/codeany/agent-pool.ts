@@ -18,7 +18,7 @@ interface PoolEntry {
 }
 
 const pool = new Map<string, PoolEntry>();
-let evictionTimer: NodeJS.Timeout | null = null;
+let evictionTimer: ReturnType<typeof setTimeout> | null = null;
 
 function poolKey(ownerId: string, taskId: string): string {
   return `${ownerId}:${taskId}`;
@@ -107,8 +107,4 @@ export function evictAgent(taskId: string, ownerId: string): void {
     pool.delete(key);
     logger.info('[AgentPool] Manually evicted agent for ' + taskId);
   }
-}
-
-export function getPoolSize(): number {
-  return pool.size;
 }

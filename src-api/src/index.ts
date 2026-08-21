@@ -17,8 +17,6 @@ import {
   providersRoutes,
   sandboxRoutes,
   skillsRoutes,
-  updaterRoutes,
-  userProvidersRoutes,
 } from '@/app/api';
 import { corsMiddleware, localOnlyMiddleware } from '@/app/middleware/index.js';
 import { loadConfig } from '@/config/loader.js';
@@ -74,7 +72,6 @@ app.use('/skills/*', localOnlyMiddleware);
 // blocked at TCP level; this is defence-in-depth for dev mode (0.0.0.0).
 app.use('/providers/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
 app.use('/cron/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
-app.use('/user-providers/*', localOnlyMiddleware);
 
 // Routes
 app.route('/health', healthRoutes);
@@ -89,51 +86,6 @@ app.route('/persona', personaRoutes);
 app.route('/skills', skillsRoutes);
 app.route('/cron', cronRoutes);
 app.route('/internal', internalDistillRoutes);
-app.route('/updater', updaterRoutes);
-app.route('/user-providers', userProvidersRoutes);
-
-// OAuth callback landing page — browser redirects here after Google/GitHub auth.
-// Supabase PKCE flow puts tokens in the hash fragment (#access_token=...),
-// so we use client-side JS to extract them and trigger the sage:// deep link.
-// Not behind localOnlyMiddleware since it's accessed from the user's browser.
-app.get('/auth/callback', (c) => {
-  return c.html(`<!DOCTYPE html>
-<html lang="zh">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sage - Login Successful</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-           display: flex; align-items: center; justify-content: center;
-           min-height: 100vh; background: #fafafa; color: #333; }
-    .card { text-align: center; padding: 3rem; }
-    .icon { font-size: 3rem; margin-bottom: 1rem; }
-    h1 { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; }
-    p { color: #888; font-size: 0.875rem; }
-    .hint { margin-top: 1.5rem; color: #aaa; font-size: 0.75rem; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="icon">✅</div>
-    <h1>Login Successful</h1>
-    <p>Returning to Sage...</p>
-    <p class="hint">You can close this tab.</p>
-  </div>
-  <script>
-    // Collect both query params (?code=...) and hash fragment (#access_token=...)
-    var params = window.location.search.slice(1);
-    var hash = window.location.hash.slice(1);
-    var all = [params, hash].filter(Boolean).join('&');
-    var deepLink = 'sage://auth/callback' + (all ? '?' + all : '');
-    window.location.href = deepLink;
-    setTimeout(function() { try { window.close(); } catch(e) {} }, 1500);
-  </script>
-</body>
-</html>`);
-});
 
 // Root endpoint
 app.get('/', (c) => {
@@ -149,11 +101,8 @@ app.get('/', (c) => {
       files: '/files',
       mcp: '/mcp',
       mcpMemory: '/mcp-memory',
-      channels: '/channels',
       skills: '/skills',
       cron: '/cron',
-      completions: '/v1/chat/completions',
-      models: '/v1/models',
     },
   });
 });
@@ -183,14 +132,6 @@ const cleanup = async () => {
     shutdownScheduler();
   } catch (error) {
     console.error('Error shutting down cron scheduler:', error);
-  }
-
-  // Disconnect all channel adapters (closes Feishu WebSocket, etc.)
-  try {
-    const { getChannelManager } = await import('@/core/channel/manager');
-    await getChannelManager().shutdown();
-  } catch (error) {
-    console.error('Error shutting down channel manager:', error);
   }
 
   // Stop all preview servers
@@ -251,53 +192,6 @@ async function start() {
   // so the first query doesn't pay the filesystem I/O cost.
   const { loadAndCacheSkills } = await import('@/shared/skills/predictor');
   await loadAndCacheSkills();
-
-  // Inject channel API key from config
-  const { getConfigLoader } = await import('@/config/loader');
-  const channelApiKey = getConfigLoader().get<string>('channelApiKey');
-  if (channelApiKey && !process.env.HTCLAW_CHANNEL_API_KEY) {
-    process.env.HTCLAW_CHANNEL_API_KEY = channelApiKey;
-  }
-
-  // Register Feishu channel adapter if configured
-  // Uses the feishu API module's state management for consistent status tracking
-  const feishuConfig = getConfigLoader().get<Record<string, unknown>>('channels.feishu');
-  if (feishuConfig && feishuConfig.enabled && feishuConfig.appId && feishuConfig.appSecret) {
-    // Load persisted agentConfig from config.json BEFORE connecting Feishu
-    // This ensures ChannelManager.resolveModelConfig() has data on startup
-    // without waiting for the frontend to call POST /providers/settings/sync
-    const savedAgentConfig = getConfigLoader().get<Record<string, unknown>>('agentConfig');
-    if (savedAgentConfig && savedAgentConfig.apiKey) {
-      const { getProviderManager } = await import('@/shared/provider/manager');
-      const pm = getProviderManager();
-      pm.updateFromSettings({
-        agentProvider: (getConfigLoader().get<string>('agentProvider') || 'codeany'),
-        agentConfig: savedAgentConfig,
-      });
-      console.log('🔑 Agent config loaded from config.json for channel adapters');
-    } else {
-      console.warn('⚠️  No persisted agentConfig in config.json — channel messages will fail until frontend syncs settings');
-    }
-
-    try {
-      const { connectOnStartup } = await import('@/app/api/feishu');
-      await connectOnStartup(feishuConfig);
-      console.log(`🔗 Feishu channel adapter registered`);
-    } catch (err) {
-      console.error('❌ Feishu channel adapter failed to start:', err);
-    }
-  }
-
-  // Auto-start WeClaw if previously connected
-  const wechatConfig = getConfigLoader().get<Record<string, unknown>>('channels.wechat');
-  if (wechatConfig && wechatConfig.enabled) {
-    try {
-      const { connectWechatOnStartup } = await import('@/app/api/wechat');
-      await connectWechatOnStartup();
-    } catch (err) {
-      console.error('❌ WeClaw auto-start failed:', err);
-    }
-  }
 
   // Initialize provider manager
   await initProviderManager();

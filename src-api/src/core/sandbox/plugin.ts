@@ -202,35 +202,6 @@ export abstract class BaseSandboxProvider implements ISandboxProvider {
 // ============================================================================
 
 /**
- * JSON Schema for Docker provider configuration
- */
-export const DOCKER_CONFIG_SCHEMA = {
-  type: 'object',
-  properties: {
-    socketPath: {
-      type: 'string',
-      default: '/var/run/docker.sock',
-      description: 'Docker socket path',
-    },
-    defaultImage: {
-      type: 'string',
-      default: 'node:18-alpine',
-      description: 'Default container image',
-    },
-    memoryLimit: {
-      type: 'string',
-      default: '1g',
-      description: "Memory limit (e.g., '1g', '512m')",
-    },
-    cpuLimit: {
-      type: 'string',
-      default: '1.0',
-      description: "CPU limit (e.g., '1.0', '0.5')",
-    },
-  },
-};
-
-/**
  * JSON Schema for Native provider configuration
  */
 export const NATIVE_CONFIG_SCHEMA = {
@@ -252,29 +223,6 @@ export const NATIVE_CONFIG_SCHEMA = {
       description: 'Default timeout in milliseconds',
     },
   },
-};
-
-/**
- * JSON Schema for E2B provider configuration
- */
-export const E2B_CONFIG_SCHEMA = {
-  type: 'object',
-  properties: {
-    apiKey: {
-      type: 'string',
-      description: 'E2B API key',
-    },
-    templateId: {
-      type: 'string',
-      description: 'Sandbox template ID',
-    },
-    timeout: {
-      type: 'number',
-      default: 60000,
-      description: 'Sandbox timeout in milliseconds',
-    },
-  },
-  required: ['apiKey'],
 };
 
 // ============================================================================
@@ -300,40 +248,3 @@ export const NATIVE_METADATA: SandboxProviderMetadata = {
   tags: ['fast', 'no-isolation'],
 };
 
-/**
- * Metadata for Docker provider
- */
-export const DOCKER_METADATA: SandboxProviderMetadata = {
-  type: 'docker',
-  name: 'Docker Container',
-  version: '1.0.0',
-  description:
-    'Container-based sandbox using Docker. Good isolation with wider platform support.',
-  configSchema: DOCKER_CONFIG_SCHEMA,
-  builtin: false,
-  isolation: 'container',
-  supportedRuntimes: ['node', 'python', 'bun'],
-  supportsVolumeMounts: true,
-  supportsNetworking: true,
-  supportsPooling: true,
-  tags: ['container', 'docker', 'isolation'],
-};
-
-/**
- * Metadata for E2B provider
- */
-export const E2B_METADATA: SandboxProviderMetadata = {
-  type: 'e2b',
-  name: 'E2B Cloud Sandbox',
-  version: '1.0.0',
-  description:
-    'Cloud-based sandbox using E2B. Provides strong isolation with remote execution.',
-  configSchema: E2B_CONFIG_SCHEMA,
-  builtin: false,
-  isolation: 'vm',
-  supportedRuntimes: ['node', 'python'],
-  supportsVolumeMounts: false,
-  supportsNetworking: true,
-  supportsPooling: false,
-  tags: ['cloud', 'e2b', 'remote'],
-};

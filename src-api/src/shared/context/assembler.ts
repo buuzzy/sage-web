@@ -16,7 +16,6 @@ import {
   compactMessages,
   estimateTokens,
   DEFAULT_COMPACTION_CONFIG,
-  type SessionMessage,
 } from './compaction';
 
 // ---------------------------------------------------------------------------

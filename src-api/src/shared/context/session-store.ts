@@ -84,43 +84,6 @@ export function createSession(sessionId: string): SessionData {
 }
 
 // ---------------------------------------------------------------------------
-// Message operations
-// ---------------------------------------------------------------------------
-
-export function appendMessages(sessionId: string, msgs: SessionMessage[]): SessionData {
-  let data = loadSession(sessionId) || createSession(sessionId);
-  data.messages.push(...msgs);
-  saveSession(data);
-  return data;
-}
-
-export function setCompaction(sessionId: string, summary: CompactionSummary): SessionData {
-  let data = loadSession(sessionId);
-  if (!data) data = createSession(sessionId);
-  data.compaction = summary;
-  saveSession(data);
-  return data;
-}
-
-/**
- * Get total estimated tokens for all messages + compaction summary.
- */
-export function getTotalTokens(data: SessionData): number {
-  const msgTokens = data.messages.reduce((sum, m) => sum + m.tokenEstimate, 0);
-  const compTokens = data.compaction?.tokenEstimate ?? 0;
-  return msgTokens + compTokens;
-}
-
-/**
- * Get messages that are NOT covered by the compaction summary.
- * These are the "recent" messages that the model will see in full.
- */
-export function getRecentMessages(data: SessionData): SessionMessage[] {
-  if (!data.compaction) return data.messages;
-  return data.messages.slice(data.compaction.compactedUpTo);
-}
-
-// ---------------------------------------------------------------------------
 // Cleanup — remove sessions older than N days
 // ---------------------------------------------------------------------------
 

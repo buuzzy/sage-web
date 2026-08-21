@@ -13,7 +13,6 @@
  */
 
 import cron from 'node-cron';
-import { nanoid } from 'nanoid';
 
 import { getProviderManager } from '@/shared/provider/manager';
 import {
@@ -156,24 +155,20 @@ async function runJobPrompt(job: CronJob): Promise<string> {
     }
   }
 
-  const session = createSession('execute');
+  const session = createSession();
 
   let output = '';
-  try {
-    for await (const msg of runAgent(
-      job.prompt,
-      session,
-      [], // no conversation history — isolated run
-      undefined, // workDir
-      undefined, // taskId
-      modelConfig,
-    )) {
-      if ((msg.type === 'text' || msg.type === 'direct_answer') && (msg as any).content) {
-        output += (msg as any).content + '\n';
-      }
+  for await (const msg of runAgent(
+    job.prompt,
+    session,
+    [], // no conversation history — isolated run
+    undefined, // workDir
+    undefined, // taskId
+    modelConfig,
+  )) {
+    if ((msg.type === 'text' || msg.type === 'direct_answer') && (msg as any).content) {
+      output += (msg as any).content + '\n';
     }
-  } catch (err) {
-    throw err;
   }
 
   return output.trim();
@@ -272,11 +267,9 @@ async function executeJob(jobId: string): Promise<void> {
       );
     }
 
-    // Push to channel if delivery mode is 'channel'
+    // Channel delivery was removed together with the Feishu/WeChat integrations.
     if (job.delivery === 'channel' && output) {
-      pushToChannel(job, output).catch((err) =>
-        console.warn(`[Cron] Channel delivery failed for job ${jobId}:`, err)
-      );
+      console.warn(`[Cron] Job "${job.name}" has delivery=channel — channel delivery is no longer supported, skipping push`);
     }
   } catch (err) {
     run.finishedAt = new Date().toISOString();
@@ -293,46 +286,6 @@ async function executeJob(jobId: string): Promise<void> {
     unscheduleJob(jobId);
     storeRemoveJob(jobId);
     console.log(`[Cron] One-shot job ${jobId} deleted after run (status: ${run.status})`);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Channel delivery
-// ---------------------------------------------------------------------------
-
-async function pushToChannel(job: CronJob, output: string): Promise<void> {
-  const conversationId = job.targetConversationId;
-  if (!conversationId) {
-    console.warn(`[Cron] Job "${job.name}" has delivery=channel but no targetConversationId — skipping push`);
-    return;
-  }
-
-  const { getChannelManager } = await import('@/core/channel/manager');
-  const adapter = getChannelManager().getAdapter('feishu');
-  if (!adapter) {
-    console.warn(`[Cron] Channel delivery: feishu adapter not registered (is Feishu configured?)`);
-    return;
-  }
-
-  const MAX_ATTEMPTS = 3;
-  const BACKOFF_BASE_MS = 1_000;
-
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      await adapter.send({ conversationId, content: output });
-      console.log(`[Cron] Channel delivery succeeded for job "${job.name}" → ${conversationId}`);
-      return;
-    } catch (err) {
-      const isLast = attempt === MAX_ATTEMPTS;
-      const delay = BACKOFF_BASE_MS * Math.pow(2, attempt - 1); // 1s, 2s, 4s
-      console.warn(
-        `[Cron] Channel delivery attempt ${attempt}/${MAX_ATTEMPTS} failed for job "${job.name}":`,
-        err instanceof Error ? err.message : err,
-        isLast ? '— giving up' : `— retrying in ${delay}ms`
-      );
-      if (isLast) throw err;
-      await new Promise((r) => setTimeout(r, delay));
-    }
   }
 }
 

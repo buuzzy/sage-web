@@ -15,9 +15,6 @@ import { join } from 'path';
 // Application Identity
 // ============================================================================
 
-/** Application name */
-export const APP_NAME = 'sage';
-
 /** Application data directory name (used in home directory) */
 export const APP_DIR_NAME = '.sage';
 
@@ -41,17 +38,8 @@ export const DEFAULT_API_HOST = 'localhost';
 /** Default work directory path (relative to home) */
 export const DEFAULT_WORK_DIR = `~/${APP_DIR_NAME}`;
 
-/** Sessions subdirectory name */
-export const SESSIONS_DIR_NAME = 'sessions';
-
 /** Skills subdirectory name */
 export const SKILLS_DIR_NAME = 'skills';
-
-/** Logs subdirectory name */
-export const LOGS_DIR_NAME = 'logs';
-
-/** Cache subdirectory name */
-export const CACHE_DIR_NAME = 'cache';
 
 // ============================================================================
 // Configuration Files
@@ -79,39 +67,12 @@ export const DEFAULT_SANDBOX_PROVIDER = 'native';
 /** Default agent provider type */
 export const DEFAULT_AGENT_PROVIDER = 'codeany';
 
-/** Default agent model */
-export const DEFAULT_AGENT_MODEL = 'claude-sonnet-4-20250514';
-
 /** Default CodeAny agent model */
 export const DEFAULT_CODEANY_MODEL = 'claude-sonnet-4-20250514';
 
 // ============================================================================
-// Timeouts and Limits
-// ============================================================================
-
-/** Default script execution timeout (ms) */
-export const DEFAULT_SCRIPT_TIMEOUT = 120000;
-
-/** Default API request timeout (ms) */
-export const DEFAULT_API_TIMEOUT = 30000;
-
-/** Maximum sandbox pool size */
-export const DEFAULT_SANDBOX_POOL_SIZE = 5;
-
-// ============================================================================
 // Network Configuration
 // ============================================================================
-
-/** Sandbox API port (internal) */
-export const SANDBOX_API_PORT = 2620;
-
-/** Get sandbox API URL */
-export function getSandboxApiUrl(): string {
-  return (
-    process.env.SANDBOX_API_URL ||
-    `http://${DEFAULT_API_HOST}:${SANDBOX_API_PORT}`
-  );
-}
 
 // ============================================================================
 // Path Helpers (cross-platform compatible, sandbox-aware)

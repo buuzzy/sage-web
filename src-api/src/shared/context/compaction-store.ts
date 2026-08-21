@@ -8,7 +8,7 @@
  * Storage: ~/.sage/compaction/{sanitized-taskId}.json
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 
@@ -55,7 +55,7 @@ export function deleteCompaction(taskId: string): boolean {
   const p = compactionPath(taskId);
   if (!existsSync(p)) return false;
   try {
-    require('fs').unlinkSync(p);
+    rmSync(p);
     return true;
   } catch {
     return false;

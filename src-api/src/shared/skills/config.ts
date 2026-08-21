@@ -46,11 +46,6 @@ export function saveSkillsConfig(config: SkillsConfigFile): void {
 // Convenience helpers
 // ---------------------------------------------------------------------------
 
-export function isSkillDisabled(skillName: string): boolean {
-  const config = loadSkillsConfig();
-  return config.disabledSkills.includes(skillName);
-}
-
 export function setSkillEnabled(skillName: string, enabled: boolean): void {
   const config = loadSkillsConfig();
   const set = new Set(config.disabledSkills);

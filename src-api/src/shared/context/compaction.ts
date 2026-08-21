@@ -10,7 +10,6 @@
  * following OpenClaw's strict identifier preservation policy.
  */
 
-import type { CompactionSummary } from './session-store';
 import type { StoredCompaction } from './compaction-store';
 import { getProviderManager } from '@/shared/provider/manager';
 

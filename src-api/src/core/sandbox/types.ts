@@ -116,20 +116,6 @@ export interface SandboxProviderConfig {
   config: Record<string, unknown>;
 }
 
-export interface DockerProviderConfig extends SandboxProviderConfig {
-  type: 'docker';
-  config: {
-    /** Docker socket path */
-    socketPath?: string;
-    /** Default container image */
-    defaultImage?: string;
-    /** Memory limit (e.g., "1g") */
-    memoryLimit?: string;
-    /** CPU limit (e.g., "1.0") */
-    cpuLimit?: string;
-  };
-}
-
 export interface NativeProviderConfig extends SandboxProviderConfig {
   type: 'native';
   config: {
@@ -139,18 +125,6 @@ export interface NativeProviderConfig extends SandboxProviderConfig {
     shell?: string;
     /** Default timeout in milliseconds */
     defaultTimeout?: number;
-  };
-}
-
-export interface E2BProviderConfig extends SandboxProviderConfig {
-  type: 'e2b';
-  config: {
-    /** E2B API key */
-    apiKey?: string;
-    /** Sandbox template ID */
-    templateId?: string;
-    /** Sandbox timeout */
-    timeout?: number;
   };
 }
 
@@ -237,8 +211,6 @@ export const SANDBOX_IMAGES = {
   python: 'python:3.11-slim',
   bun: 'oven/bun:latest',
 } as const;
-
-export type SandboxImage = keyof typeof SANDBOX_IMAGES;
 
 export interface SandboxConfig {
   /** Whether sandbox mode is enabled */

@@ -182,25 +182,3 @@ export function appendRun(jobId: string, run: CronRun): void {
   job.updatedAt = new Date().toISOString();
   save();
 }
-
-/** Upsert a job by id — used by system job registration */
-export function upsertJob(job: Omit<CronJob, 'id' | 'createdAt' | 'updatedAt' | 'runs'> & { id: string }): CronJob {
-  const store = getStore();
-  const existing = store.jobs.find((j) => j.id === job.id);
-  const now = new Date().toISOString();
-
-  if (existing) {
-    // Update but keep run history and createdAt; enforce runs limit
-    const existingRuns = existing.runs ?? [];
-    const trimmedRuns = existingRuns.length > 10 ? existingRuns.slice(-10) : existingRuns;
-    Object.assign(existing, { ...job, updatedAt: now, runs: trimmedRuns });
-    save();
-    return existing;
-  }
-
-  const newJob: CronJob = { ...job, createdAt: now, updatedAt: now, runs: [] };
-  store.jobs.push(newJob);
-  save();
-  console.log(`[CronStore] Upserted system job: ${newJob.id} "${newJob.name}"`);
-  return newJob;
-}

@@ -66,6 +66,3 @@ export function createLogger(prefix: string) {
     },
   };
 }
-
-/** Log file path for user reference */
-export const LOG_FILE_PATH = LOG_FILE;

@@ -30,6 +30,3 @@ export function getBuiltInModelConfig(): BuiltInModelConfig | null {
     apiType: 'anthropic-messages',
   };
 }
-
-export const BUILTIN_MODEL_DISPLAY_NAME = 'Sage AI';
-export const BUILTIN_MODEL_ID = 'MiniMax-M3';

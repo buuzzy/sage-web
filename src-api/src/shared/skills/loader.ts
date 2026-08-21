@@ -308,7 +308,6 @@ export async function installBuiltinSkills(): Promise<void> {
       const srcSkillDir = join(sourceDir, entry.name);
       const destSkillDir = join(targetDir, entry.name);
       const srcSkillFile = join(srcSkillDir, 'SKILL.md');
-      const destSkillFile = join(destSkillDir, 'SKILL.md');
 
       // Check if source has SKILL.md
       try {

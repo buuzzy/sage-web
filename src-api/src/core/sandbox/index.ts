@@ -3,10 +3,7 @@ import { registerBuiltinProviders } from '@/extensions/sandbox/index';
 
 import type {
   ISandboxProvider,
-  SandboxExecOptions,
-  SandboxExecResult,
   SandboxProviderType,
-  ScriptOptions,
 } from './types.js';
 
 /**
@@ -154,65 +151,6 @@ export async function getBestProviderWithInfo(): Promise<ProviderSelectionResult
         '请检查系统环境或联系技术支持。'
     );
   }
-}
-
-/**
- * Execute a command using the best available sandbox
- */
-export async function execInSandbox(
-  options: SandboxExecOptions
-): Promise<SandboxExecResult> {
-  const { provider } = await getBestProviderWithInfo();
-  const result = await provider.exec(options);
-  const caps = provider.getCapabilities();
-
-  // Add provider info to result
-  return {
-    ...result,
-    provider: {
-      type: provider.type,
-      name: provider.name,
-      isolation: caps.isolation,
-    },
-  };
-}
-
-/**
- * Run a script using the best available sandbox
- * Returns result with provider info for UI display
- */
-export async function runScriptInSandbox(
-  filePath: string,
-  workDir: string,
-  options?: ScriptOptions
-): Promise<SandboxExecResult> {
-  const { provider, usedFallback, fallbackReason } =
-    await getBestProviderWithInfo();
-  const result = await provider.runScript(filePath, workDir, options);
-  const caps = provider.getCapabilities();
-
-  // Log which provider was used
-  const providerLabel =
-    provider.type === 'codex'
-      ? '🔒 Codex Sandbox (进程隔离)'
-      : provider.type === 'claude'
-        ? '🔒 Claude Sandbox (容器隔离)'
-        : '⚠️ Native (本机执行)';
-  console.log(`[Sandbox] Script executed via: ${providerLabel}`);
-
-  if (usedFallback && fallbackReason) {
-    console.log(`[Sandbox] Fallback reason: ${fallbackReason}`);
-  }
-
-  // Add provider info to result for UI display
-  return {
-    ...result,
-    provider: {
-      type: provider.type,
-      name: provider.name,
-      isolation: caps.isolation,
-    },
-  };
 }
 
 /**

@@ -82,8 +82,3 @@ export async function getSageSystemPrompt(): Promise<string> {
 
   return parts.join('\n\n---\n\n') + '\n\n---\n\n';
 }
-
-export function invalidateCache(): void {
-  cachedSoulPrompt = null;
-  cachedAgentsPrompt = null;
-}

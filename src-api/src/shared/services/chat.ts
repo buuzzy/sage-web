@@ -416,7 +416,9 @@ export async function generateTitle(
         thinking: { type: 'disabled' },
       };
 
-      const response = await (client.messages.create as Function)(requestParams);
+      const response = await (client.messages.create as unknown as (
+        body: Record<string, unknown>
+      ) => Promise<Anthropic.Message>)(requestParams);
       title = (response.content as Array<{ type: string; text?: string }>)
         .filter((block) => block.type === 'text')
         .map((block) => block.text || '')
