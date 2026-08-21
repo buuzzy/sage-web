@@ -164,8 +164,6 @@ export interface AgentOptions {
   taskId?: string;
   /** Abort controller for cancellation */
   abortController?: AbortController;
-  /** Permission mode */
-  permissionMode?: 'plan' | 'execute' | 'bypassPermissions';
   /** Sandbox configuration for isolated execution */
   sandbox?: SandboxConfig;
   /** Image attachments for vision capabilities */

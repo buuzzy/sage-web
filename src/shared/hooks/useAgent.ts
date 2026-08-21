@@ -58,7 +58,6 @@ import type {
   AgentQuestion,
   MessageAttachment,
   PendingQuestion,
-  PermissionRequest,
   SessionInfo,
   TaskPlan,
   UseAgentReturn,
@@ -66,7 +65,6 @@ import type {
 
 // Re-export types for backward compatibility
 export type {
-  PermissionRequest,
   QuestionOption,
   AgentQuestion,
   PendingQuestion,
@@ -146,8 +144,6 @@ export function useAgent(): UseAgentReturn {
   const [isRunning, setIsRunning] = useState(false);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [initialPrompt, setInitialPrompt] = useState<string>('');
-  const [pendingPermission, setPendingPermission] =
-    useState<PermissionRequest | null>(null);
   const [pendingQuestion, setPendingQuestion] =
     useState<PendingQuestion | null>(null);
   const [phase, setPhase] = useState<AgentPhase>('idle');
@@ -220,7 +216,6 @@ export function useAgent(): UseAgentReturn {
 
       // Clear UI state for the old task
       setMessages([]);
-      setPendingPermission(null);
       setPendingQuestion(null);
     }
 
@@ -816,13 +811,6 @@ export function useAgent(): UseAgentReturn {
           // UI updates only for active task
           if (isActive) {
             // Stream ended
-            setPendingPermission(null);
-          }
-        } else if (data.type === 'permission_request') {
-          // Handle permission request - only for active task
-          if (isActive && data.permission) {
-            setPendingPermission(data.permission);
-            setMessages((prev) => [...prev, data]);
           }
         } else if (data.type === 'session_action') {
           // /new or /reset: clear current session messages
@@ -897,7 +885,6 @@ export function useAgent(): UseAgentReturn {
             (data.type === 'text' && Boolean(data.content?.trim())) ||
             data.type === 'tool_use' ||
             data.type === 'tool_result' ||
-            (data as AgentMessage).type === 'permission_request' ||
             data.type === 'error'
           ) {
             sawVisibleStreamOutput = true;
@@ -1696,6 +1683,7 @@ export function useAgent(): UseAgentReturn {
             workDir,
             taskId,
             modelConfig,
+            language: getPreferredLanguage(),
             sandboxConfig,
             images: hasImages ? images : undefined,
             skillsConfig,
@@ -1815,7 +1803,6 @@ export function useAgent(): UseAgentReturn {
     setMessages([]);
     setTaskId(null);
     setInitialPrompt('');
-    setPendingPermission(null);
     setPendingQuestion(null);
     setPhase('idle');
     setIsRunning(false);
@@ -1824,49 +1811,6 @@ export function useAgent(): UseAgentReturn {
   }, []);
 
   // Respond to permission request
-  const respondToPermission = useCallback(
-    async (permissionId: string, approved: boolean): Promise<void> => {
-      if (!sessionIdRef.current) {
-        console.error('No active session to respond to permission');
-        return;
-      }
-
-      try {
-        const response = await fetch(`${AGENT_SERVER_URL}/agent/permission`, {
-          method: 'POST',
-          headers: await getRequestHeaders(),
-          body: JSON.stringify({
-            sessionId: sessionIdRef.current,
-            permissionId,
-            approved,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(
-            `Failed to respond to permission: ${response.status}`
-          );
-        }
-
-        // Clear pending permission
-        setPendingPermission(null);
-
-        // Add response message to UI
-        const responseMessage: AgentMessage = {
-          type: 'text',
-          content: approved
-            ? 'Permission granted. Continuing...'
-            : 'Permission denied. Operation cancelled.',
-        };
-        setMessages((prev) => [...prev, responseMessage]);
-      } catch (error) {
-        console.error('Failed to respond to permission:', error);
-        setPendingPermission(null);
-      }
-    },
-    []
-  );
-
   // Respond to question from AskUserQuestion tool
   const respondToQuestion = useCallback(
     async (
@@ -1960,7 +1904,6 @@ export function useAgent(): UseAgentReturn {
     sessionFolder,
     taskFolder,
     filesVersion,
-    pendingPermission,
     pendingQuestion,
     phase,
     runAgent,
@@ -1969,7 +1912,6 @@ export function useAgent(): UseAgentReturn {
     clearMessages,
     loadTask,
     loadMessages,
-    respondToPermission,
     respondToQuestion,
     setSessionInfo,
     generatedTitle,

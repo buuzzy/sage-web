@@ -38,14 +38,6 @@ export interface ClassifiedAgentError {
   status?: number;
 }
 
-export interface PermissionRequest {
-  id: string;
-  tool: string;
-  command?: string;
-  description: string;
-  risk_level?: 'low' | 'medium' | 'high';
-}
-
 // Question types for AskUserQuestion tool
 export interface QuestionOption {
   label: string;
@@ -86,7 +78,6 @@ export interface AgentMessage {
     | 'session'
     | 'done'
     | 'user'
-    | 'permission_request'
     | 'plan'
     | 'direct_answer'
     | 'session_action'
@@ -109,8 +100,6 @@ export interface AgentMessage {
   retryable?: boolean;
   status?: number;
   sessionId?: string;
-  // Permission request fields
-  permission?: PermissionRequest;
   // Tool result fields
   toolUseId?: string;
   output?: string;
@@ -163,7 +152,6 @@ export interface UseAgentReturn {
   sessionFolder: string | null;
   taskFolder: string | null; // Full path to current task folder (sessionFolder/task-XX)
   filesVersion: number; // Incremented when files are added (e.g., attachments saved)
-  pendingPermission: PermissionRequest | null;
   pendingQuestion: PendingQuestion | null;
   // Execution phase (idle while not running)
   phase: AgentPhase;
@@ -181,10 +169,6 @@ export interface UseAgentReturn {
   clearMessages: () => void;
   loadTask: (taskId: string) => Promise<Task | null>;
   loadMessages: (taskId: string) => Promise<void>;
-  respondToPermission: (
-    permissionId: string,
-    approved: boolean
-  ) => Promise<void>;
   respondToQuestion: (
     questionId: string,
     answers: Record<string, string>
