@@ -1,15 +1,8 @@
 import { createBrowserRouter } from 'react-router-dom';
-import {
-  HomePage,
-  LibraryPage,
-  LoginPage,
-  SetupPage,
-  TaskDetailPage,
-} from '@/app/pages';
+import { HomePage, LibraryPage, LoginPage, TaskDetailPage } from '@/app/pages';
+import { RouteErrorElement } from '@/app/route-error-element';
 
 import { AuthGuard } from '@/components/auth-guard';
-import { SetupGuard } from '@/components/setup-guard';
-import { RouteErrorElement } from '@/app/route-error-element';
 
 const routes = [
   {
@@ -20,9 +13,7 @@ const routes = [
     path: '/',
     element: (
       <AuthGuard>
-        <SetupGuard>
-          <HomePage />
-        </SetupGuard>
+        <HomePage />
       </AuthGuard>
     ),
   },
@@ -30,9 +21,7 @@ const routes = [
     path: '/task/:taskId',
     element: (
       <AuthGuard>
-        <SetupGuard>
-          <TaskDetailPage />
-        </SetupGuard>
+        <TaskDetailPage />
       </AuthGuard>
     ),
   },
@@ -40,15 +29,9 @@ const routes = [
     path: '/library',
     element: (
       <AuthGuard>
-        <SetupGuard>
-          <LibraryPage />
-        </SetupGuard>
+        <LibraryPage />
       </AuthGuard>
     ),
-  },
-  {
-    path: '/setup',
-    element: <SetupPage />,
   },
 ];
 

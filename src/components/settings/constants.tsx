@@ -1,19 +1,5 @@
 import type { ComponentType } from 'react';
-import {
-  customProviderModels,
-  defaultProviderIds,
-  defaultProviders,
-  providerDefaultModels,
-} from '@/shared/db/settings';
-import {
-  Brain,
-  Clock,
-  Cpu,
-  Info,
-  Settings,
-  Sparkles,
-  User,
-} from 'lucide-react';
+import { Brain, Info, Settings, Sparkles, User } from 'lucide-react';
 
 import type { SettingsCategory } from './types';
 
@@ -24,25 +10,7 @@ export const categoryIcons: Record<
 > = {
   account: User,
   general: Settings,
-  model: Cpu,
   skills: Sparkles,
-  cron: Clock,
   persona: Brain,
   about: Info,
 };
-
-// Provider icons mapping (derived from defaultProviders)
-export const providerIcons: Record<string, string> = Object.fromEntries(
-  defaultProviders.filter((p) => p.icon).map((p) => [p.id, p.icon!])
-);
-
-// Provider API Key settings URLs (derived from defaultProviders)
-export const providerApiKeyUrls: Record<string, string> = Object.fromEntries(
-  defaultProviders.filter((p) => p.apiKeyUrl).map((p) => [p.id, p.apiKeyUrl!])
-);
-
-// Re-export from settings.ts for backward compatibility
-export { customProviderModels, defaultProviderIds, providerDefaultModels };
-
-// Re-export API config
-export { API_PORT, API_BASE_URL } from '@/config';

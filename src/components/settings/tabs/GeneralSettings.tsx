@@ -1,4 +1,4 @@
-import type { Language } from '@/core/i18n/translations';
+import type { Language } from '@/config/locale';
 import {
   accentColors,
   backgroundStyles,
