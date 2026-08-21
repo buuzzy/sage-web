@@ -24,10 +24,6 @@ function RunningIndicator({
 
   // Get description of current activity
   const getActivityText = () => {
-    if (phase === 'planning') {
-      return '正在规划执行方案…';
-    }
-
     if (!lastToolUse?.name) {
       return phase === 'executing' ? '执行中…' : '思考中…';
     }

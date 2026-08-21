@@ -27,7 +27,7 @@ interface AuthContextType {
    * 本地 user-scoped DB 是否已绑定成功。
    *
    * 对 Web 端来说，默认走 IndexedDB + Supabase，同样保留这个状态是为了
-   * 让 AuthGuard / SetupGuard 的行为和 macOS 版本保持一致。
+   * 让 AuthGuard 的行为和 macOS 版本保持一致。
    */
   dbReady: boolean;
   dbError: string | null;

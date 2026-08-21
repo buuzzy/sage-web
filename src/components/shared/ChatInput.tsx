@@ -9,15 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MessageAttachment } from '@/shared/hooks/useAgent';
 import { cn } from '@/shared/lib/utils';
 import { useLanguage } from '@/shared/providers/language-provider';
-import {
-  ArrowUp,
-  FileText,
-  Paperclip,
-  Plus,
-  Send,
-  Square,
-  X,
-} from 'lucide-react';
+import { ArrowUp, Plus, Send, Square, X } from 'lucide-react';
 
 import { ContextUsageRing } from './ContextUsageRing';
 
@@ -33,10 +25,7 @@ export interface ChatInputProps {
   /** Whether the agent is running */
   isRunning?: boolean;
   /** Callback when submitting with text and image attachments */
-  onSubmit: (
-    text: string,
-    attachments?: MessageAttachment[]
-  ) => Promise<void>;
+  onSubmit: (text: string, attachments?: MessageAttachment[]) => Promise<void>;
   /** Callback when stop button is clicked */
   onStop?: () => void;
   /** Variant: 'home' for larger home page style, 'reply' for compact reply style */
@@ -62,9 +51,6 @@ export interface ChatInputProps {
 // Generate unique ID for attachments
 const generateId = () =>
   `attachment_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-
-// Module-level guard: prevent the same drop event from being handled by multiple ChatInput instances
-let lastDropTimestamp = 0;
 
 // Create preview for image files with error handling
 const createImagePreview = (file: File): Promise<string> => {
@@ -101,10 +87,8 @@ export function ChatInput({
   const { t } = useLanguage();
   const [value, setValue] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
   const prevIsRunningRef = useRef(isRunning);
 
@@ -140,39 +124,32 @@ export function ChatInput({
   }, [isRunning]);
 
   // Add image attachments
-  const addImages = useCallback(
-    async (files: FileList | File[]) => {
-      const fileArray = Array.from(files);
-      const newAttachments: Attachment[] = [];
+  const addImages = useCallback(async (files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    const newAttachments: Attachment[] = [];
 
-      console.log(
-        '[ChatInput] addImages called with',
-        fileArray.length,
-        'files'
-      );
+    console.log('[ChatInput] addImages called with', fileArray.length, 'files');
 
-      for (const file of fileArray) {
-        const attachment: Attachment = {
-          id: generateId(),
-          file,
-        };
+    for (const file of fileArray) {
+      const attachment: Attachment = {
+        id: generateId(),
+        file,
+      };
 
-        try {
-          attachment.preview = await createImagePreview(file);
-          console.log(
-            `[ChatInput] Created preview for ${file.name}, previewLength=${attachment.preview?.length || 0}`
-          );
-        } catch (error) {
-          console.error('[ChatInput] Failed to create image preview:', error);
-        }
-
-        newAttachments.push(attachment);
+      try {
+        attachment.preview = await createImagePreview(file);
+        console.log(
+          `[ChatInput] Created preview for ${file.name}, previewLength=${attachment.preview?.length || 0}`
+        );
+      } catch (error) {
+        console.error('[ChatInput] Failed to create image preview:', error);
       }
 
-      setAttachments((prev) => [...prev, ...newAttachments]);
-    },
-    []
-  );
+      newAttachments.push(attachment);
+    }
+
+    setAttachments((prev) => [...prev, ...newAttachments]);
+  }, []);
 
   // Remove attachment
   const removeAttachment = useCallback((id: string) => {
@@ -308,25 +285,14 @@ export function ChatInput({
 
   return (
     <div
-      ref={containerRef}
       className={cn(
         'relative w-full transition-colors',
         isHome
           ? 'border-border/50 bg-background rounded-2xl border p-4 shadow-lg'
           : 'border-border/60 bg-background rounded-xl border p-3 shadow-sm',
-        isDragging && 'border-primary/50 bg-primary/5 border-2',
         className
       )}
     >
-      {/* Drag overlay */}
-      {isDragging && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-[inherit]">
-          <div className="text-primary/70 flex items-center gap-2 text-sm font-medium">
-            <Paperclip className="size-4" />
-            <span>{t.home.dropFilesHere || 'Drop files here'}</span>
-          </div>
-        </div>
-      )}
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -352,8 +318,8 @@ export function ChatInput({
                   className="h-10 w-10 rounded object-cover"
                 />
               ) : (
-                <div className="bg-muted flex h-10 w-10 items-center justify-center rounded">
-                  <FileText className="text-muted-foreground h-5 w-5" />
+                <div className="bg-muted text-muted-foreground flex h-10 w-10 items-center justify-center rounded text-xs font-medium">
+                  {attachment.file.name.charAt(0).toUpperCase()}
                 </div>
               )}
               <span className="text-foreground max-w-[120px] truncate text-sm">

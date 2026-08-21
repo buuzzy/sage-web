@@ -16,7 +16,6 @@ function TaskGroupComponent({
   tools,
   isCompleted,
   isRunning,
-  searchQuery,
 }: {
   title: string;
   description: string;
@@ -27,7 +26,6 @@ function TaskGroupComponent({
   }[];
   isCompleted: boolean;
   isRunning: boolean;
-  searchQuery?: string;
 }) {
   const { t } = useLanguage();
   // Default: collapsed when completed, expanded when running or in progress
@@ -94,7 +92,6 @@ function TaskGroupComponent({
                     globalIndex === tools[tools.length - 1].globalIndex &&
                     isRunning
                   }
-                  searchQuery={searchQuery}
                 />
               ))}
             </div>

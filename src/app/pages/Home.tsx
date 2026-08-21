@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API_BASE_URL } from '@/config';
 import {
   createSession,
   deleteTask,
@@ -133,10 +132,10 @@ function HomeContent() {
 
   return (
     <div
-        className={cn(
-          'bg-sidebar flex h-screen overflow-hidden',
-          mobile && 'pt-[var(--safe-area-top)]'
-        )}
+      className={cn(
+        'bg-sidebar flex h-screen overflow-hidden',
+        mobile && 'pt-[var(--safe-area-top)]'
+      )}
     >
       {/* Left Sidebar */}
       <LeftSidebar
@@ -150,12 +149,12 @@ function HomeContent() {
 
       {/* Main Content */}
       <div
-          className={cn(
-            'bg-background flex min-w-0 flex-1 flex-col overflow-hidden',
-            mobile ? 'rounded-none' : 'my-2 mr-2 rounded-2xl shadow-sm'
-          )}
+        className={cn(
+          'bg-background flex min-w-0 flex-1 flex-col overflow-hidden',
+          mobile ? 'rounded-none' : 'my-2 mr-2 rounded-2xl shadow-sm'
+        )}
       >
-       {/* Content Area - Vertically Centered */}
+        {/* Content Area - Vertically Centered */}
         <div className="relative flex flex-1 flex-col items-center justify-center overflow-auto px-4">
           {/* Mobile sidebar toggle */}
           <button
@@ -186,9 +185,7 @@ function HomeContent() {
             <div
               className={cn(
                 'flex w-full gap-3',
-                mobile
-                  ? 'flex-col'
-                  : 'flex-row flex-wrap justify-center'
+                mobile ? 'flex-col' : 'flex-row flex-wrap justify-center'
               )}
             >
               {followOnPrompts.map((prompt) => (
@@ -199,9 +196,7 @@ function HomeContent() {
                   className={cn(
                     'border-border bg-background text-muted-foreground flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors',
                     'hover:bg-accent hover:text-foreground',
-                    mobile
-                      ? 'min-h-11 w-full justify-start'
-                      : 'max-w-md'
+                    mobile ? 'min-h-11 w-full justify-start' : 'max-w-md'
                   )}
                 >
                   <Sparkles className="size-4 shrink-0" />

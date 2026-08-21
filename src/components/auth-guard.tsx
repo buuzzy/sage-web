@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '@/shared/providers/auth-provider';
 import ImageLogo from '@/assets/logo.png';
+import { useAuth } from '@/shared/providers/auth-provider';
 
 interface AuthGuardProps {
   children: ReactNode;
@@ -12,7 +12,7 @@ interface AuthGuardProps {
  *
  * loading → 空白等待（避免闪烁）
  * unauthenticated → 跳转 /login
- * authenticated + dbReady → 渲染子组件（SetupGuard + 应用内容）
+ * authenticated + dbReady → 渲染应用内容
  * authenticated + !dbReady → 继续显示 loading（SQLite 正在按 uid 绑定）
  */
 export function AuthGuard({ children }: AuthGuardProps) {

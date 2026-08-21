@@ -1,50 +1,11 @@
 /**
  * Agent execution strategy classifier.
- * Pure functions that determine whether a prompt should go through
- * plan/approve/execute or direct execution.
+ * Single-path architecture: every prompt goes through direct execution
+ * with full tools + conversation context. The only classification left
+ * is multi-target detection, used to boost the prompt with batching hints.
  */
 
 import type { AgentExecutionStrategy } from './types';
-
-function isConversationalPrompt(lower: string): boolean {
-  const chinesePatterns = [
-    '你好',
-    '您好',
-    '在吗',
-    '谢谢',
-    '你是谁',
-    '你能做什么',
-    '你可以做什么',
-  ];
-  if (chinesePatterns.some((p) => lower.includes(p))) {
-    return true;
-  }
-
-  return /\b(hello|hi|hey|thanks|thank you)\b/i.test(lower);
-}
-
-function isMemoryRecallPrompt(lower: string): boolean {
-  const memoryRecallPatterns = [
-    'memory',
-    '记忆',
-    '历史',
-    '之前',
-    '以前',
-    '上次',
-    '回顾',
-    '回忆',
-    '复盘',
-    '找一下',
-    '查一下之前',
-    '聊过',
-    '说过',
-    '提到过',
-    '回测',
-    'backtest',
-  ];
-
-  return memoryRecallPatterns.some((p) => lower.includes(p));
-}
 
 function countExplicitSymbols(lower: string): number {
   const matches = lower.match(/\b(?:sh|sz|hk|bj)?\d{5,6}\b/g);
@@ -65,64 +26,10 @@ function isMultiTargetQuery(prompt: string): boolean {
   );
 }
 
-function hasDirectLookupIntent(lower: string): boolean {
-  const directPatterns = [
-    // Simple quote queries
-    '行情',
-    '股价',
-    '报价',
-    '价格',
-    '多少钱',
-    '现在多少',
-    '涨跌',
-    '涨幅',
-    '跌幅',
-    '涨了',
-    '跌了',
-    // K-line / chart
-    'k线',
-    'kline',
-    '走势',
-    '日线',
-    '周线',
-   // Simple lookups
-   '最新价',
-   '收盘价',
-   '开盘价',
-   '换手率',
-   '成交量',
-   '市盈率',
-   '市净率',
-    '估值',
-   'pe',
-   'pb',
-    // Fund NAV
-    '净值',
-    // Quick news
-    '新闻',
-    '资讯',
-    '快讯',
-    '早报',
-    // Short question forms
-    '怎么样',
-    '什么情况',
-    '表现如何',
-  ];
-
-  return directPatterns.some((p) => lower.includes(p));
-}
-
 function classifyAgentExecutionStrategy(
-  prompt: string,
-  options: { hasImages?: boolean; apiType?: string | null }
+  prompt: string
 ): AgentExecutionStrategy {
-  // Single-path architecture: all queries go through direct execution.
-  // The LLM decides its own workflow with full tools + conversation context.
-  // Plan/execute split has been removed — it caused context loss on follow-ups.
-  const trimmed = prompt.trim();
-  const lower = trimmed.toLowerCase();
-  const isOpenAiProvider = options.apiType === 'openai-completions';
-  const multiTarget = isMultiTargetQuery(trimmed);
+  const multiTarget = isMultiTargetQuery(prompt);
 
   return {
     route: 'direct',

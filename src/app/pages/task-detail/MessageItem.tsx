@@ -13,18 +13,10 @@ import { UserMessage } from './UserMessage';
 
 function MessageItem({
   message,
-  phase,
-  isRunning,
-  onApprovePlan,
-  onRejectPlan,
   allMessages,
   taskId,
 }: {
   message: AgentMessage;
-  phase?: string;
-  isRunning?: boolean;
-  onApprovePlan?: () => void;
-  onRejectPlan?: () => void;
   allMessages?: AgentMessage[];
   taskId?: string;
 }) {
@@ -38,14 +30,7 @@ function MessageItem({
   }
 
   if (message.type === 'plan' && message.plan) {
-    return (
-      <PlanApproval
-        plan={message.plan}
-        isWaitingApproval={phase === 'awaiting_approval' && !isRunning}
-        onApprove={onApprovePlan}
-        onReject={onRejectPlan}
-      />
-    );
+    return <PlanApproval plan={message.plan} />;
   }
 
   if (message.type === 'text') {

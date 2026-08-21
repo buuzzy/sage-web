@@ -1,12 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   deleteTask,
@@ -46,27 +38,6 @@ interface LocationState {
   attachments?: MessageAttachment[];
 }
 
-// Context for tool selection - allows child components to select tools
-interface ToolSelectionContextType {
-  selectedToolIndex: number | null;
-  setSelectedToolIndex: (index: number | null) => void;
-  showComputer: () => void;
-}
-
-const ToolSelectionContext = createContext<ToolSelectionContextType | null>(
-  null
-);
-
-export function useToolSelection() {
-  const context = useContext(ToolSelectionContext);
-  if (!context) {
-    throw new Error(
-      'useToolSelection must be used within ToolSelectionContext'
-    );
-  }
-  return context;
-}
-
 export function TaskDetailPage() {
   return (
     <SidebarProvider>
@@ -95,11 +66,8 @@ function TaskDetailContent() {
     loadTask,
     loadMessages,
     phase,
-    plan: _plan,
-    approvePlan,
-    rejectPlan,
-   pendingQuestion,
-   respondToQuestion,
+    pendingQuestion,
+    respondToQuestion,
     backgroundTasks,
     generatedTitle,
   } = useAgent();
@@ -133,7 +101,11 @@ function TaskDetailContent() {
     // Authoritative: covers system prompt + tools + history + current prompt.
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
-      if (m.type === 'result' && m.usage && typeof m.usage.input_tokens === 'number') {
+      if (
+        m.type === 'result' &&
+        m.usage &&
+        typeof m.usage.input_tokens === 'number'
+      ) {
         return m.usage.input_tokens;
       }
     }
@@ -142,7 +114,9 @@ function TaskDetailContent() {
       try {
         const parsed = JSON.parse(task.provider_usage);
         if (typeof parsed.input_tokens === 'number') return parsed.input_tokens;
-      } catch { /* ignore malformed JSON */ }
+      } catch {
+        /* ignore malformed JSON */
+      }
     }
     // Last resort: client-side estimate (only meaningful before first response)
     const settings = getSettings();
@@ -172,7 +146,7 @@ function TaskDetailContent() {
   const [isLoading, setIsLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
- const prevTaskIdRef = useRef<string | undefined>(undefined);
+  const prevTaskIdRef = useRef<string | undefined>(undefined);
 
   // Canvas panel state
   const [isCanvasVisible, setIsCanvasVisible] = useState(false);
@@ -217,17 +191,6 @@ function TaskDetailContent() {
     localStorage.setItem('canvasWidth', String(canvasWidth));
   }, [canvasWidth]);
 
-  // Handle resize drag — positive delta widens the canvas panel
-  const handleCanvasResize = useCallback((delta: number) => {
-    setCanvasWidth((prev) => {
-      const maxW = Math.min(800, window.innerWidth * 0.6);
-      return Math.max(320, Math.min(maxW, prev + delta));
-    });
- }, []);
-
-  // Tool search
-  const [toolSearchQuery] = useState('');
-
   // Title rename dialog state
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -253,35 +216,8 @@ function TaskDetailContent() {
     } catch (error) {
       console.error('Failed to rename task:', error);
     }
-   setRenameDialogOpen(false);
- }, [taskId, renameValue]);
-
-  // Selected tool operation index for syncing with virtual computer
-  const [selectedToolIndex, setSelectedToolIndex] = useState<number | null>(
-    null
-  );
-
-  // Calculate total tool count for auto-selection
-  const toolCount = useMemo(() => {
-    return messages.filter((m) => m.type === 'tool_use').length;
-  }, [messages]);
-
-  // Auto-select the latest tool when running
-  useEffect(() => {
-    if (isRunning && toolCount > 0) {
-      setSelectedToolIndex(toolCount - 1);
-    }
-  }, [toolCount, isRunning]);
-
-  // Tool selection context value
-  const toolSelectionValue = useMemo(
-    () => ({
-      selectedToolIndex,
-      setSelectedToolIndex,
-      showComputer: () => {}, // No-op since we removed the separate computer panel
-    }),
-    [selectedToolIndex]
-  );
+    setRenameDialogOpen(false);
+  }, [taskId, renameValue]);
 
   // Auto scroll to bottom only when task is running AND user hasn't scrolled up
   useEffect(() => {
@@ -443,9 +379,7 @@ function TaskDetailContent() {
         // Only reset UI state here - loadTask will handle task switching
         setTask(null);
         setHasStarted(false);
-       isInitializingRef.current = false; // Reset for new task
-
-        setSelectedToolIndex(null);
+        isInitializingRef.current = false; // Reset for new task
 
         // Reset canvas panel state
         setIsCanvasVisible(false);
@@ -506,12 +440,7 @@ function TaskDetailContent() {
         const sessionInfo = initialSessionId
           ? { sessionId: initialSessionId, taskIndex: initialTaskIndex }
           : undefined;
-        await runAgent(
-          initialPrompt,
-          taskId,
-          sessionInfo,
-          initialAttachments
-        );
+        await runAgent(initialPrompt, taskId, sessionInfo, initialAttachments);
         const newTask = await loadTask(taskId);
         setTask(newTask);
       } else {
@@ -526,10 +455,7 @@ function TaskDetailContent() {
 
   // Handle reply submission from ChatInput
   const handleReply = useCallback(
-    async (
-      text: string,
-      messageAttachments?: MessageAttachment[]
-    ) => {
+    async (text: string, messageAttachments?: MessageAttachment[]) => {
       if (
         (text.trim() ||
           (messageAttachments && messageAttachments.length > 0)) &&
@@ -585,7 +511,7 @@ function TaskDetailContent() {
   }, [messages, displayPrompt]);
 
   return (
-    <ToolSelectionContext.Provider value={toolSelectionValue}>
+    <>
       <div
         className={cn(
           'bg-sidebar flex h-screen overflow-hidden',
@@ -603,8 +529,8 @@ function TaskDetailContent() {
             ...backgroundTasks.filter((t) => t.isRunning).map((t) => t.taskId),
             // Include current task if it's running
             ...(isRunning && taskId ? [taskId] : []),
-         ]}
-       />
+          ]}
+        />
 
         {/* Main Content Area */}
         <div
@@ -668,7 +594,12 @@ function TaskDetailContent() {
               ref={messagesContainerRef}
               className="scrollbar-soft relative flex flex-1 justify-center overflow-x-hidden overflow-y-auto"
             >
-              <div className={cn('w-full max-w-[800px] pt-4 pb-24', mobile ? 'px-4' : 'px-6')}>
+              <div
+                className={cn(
+                  'w-full max-w-[800px] pt-4 pb-24',
+                  mobile ? 'px-4' : 'px-6'
+                )}
+              >
                 {isLoading ? (
                   <div className="flex min-h-[200px] items-center justify-center py-12">
                     <div className="text-muted-foreground flex items-center gap-3">
@@ -688,10 +619,6 @@ function TaskDetailContent() {
                     <MessageList
                       messages={messages}
                       isRunning={isRunning}
-                      searchQuery={toolSearchQuery}
-                      phase={phase}
-                      onApprovePlan={approvePlan}
-                      onRejectPlan={rejectPlan}
                       taskId={taskId}
                     />
 
@@ -723,7 +650,12 @@ function TaskDetailContent() {
                   <ArrowDown className="size-4" />
                 </button>
               )}
-              <div className={cn('w-full max-w-[800px] px-4', mobile ? 'pb-[calc(8px+var(--safe-area-bottom))]' : 'py-3')}>
+              <div
+                className={cn(
+                  'w-full max-w-[800px] px-4',
+                  mobile ? 'pb-[calc(8px+var(--safe-area-bottom))]' : 'py-3'
+                )}
+              >
                 <ChatInput
                   variant="reply"
                   placeholder={t.home.reply}
@@ -738,10 +670,10 @@ function TaskDetailContent() {
             </div>
           </div>
 
-         {/* Resize handle + Canvas Panel */}
-         {isCanvasVisible && (
-          <>
-               {mobile ? (
+          {/* Resize handle + Canvas Panel */}
+          {isCanvasVisible && (
+            <>
+              {mobile ? (
                 <div className="bg-background absolute inset-0 z-50 flex flex-col overflow-hidden">
                   <CanvasPanel
                     canvases={canvases}
@@ -787,8 +719,8 @@ function TaskDetailContent() {
                   </div>
                 </>
               )}
-           </>
-         )}
+            </>
+          )}
         </div>
       </div>
       {/* Rename dialog */}
@@ -827,6 +759,6 @@ function TaskDetailContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </ToolSelectionContext.Provider>
+    </>
   );
 }

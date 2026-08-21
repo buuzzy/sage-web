@@ -11,18 +11,10 @@ import { TaskGroupComponent } from './TaskGroupComponent';
 function MessageList({
   messages,
   isRunning,
-  searchQuery,
-  phase,
-  onApprovePlan,
-  onRejectPlan,
   taskId,
 }: {
   messages: AgentMessage[];
   isRunning: boolean;
-  searchQuery?: string;
-  phase?: string;
-  onApprovePlan?: () => void;
-  onRejectPlan?: () => void;
   taskId?: string;
 }) {
   if (messages.length === 0) {
@@ -272,7 +264,6 @@ function MessageList({
               tools={group.tools}
               isCompleted={group.isCompleted}
               isRunning={isRunning}
-              searchQuery={searchQuery}
             />
           );
         }
@@ -280,9 +271,6 @@ function MessageList({
           <MessageItem
             key={index}
             message={group.message}
-            phase={phase}
-            onApprovePlan={onApprovePlan}
-            onRejectPlan={onRejectPlan}
             allMessages={messages}
             taskId={taskId}
           />

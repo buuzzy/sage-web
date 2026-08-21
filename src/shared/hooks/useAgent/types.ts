@@ -10,15 +10,8 @@
 import type { Task } from '@/shared/db';
 import type { BackgroundTask } from '@/shared/lib/background-tasks';
 
-export type AgentExecutionRoute = 'direct' | 'plan';
-export type AgentExecutionIntent =
-  | 'conversation'
-  | 'memory_recall'
-  | 'simple_lookup'
-  | 'multi_target'
-  | 'complex_task'
-  | 'image'
-  | 'openai_provider';
+export type AgentExecutionRoute = 'direct';
+export type AgentExecutionIntent = 'simple_lookup' | 'multi_target';
 
 export interface AgentExecutionStrategy {
   route: AgentExecutionRoute;
@@ -154,11 +147,7 @@ export interface ConversationMessage {
   imagePaths?: string[]; // Image file paths for context
 }
 
-export type AgentPhase =
-  | 'idle'
-  | 'planning'
-  | 'awaiting_approval'
-  | 'executing';
+export type AgentPhase = 'idle' | 'executing';
 
 export interface SessionInfo {
   sessionId: string;
@@ -176,17 +165,14 @@ export interface UseAgentReturn {
   filesVersion: number; // Incremented when files are added (e.g., attachments saved)
   pendingPermission: PermissionRequest | null;
   pendingQuestion: PendingQuestion | null;
-  // Two-phase planning
+  // Execution phase (idle while not running)
   phase: AgentPhase;
-  plan: TaskPlan | null;
   runAgent: (
     prompt: string,
     existingTaskId?: string,
     sessionInfo?: SessionInfo,
     attachments?: MessageAttachment[]
   ) => Promise<string>;
-  approvePlan: () => Promise<void>;
-  rejectPlan: () => void;
   continueConversation: (
     reply: string,
     attachments?: MessageAttachment[]

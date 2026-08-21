@@ -12,7 +12,6 @@ interface ToolExecutionItemProps {
   result?: AgentMessage;
   isLast: boolean;
   isFirst?: boolean;
-  searchQuery?: string;
 }
 
 // Get tool display name
@@ -302,7 +301,9 @@ function ToolDetailModal({
         {/* Header */}
         <div className="border-border flex shrink-0 items-center justify-between border-b px-4 py-3">
           <div className="flex items-center gap-2">
-            <span className="font-mono font-medium">{getMcpToolDisplayName(toolName)}</span>
+            <span className="font-mono font-medium">
+              {getMcpToolDisplayName(toolName)}
+            </span>
             {isError && (
               <span className="rounded bg-red-500/10 px-1.5 py-0.5 text-xs text-red-500">
                 Error

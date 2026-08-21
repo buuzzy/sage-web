@@ -3,10 +3,14 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Copy, FileText, Image as ImageIcon } from 'lucide-react';
 import { getSettings } from '@/shared/db/settings';
 import type { AgentMessage } from '@/shared/hooks/useAgent';
-import { useLanguage } from '@/shared/providers/language-provider';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Copy,
+  Image as ImageIcon,
+} from 'lucide-react';
 
 import { serializeMessagesForCopy } from './helpers';
 
@@ -122,16 +126,16 @@ function AgentActionBar({
             return false;
           return true;
         },
-     });
+      });
 
-     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-     const fileName = `sage-${ts}.png`;
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const fileName = `sage-${ts}.png`;
 
-     // Browser download
-       const a = document.createElement('a');
-       a.download = fileName;
-       a.href = dataUrl;
-       a.click();
+      // Browser download
+      const a = document.createElement('a');
+      a.download = fileName;
+      a.href = dataUrl;
+      a.click();
     } catch (err) {
       console.error('[ExportImage] failed:', err);
     } finally {
@@ -154,7 +158,7 @@ function AgentActionBar({
         category: bugCategory,
         description: bugDesc.trim() || null,
         messageCount: allMessages.length,
-     };
+      };
 
       // ── 构造排查上下文 ──────────────────────────────────────────
       // 默认上报：轻量摘要（最近 3 条 user / 2 条 text，各截 240 字）+ 当前 provider/model

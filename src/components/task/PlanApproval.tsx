@@ -1,21 +1,18 @@
 import type { TaskPlan } from '@/shared/hooks/useAgent';
 import { cn } from '@/shared/lib/utils';
 import { useLanguage } from '@/shared/providers/language-provider';
-import { Ban, Check, ListTodo, Play, X } from 'lucide-react';
+import { Ban, Check, ListTodo, X } from 'lucide-react';
 
 interface PlanApprovalProps {
   plan: TaskPlan;
-  isWaitingApproval: boolean;
-  onApprove?: () => void;
-  onReject?: () => void;
 }
 
-export function PlanApproval({
-  plan,
-  isWaitingApproval,
-  onApprove,
-  onReject,
-}: PlanApprovalProps) {
+/**
+ * Read-only renderer for historical plan messages.
+ * The interactive plan approval flow was removed with the single-path
+ * architecture refactor — this component only displays stored plans.
+ */
+export function PlanApproval({ plan }: PlanApprovalProps) {
   const { t } = useLanguage();
 
   // Check if all steps are completed
@@ -30,9 +27,9 @@ export function PlanApproval({
     <div
       className={cn(
         'space-y-4 rounded-xl border p-4',
-        isCancelled && !isWaitingApproval
+        isCancelled
           ? 'border-muted-foreground/30 bg-muted/30'
-          : isAllCompleted && !isWaitingApproval
+          : isAllCompleted
             ? 'border-emerald-500/30 bg-emerald-50/30 dark:bg-emerald-950/20'
             : 'border-primary/30 bg-accent/30'
       )}
@@ -40,19 +37,15 @@ export function PlanApproval({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="text-foreground flex items-center gap-2 text-sm font-medium">
-          {isCancelled && !isWaitingApproval ? (
+          {isCancelled ? (
             <Ban className="text-muted-foreground size-4" />
-          ) : isAllCompleted && !isWaitingApproval ? (
+          ) : isAllCompleted ? (
             <Check className="size-4 text-emerald-500" />
           ) : (
             <ListTodo className="text-primary size-4" />
           )}
           {t.task.executionPlan}
-          {isWaitingApproval ? (
-            <span className="bg-primary/20 text-primary rounded-full px-2 py-0.5 text-xs">
-              {t.task.pendingApproval}
-            </span>
-          ) : isCancelled ? (
+          {isCancelled ? (
             <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">
               {t.task.planCancelled}
             </span>
@@ -129,26 +122,6 @@ export function PlanApproval({
         <div className="space-y-1">
           <p className="text-muted-foreground text-xs">{t.task.notes}</p>
           <p className="text-muted-foreground text-sm">{plan.notes}</p>
-        </div>
-      )}
-
-      {/* Action buttons - only show when waiting for approval */}
-      {isWaitingApproval && onApprove && onReject && (
-        <div className="flex items-center justify-end gap-2 pt-2">
-          <button
-            onClick={onReject}
-            className="text-muted-foreground hover:text-foreground hover:bg-accent flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors"
-          >
-            <X className="size-4" />
-            {t.task.cancel}
-          </button>
-          <button
-            onClick={onApprove}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 flex cursor-pointer items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm transition-colors"
-          >
-            <Play className="size-4" />
-            {t.task.startExecution}
-          </button>
         </div>
       )}
     </div>

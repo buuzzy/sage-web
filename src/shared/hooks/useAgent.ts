@@ -45,11 +45,11 @@ import {
   throwForBadResponse,
 } from './useAgent/errors';
 import { extractAndSaveFiles, extractFilesFromText } from './useAgent/files';
+import { matchSlashCommand } from './useAgent/slash-command';
 import {
   applyAgentStrategyHint,
   classifyAgentExecutionStrategy,
 } from './useAgent/strategy';
-import { matchSlashCommand } from './useAgent/slash-command';
 // Sub-module imports
 import { sanitizeTitle } from './useAgent/title';
 import type {
@@ -151,7 +151,6 @@ export function useAgent(): UseAgentReturn {
   const [pendingQuestion, setPendingQuestion] =
     useState<PendingQuestion | null>(null);
   const [phase, setPhase] = useState<AgentPhase>('idle');
-  const [plan, setPlan] = useState<TaskPlan | null>(null);
   // Session management
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [currentTaskIndex, setCurrentTaskIndex] = useState<number>(1);
@@ -171,9 +170,6 @@ export function useAgent(): UseAgentReturn {
   const taskIdRef = useRef<string | null>(null);
   const isRunningRef = useRef<boolean>(false);
   const initialPromptRef = useRef<string>('');
-  // Tracks the most recent prompt that should be passed to /agent/execute.
-  // For follow-up messages (continueConversation), this replaces initialPrompt.
-  const pendingExecutePromptRef = useRef<string>('');
 
   // Keep refs in sync with state (for use in callbacks to avoid stale closures)
   useEffect(() => {
@@ -226,7 +222,6 @@ export function useAgent(): UseAgentReturn {
       setMessages([]);
       setPendingPermission(null);
       setPendingQuestion(null);
-      setPlan(null);
     }
 
     // Stop any existing polling from previous task
@@ -595,22 +590,23 @@ export function useAgent(): UseAgentReturn {
             type: 'error' as const,
             message: msg.error_message || undefined,
           });
-       } else if (msg.type === 'plan') {
-         // Restore plan message with parsed plan data
-         try {
-           const planData = msg.content
-             ? (JSON.parse(msg.content) as TaskPlan)
-             : undefined;
-           if (planData) {
-             // Check if there's a result message after this plan (execution finished)
-             const hasResultAfter = dbMessages
-               .slice(i + 1)
-               .some((m) => m.type === 'result');
-             const executionFinished =
-               (taskIsCompleted || hasResultAfter) && !isRestoringFromBackground;
+        } else if (msg.type === 'plan') {
+          // Restore plan message with parsed plan data
+          try {
+            const planData = msg.content
+              ? (JSON.parse(msg.content) as TaskPlan)
+              : undefined;
+            if (planData) {
+              // Check if there's a result message after this plan (execution finished)
+              const hasResultAfter = dbMessages
+                .slice(i + 1)
+                .some((m) => m.type === 'result');
+              const executionFinished =
+                (taskIsCompleted || hasResultAfter) &&
+                !isRestoringFromBackground;
 
-             // Determine how to mark plan steps based on task status
-             let restoredPlan: TaskPlan;
+              // Determine how to mark plan steps based on task status
+              let restoredPlan: TaskPlan;
               if (taskIsStopped && executionFinished) {
                 // Task was cancelled - mark steps as cancelled
                 restoredPlan = {
@@ -649,45 +645,6 @@ export function useAgent(): UseAgentReturn {
       // Set messages immediately (with loading placeholders for attachments)
       setMessages(agentMessages);
       setTaskId(id);
-
-      // Check if task has a pending plan awaiting approval
-      // Only restore if NOT running in background (running tasks already have plan approved)
-      if (!isRestoringFromBackground) {
-        const lastPlanMessage = [...agentMessages]
-          .reverse()
-          .find((m) => m.type === 'plan' && m.plan);
-        if (
-          lastPlanMessage &&
-          lastPlanMessage.type === 'plan' &&
-          lastPlanMessage.plan
-        ) {
-         const planSteps = lastPlanMessage.plan.steps || [];
-         // Check if plan has incomplete steps (pending or no status)
-         const hasIncompleteSteps = planSteps.some(
-           (s) => !s.status || s.status === 'pending'
-         );
-         // Check if execution already finished (result message exists after plan)
-         const hasResultMessage = agentMessages.some(
-           (m) => m.type === 'result'
-         );
-
-          // Restore awaiting-approval state only if plan is truly unexecuted
-          if (hasIncompleteSteps && !taskIsCompleted && !taskIsStopped && !hasResultMessage) {
-            console.log(
-              '[useAgent] Restoring plan awaiting approval for task:',
-              id,
-              {
-                planSteps: planSteps.map((s) => ({
-                  description: s.description,
-                  status: s.status,
-                })),
-              }
-            );
-            setPlan(lastPlanMessage.plan);
-            setPhase('awaiting_approval');
-          }
-        }
-      }
 
       // Load attachments asynchronously in background
       if (attachmentLoadTasks.length > 0) {
@@ -777,9 +734,6 @@ export function useAgent(): UseAgentReturn {
         { name: string; input: Record<string, unknown> }
       > = new Map();
 
-      // Track tool execution progress for updating plan steps
-      let completedToolCount = 0;
-      let totalToolCount = 0;
       let sawToolActivity = false;
       let sawFinalTextAfterTool = false;
       let finalResultSubtype: string | undefined;
@@ -818,10 +772,7 @@ export function useAgent(): UseAgentReturn {
               });
               await updateTask(currentTaskId, { status: 'error' });
             } catch (dbError) {
-              console.error(
-                'Failed to save empty stream fallback:',
-                dbError
-              );
+              console.error('Failed to save empty stream fallback:', dbError);
             }
           } else if (
             sawToolActivity &&
@@ -864,18 +815,8 @@ export function useAgent(): UseAgentReturn {
 
           // UI updates only for active task
           if (isActive) {
-            // Stream ended - mark all plan steps as completed
+            // Stream ended
             setPendingPermission(null);
-            setPlan((currentPlan) => {
-              if (!currentPlan) return currentPlan;
-              return {
-                ...currentPlan,
-                steps: currentPlan.steps.map((step) => ({
-                  ...step,
-                  status: 'completed' as const,
-                })),
-              };
-            });
           }
         } else if (data.type === 'permission_request') {
           // Handle permission request - only for active task
@@ -885,14 +826,10 @@ export function useAgent(): UseAgentReturn {
           }
         } else if (data.type === 'session_action') {
           // /new or /reset: clear current session messages
-          if (
-            isActive &&
-            (data.action === 'new' || data.action === 'reset')
-          ) {
+          if (isActive && (data.action === 'new' || data.action === 'reset')) {
             console.log(`[useAgent] Session action: ${data.action}`);
             try {
-              const { deleteMessagesByTaskId } =
-                await import('@/shared/db');
+              const { deleteMessagesByTaskId } = await import('@/shared/db');
               await deleteMessagesByTaskId(currentTaskId);
               setMessages([]);
             } catch (err) {
@@ -925,24 +862,18 @@ export function useAgent(): UseAgentReturn {
               }
               // Reload messages in UI (map DB Message → AgentMessage to align types)
               const { getMessagesByTaskId } = await import('@/shared/db');
-              const freshMessages =
-                await getMessagesByTaskId(currentTaskId);
-              const agentMsgs: AgentMessage[] = freshMessages.map(
-                (msg) => ({
-                  type: msg.type as AgentMessage['type'],
-                  content: msg.content ?? undefined,
-                  name: msg.tool_name ?? undefined,
-                  output: msg.tool_output ?? undefined,
-                  toolUseId: msg.tool_use_id ?? undefined,
-                  subtype: msg.subtype as AgentMessage['subtype'],
-                })
-              );
+              const freshMessages = await getMessagesByTaskId(currentTaskId);
+              const agentMsgs: AgentMessage[] = freshMessages.map((msg) => ({
+                type: msg.type as AgentMessage['type'],
+                content: msg.content ?? undefined,
+                name: msg.tool_name ?? undefined,
+                output: msg.tool_output ?? undefined,
+                toolUseId: msg.tool_use_id ?? undefined,
+                subtype: msg.subtype as AgentMessage['subtype'],
+              }));
               setMessages(agentMsgs);
             } catch (err) {
-              console.error(
-                '[useAgent] Failed to apply compact result:',
-                err
-              );
+              console.error('[useAgent] Failed to apply compact result:', err);
             }
           }
         } else {
@@ -977,10 +908,7 @@ export function useAgent(): UseAgentReturn {
             // For tool_result messages, extract metadata for artifact mapping
             let messageToAdd = data;
             if (data.type === 'tool_result' && data.output && data.name) {
-              const metadata = extractToolMetadata(
-                data.output,
-                data.name
-              );
+              const metadata = extractToolMetadata(data.output, data.name);
               if (metadata) {
                 messageToAdd = {
                   ...data,
@@ -1004,15 +932,10 @@ export function useAgent(): UseAgentReturn {
               name: data.name,
               input: (data.input as Record<string, unknown>) || {},
             });
-            totalToolCount++;
 
             // Handle AskUserQuestion tool - show question UI and pause execution
             // Only handle for active task to avoid affecting wrong task's UI
-            if (
-              isActive &&
-              data.name === 'AskUserQuestion' &&
-              data.input
-            ) {
+            if (isActive && data.name === 'AskUserQuestion' && data.input) {
               const input = data.input as { questions?: AgentQuestion[] };
               if (input.questions && Array.isArray(input.questions)) {
                 setPendingQuestion({
@@ -1032,13 +955,17 @@ export function useAgent(): UseAgentReturn {
                 }
                 // Also stop backend agent
                 if (sessionIdRef.current) {
-                  getRequestHeaders().then(headers => fetch(
-                    `${AGENT_SERVER_URL}/agent/stop/${sessionIdRef.current}`,
-                    {
-                      method: 'POST',
-                      headers,
-                    }
-                  )).catch(() => {});
+                  getRequestHeaders()
+                    .then((headers) =>
+                      fetch(
+                        `${AGENT_SERVER_URL}/agent/stop/${sessionIdRef.current}`,
+                        {
+                          method: 'POST',
+                          headers,
+                        }
+                      )
+                    )
+                    .catch(() => {});
                 }
                 shouldStop = true;
                 return;
@@ -1072,37 +999,6 @@ export function useAgent(): UseAgentReturn {
                 setFilesVersion((v) => v + 1);
               }
             }
-
-            // Update plan step progress
-            completedToolCount++;
-            setPlan((currentPlan) => {
-              if (!currentPlan || !currentPlan.steps.length)
-                return currentPlan;
-
-              const stepCount = currentPlan.steps.length;
-              // Calculate how many steps should be completed based on tool progress
-              // Use a heuristic: distribute tool completions across steps
-              const progressRatio =
-                completedToolCount /
-                Math.max(totalToolCount, stepCount * 2);
-              const completedSteps = Math.min(
-                Math.floor(progressRatio * stepCount),
-                stepCount - 1 // Keep at least one step as in_progress until done
-              );
-
-              const updatedSteps = currentPlan.steps.map(
-                (step, index) => {
-                  if (index < completedSteps) {
-                    return { ...step, status: 'completed' as const };
-                  } else if (index === completedSteps) {
-                    return { ...step, status: 'in_progress' as const };
-                  }
-                  return { ...step, status: 'pending' as const };
-                }
-              );
-
-              return { ...currentPlan, steps: updatedSteps };
-            });
           }
 
           // Save message to database
@@ -1110,10 +1006,7 @@ export function useAgent(): UseAgentReturn {
             // Extract tool metadata for artifact mapping
             let toolMetadata: string | undefined;
             if (data.type === 'tool_result' && data.output && data.name) {
-              const metadata = extractToolMetadata(
-                data.output,
-                data.name
-              );
+              const metadata = extractToolMetadata(data.output, data.name);
               if (metadata) {
                 toolMetadata = serializeToolMetadata(metadata);
               }
@@ -1130,9 +1023,7 @@ export function useAgent(): UseAgentReturn {
                 | 'user',
               content: data.content,
               tool_name: data.name,
-              tool_input: data.input
-                ? JSON.stringify(data.input)
-                : undefined,
+              tool_input: data.input ? JSON.stringify(data.input) : undefined,
               tool_output: data.output,
               tool_use_id: data.toolUseId,
               tool_metadata: toolMetadata,
@@ -1160,7 +1051,10 @@ export function useAgent(): UseAgentReturn {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          if (shouldStop) { reader.cancel(); break; }
+          if (shouldStop) {
+            reader.cancel();
+            break;
+          }
 
           // Note: We no longer cancel the reader when task switches.
           // Background tasks continue to process the stream and save to database.
@@ -1204,7 +1098,9 @@ export function useAgent(): UseAgentReturn {
             if (res.status === 404) {
               // Task buffer expired (10-min TTL) — agent likely completed long ago.
               // Reload messages from DB as final fallback.
-              console.warn('[useAgent] Catchup buffer expired, reloading from DB');
+              console.warn(
+                '[useAgent] Catchup buffer expired, reloading from DB'
+              );
               break;
             }
 
@@ -1237,10 +1133,16 @@ export function useAgent(): UseAgentReturn {
       } catch (streamError) {
         if (_abortController.signal.aborted || shouldStop) return;
         // Stream disconnected (network error, proxy reset, etc.)
-      // Backend continues executing and buffering events — recover via catchup.
-      // streamError is typed as unknown by catch; coerce for logging
-      const errMsg = streamError instanceof Error ? streamError.message : String(streamError);
-        console.warn('[useAgent] SSE stream disconnected, recovering via catchup...', errMsg);
+        // Backend continues executing and buffering events — recover via catchup.
+        // streamError is typed as unknown by catch; coerce for logging
+        const errMsg =
+          streamError instanceof Error
+            ? streamError.message
+            : String(streamError);
+        console.warn(
+          '[useAgent] SSE stream disconnected, recovering via catchup...',
+          errMsg
+        );
         try {
           await catchupEvents();
         } catch (catchupError) {
@@ -1281,8 +1183,6 @@ export function useAgent(): UseAgentReturn {
       isRunningRef.current = true; // Sync update ref immediately
       setMessages([]);
       setInitialPrompt(prompt);
-      setPhase('planning');
-      setPlan(null);
 
       // Handle session info
       const sessId = sessionInfo?.sessionId || currentSessionId || '';
@@ -1403,67 +1303,10 @@ export function useAgent(): UseAgentReturn {
 
       const hasImages = images && images.length > 0;
 
-      // Save file attachments to disk and augment prompt with file paths
-      const fileAttachments =
-        attachments?.filter((a) => a.type === 'file') || [];
-      let augmentedPrompt = prompt;
+      // Note: non-image file attachments were removed with the image-only
+      // ChatInput refactor — attachments are always images now.
+      const augmentedPrompt = prompt;
       let savedFileRefs: AttachmentReference[] = [];
-
-      if (fileAttachments.length > 0) {
-        // Ensure we have a folder to save attachments to
-        let saveFolder = computedSessionFolder;
-        if (!saveFolder) {
-          try {
-            const base = await getSessionsBaseDir();
-            saveFolder = `${base}/temp-${Date.now()}`;
-          } catch {
-            // ignore
-          }
-        }
-
-        if (saveFolder) {
-          try {
-            savedFileRefs = await saveAttachments(saveFolder, fileAttachments);
-            console.log(
-              '[useAgent] Saved file attachments:',
-              savedFileRefs.map((r) => r.path)
-            );
-            setFilesVersion((v) => v + 1);
-
-            // Append file paths to prompt so the agent knows about them
-            const filePaths = savedFileRefs.map((r) => r.path).join('\n');
-            augmentedPrompt = `${prompt}\n\n[Attached files]\n${filePaths}`;
-          } catch (error) {
-            console.error('[useAgent] Failed to save file attachments:', error);
-          }
-        } else {
-          // Can't save to disk — include file content inline for small text files
-          console.warn(
-            '[useAgent] No folder available, embedding file content in prompt'
-          );
-          const fileInfo = fileAttachments
-            .map((a) => {
-              // For text-based files, decode and include content
-              if (
-                a.data &&
-                (a.mimeType?.startsWith('text/') ||
-                  a.name.match(/\.(csv|txt|json|xml|tsv|md|log)$/i))
-              ) {
-                try {
-                  const content = atob(
-                    a.data.includes(',') ? a.data.split(',')[1] : a.data
-                  );
-                  return `[File: ${a.name}]\n${content}`;
-                } catch {
-                  return `[File: ${a.name}] (unable to decode)`;
-                }
-              }
-              return `[File: ${a.name}] (binary file, unable to include inline)`;
-            })
-            .join('\n\n');
-          augmentedPrompt = `${prompt}\n\n${fileInfo}`;
-        }
-      }
 
       // Debug logging for attachments
       if (attachments && attachments.length > 0) {
@@ -1474,16 +1317,10 @@ export function useAgent(): UseAgentReturn {
           );
         });
         console.log('[useAgent] Valid images for API:', images?.length || 0);
-        console.log('[useAgent] File attachments:', fileAttachments.length);
-        console.log('[useAgent] computedSessionFolder:', computedSessionFolder);
-        console.log(
-          '[useAgent] augmentedPrompt:',
-          augmentedPrompt.slice(0, 200)
-        );
       }
 
-     try {
-       const modelConfig = getModelConfig();
+      try {
+        const modelConfig = getModelConfig();
 
         // Slash commands bypass planning and don't pollute conversation history
         const slashMatch = matchSlashCommand(augmentedPrompt);
@@ -1499,26 +1336,23 @@ export function useAgent(): UseAgentReturn {
           const language = getPreferredLanguage();
           const mcpConfig = getMcpConfig();
 
-          const response = await fetchWithRetry(
-            `${AGENT_SERVER_URL}/agent`,
-            {
-              method: 'POST',
-              headers: await getRequestHeaders(),
-              body: JSON.stringify({
-                prompt: augmentedPrompt,
-                workDir,
-                taskId: currentTaskId,
-                modelConfig,
-                sandboxConfig,
-                skillsConfig,
-                mcpConfig,
-                language,
-                userId: getCurrentBoundUid() ?? undefined,
-                accessToken: await getCurrentAccessToken(),
-              }),
-              signal: abortController.signal,
-            }
-          );
+          const response = await fetchWithRetry(`${AGENT_SERVER_URL}/agent`, {
+            method: 'POST',
+            headers: await getRequestHeaders(),
+            body: JSON.stringify({
+              prompt: augmentedPrompt,
+              workDir,
+              taskId: currentTaskId,
+              modelConfig,
+              sandboxConfig,
+              skillsConfig,
+              mcpConfig,
+              language,
+              userId: getCurrentBoundUid() ?? undefined,
+              accessToken: await getCurrentAccessToken(),
+            }),
+            signal: abortController.signal,
+          });
 
           throwForBadResponse(response, '/agent');
           await processStream(response, currentTaskId, abortController);
@@ -1535,10 +1369,7 @@ export function useAgent(): UseAgentReturn {
         // real-time data (time, weather, search) and incorrectly say "I can't".
 
         const isOpenAiProvider = modelConfig?.apiType === 'openai-completions';
-        const executionStrategy = classifyAgentExecutionStrategy(prompt, {
-          hasImages: Boolean(hasImages),
-          apiType: modelConfig?.apiType,
-        });
+        const executionStrategy = classifyAgentExecutionStrategy(prompt);
         const executionPrompt = applyAgentStrategyHint(
           augmentedPrompt,
           executionStrategy
@@ -1691,187 +1522,9 @@ export function useAgent(): UseAgentReturn {
           await processStream(response, currentTaskId, abortController);
           return currentTaskId;
         }
-
-        // Save user message to database (for plan path)
-        try {
-          const allRefs = [...savedFileRefs];
-          await createMessage({
-            task_id: currentTaskId,
-            type: 'user',
-            content: prompt,
-            attachments:
-              allRefs.length > 0 ? JSON.stringify(allRefs) : undefined,
-          });
-        } catch (error) {
-          console.error('Failed to save user message:', error);
-        }
-
-        // Phase 1: Request planning (no images)
-        const response = await fetchWithRetry(
-          `${AGENT_SERVER_URL}/agent/plan`,
-          {
-            method: 'POST',
-            headers: await getRequestHeaders(),
-             body: JSON.stringify({
-               prompt: executionPrompt,
-               modelConfig,
-               language: getPreferredLanguage(),
-               userId: getCurrentBoundUid() ?? undefined,
-               accessToken: await getCurrentAccessToken(),
-             }),
-            signal: abortController.signal,
-          }
-        );
-
-        throwForBadResponse(response, '/agent/plan');
-
-        // Process planning stream
-        const reader = response.body?.getReader();
-        if (!reader) throw new Error('No response body');
-
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let sawPlanningOutcome = false;
-
-        // Helper to check if this stream is still for the active task
-        const isActiveTask = () => activeTaskIdRef.current === currentTaskId;
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          // Note: We no longer cancel the reader when task switches.
-          // Planning streams continue in background, UI updates are skipped for inactive tasks.
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6)) as AgentMessage;
-
-                // Check if this task is still active for UI updates
-                const isActive = isActiveTask();
-
-                if (data.type === 'session') {
-                  if (isActive) {
-                    sessionIdRef.current = data.sessionId || null;
-                  }
-                } else if (data.type === 'direct_answer' && data.content) {
-                  sawPlanningOutcome = true;
-                  // Simple question - direct answer, no plan needed
-                  console.log(
-                    '[useAgent] Received direct answer, no plan needed'
-                  );
-                  // Extract actual answer if content is JSON
-                  let actualContent = data.content;
-                  try {
-                    if (
-                      typeof data.content === 'string' &&
-                      data.content.trim().startsWith('{')
-                    ) {
-                      const parsed = JSON.parse(data.content);
-                      if (parsed.answer && typeof parsed.answer === 'string') {
-                        actualContent = parsed.answer;
-                      }
-                    }
-                  } catch {
-                    // Not JSON, use original content
-                  }
-                  // UI updates only for active task
-                  if (isActive) {
-                    setMessages((prev) => [
-                      ...prev,
-                      { type: 'text', content: actualContent },
-                    ]);
-                    setPlan(null); // Clear any plan when we get a direct answer
-                    setPhase('idle');
-                  }
-
-                  // Save to database (always)
-                  try {
-                    await createMessage({
-                      task_id: currentTaskId,
-                      type: 'text',
-                      content: actualContent,
-                    });
-                    await updateTask(currentTaskId, { status: 'completed' });
-                  } catch (dbError) {
-                    console.error('Failed to save direct answer:', dbError);
-                  }
-                } else if (data.type === 'plan' && data.plan) {
-                  sawPlanningOutcome = true;
-                  // Complex task - received the plan, wait for approval
-                  // UI updates only for active task
-                  if (isActive) {
-                    setPlan(data.plan);
-                    setPhase('awaiting_approval');
-                    setMessages((prev) => [...prev, data]);
-                  }
-
-                  // Save plan to database (always, even if not active)
-                  try {
-                    await createMessage({
-                      task_id: currentTaskId,
-                      type: 'plan',
-                      content: JSON.stringify(data.plan),
-                    });
-                  } catch (dbError) {
-                    console.error('Failed to save plan:', dbError);
-                  }
-                } else if (data.type === 'text') {
-                  // Skip text messages that contain plan JSON (will be rendered by PlanApproval)
-                  const content = data.content || '';
-                  const isPlanJson =
-                    content.includes('"type"') &&
-                    content.includes('"plan"') &&
-                    (content.includes('"steps"') || content.includes('"goal"'));
-                  if (isActive && !isPlanJson) {
-                    setMessages((prev) => [...prev, data]);
-                  }
-                } else if (data.type === 'done') {
-                  if (!sawPlanningOutcome) {
-                    sawPlanningOutcome = true;
-                    const fallbackMessage: AgentMessage = {
-                      type: 'error',
-                      message: MODEL_EMPTY_RESPONSE_MESSAGE,
-                    };
-                    if (isActive) {
-                      setMessages((prev) => [...prev, fallbackMessage]);
-                      setPhase('idle');
-                    }
-                    try {
-                      await createMessage({
-                        task_id: currentTaskId,
-                        type: 'error',
-                        error_message: MODEL_EMPTY_RESPONSE_MESSAGE,
-                      });
-                      await updateTask(currentTaskId, { status: 'error' });
-                    } catch (dbError) {
-                      console.error(
-                        'Failed to save planning empty response fallback:',
-                        dbError
-                      );
-                    }
-                  }
-                } else if (data.type === 'error') {
-                  sawPlanningOutcome = true;
-                  if (isActive) {
-                    setMessages((prev) => [...prev, data]);
-                    setPhase('idle');
-                  }
-                }
-              } catch {
-                // Ignore parse errors
-              }
-            }
-          }
-        }
       } catch (error) {
         if ((error as Error).name !== 'AbortError') {
-          const classifiedError = classifyFetchError(error, '/agent/plan');
+          const classifiedError = classifyFetchError(error, '/agent');
           const errorMessage = classifiedError.message;
           console.error('[useAgent] Request failed:', {
             error,
@@ -1925,250 +1578,9 @@ export function useAgent(): UseAgentReturn {
     [isRunning, processStream]
   );
 
-  // Phase 2: Execute the approved plan
-  const approvePlan = useCallback(async (): Promise<void> => {
-    if (
-      !plan ||
-      !taskId ||
-      phase !== 'awaiting_approval' ||
-      isRunningRef.current
-    )
-      return;
-
-    // Ensure this task is the active one before execution
-    activeTaskIdRef.current = taskId;
-
-    setIsRunning(true);
-    isRunningRef.current = true; // Sync update ref immediately
-    setPhase('executing');
-
-    // Initialize plan steps as pending in UI
-    const updatedPlan: TaskPlan = {
-      ...plan,
-      steps: plan.steps.map((s) => ({ ...s, status: 'pending' as const })),
-    };
-    setPlan(updatedPlan);
-
-    // Save the plan as a message to the database for persistence
-    try {
-      await createMessage({
-        task_id: taskId,
-        type: 'plan',
-        content: JSON.stringify(updatedPlan),
-      });
-      console.log('[useAgent] Saved plan to database (approved):', updatedPlan.id);
-    } catch (error) {
-      console.error('Failed to save plan to database:', error);
-    }
-
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-
-    try {
-      // Use session folder directly as workDir (no task subfolder)
-      let workDir: string;
-      if (sessionFolder) {
-        workDir = sessionFolder;
-      } else {
-        const settings = getSettings();
-        workDir = settings.workDir || (await getAppDataDir());
-      }
-      const modelConfig = getModelConfig();
-      const sandboxConfig = getSandboxConfig();
-      const skillsConfig = getSkillsConfig();
-      const mcpConfig = getMcpConfig();
-      const language = getPreferredLanguage();
-
-      // Build conversation history so execute phase has multi-turn context.
-      const executeConversation = buildConversationHistory(initialPrompt, messages);
-
-      const response = await fetchWithRetry(
-        `${AGENT_SERVER_URL}/agent/execute`,
-        {
-          method: 'POST',
-          headers: await getRequestHeaders(),
-         body: JSON.stringify({
-           planId: plan.id,
-           prompt: pendingExecutePromptRef.current || initialPrompt,
-           conversation: executeConversation,
-           workDir,
-           taskId,
-           modelConfig,
-           sandboxConfig,
-           skillsConfig,
-           mcpConfig,
-           language,
-           userId: getCurrentBoundUid() ?? undefined,
-           accessToken: await getCurrentAccessToken(),
-         }),
-          signal: abortController.signal,
-        }
-      );
-
-      throwForBadResponse(response, '/agent/execute');
-
-      await processStream(response, taskId, abortController);
-    } catch (error) {
-      if ((error as Error).name !== 'AbortError') {
-        const classifiedError = classifyFetchError(error, '/agent/execute');
-        const errorMessage = classifiedError.message;
-        console.error('[useAgent] Execute failed:', {
-          error,
-          category: classifiedError.category,
-          retryable: classifiedError.retryable,
-          status: classifiedError.status,
-        });
-
-        // UI updates only for active task
-        if (activeTaskIdRef.current === taskId) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              type: 'error',
-              message: errorMessage,
-              errorCategory: classifiedError.category,
-              retryable: classifiedError.retryable,
-              status: classifiedError.status,
-            },
-          ]);
-        }
-
-        // Save to database (always)
-        try {
-          await createMessage({
-            task_id: taskId,
-            type: 'error',
-            error_message: errorMessage,
-            tool_metadata: JSON.stringify({
-              errorCategory: classifiedError.category,
-              retryable: classifiedError.retryable,
-              status: classifiedError.status,
-            }),
-          });
-          await updateTask(taskId, { status: 'error' });
-        } catch (dbError) {
-          console.error('Failed to save error:', dbError);
-        }
-      }
-    } finally {
-      // Only update running state if this is still the active task
-      if (activeTaskIdRef.current === taskId) {
-        setIsRunning(false);
-        setPhase('idle');
-        setPlan(null); // Clear plan state to prevent showing confirmation box again
-        abortControllerRef.current = null;
-
-        // Mark task as completed in database
-        try {
-          await updateTask(taskId, { status: 'completed' });
-        } catch (dbError) {
-          console.error('Failed to mark task as completed:', dbError);
-        }
-
-        // Reload messages from database to ensure all are displayed
-        // (in case some were missed during streaming)
-        try {
-          const dbMessages = await getMessagesByTaskId(taskId);
-          const agentMessages: AgentMessage[] = [];
-          for (const msg of dbMessages) {
-            if (msg.type === 'user') {
-              agentMessages.push({
-                type: 'user' as const,
-                content: msg.content || undefined,
-              });
-            } else if (msg.type === 'text') {
-              agentMessages.push({
-                type: 'text' as const,
-                content: msg.content || undefined,
-              });
-            } else if (msg.type === 'tool_use') {
-              agentMessages.push({
-                type: 'tool_use' as const,
-                name: msg.tool_name || undefined,
-                input: msg.tool_input ? JSON.parse(msg.tool_input) : undefined,
-              });
-            } else if (msg.type === 'tool_result') {
-              agentMessages.push({
-                type: 'tool_result' as const,
-                toolUseId: msg.tool_use_id || undefined,
-                output: msg.tool_output || undefined,
-              });
-            } else if (msg.type === 'result') {
-              agentMessages.push({
-                type: 'result' as const,
-                subtype: msg.subtype || undefined,
-              });
-            } else if (msg.type === 'error') {
-              agentMessages.push({
-                type: 'error' as const,
-                message: msg.error_message || undefined,
-              });
-            } else if (msg.type === 'plan') {
-              try {
-                const planData = msg.content
-                  ? (JSON.parse(msg.content) as TaskPlan)
-                  : undefined;
-                if (planData) {
-                  const completedPlan: TaskPlan = {
-                    ...planData,
-                    steps: planData.steps.map((s) => ({
-                      ...s,
-                      status: 'completed' as const,
-                    })),
-                  };
-                  agentMessages.push({
-                    type: 'plan' as const,
-                    plan: completedPlan,
-                  });
-                }
-              } catch {
-                // Ignore parse errors
-              }
-            } else {
-              agentMessages.push({ type: msg.type as AgentMessage['type'] });
-            }
-          }
-          setMessages(agentMessages);
-        } catch (reloadError) {
-          console.error(
-            '[useAgent] Failed to reload messages after execution:',
-            reloadError
-          );
-        }
-      }
-    }
-  }, [plan, taskId, phase, initialPrompt, processStream, sessionFolder]);
-
-  // Reject the plan
-  const rejectPlan = useCallback(async (): Promise<void> => {
-    setPlan(null);
-    setPhase('idle');
-    setMessages((prev) => [...prev, { type: 'text', content: '计划已取消。' }]);
-
-    // Save rejection to database so it won't be restored when switching back
-    if (taskId) {
-      try {
-        // Mark task as stopped (cancelled)
-        await updateTask(taskId, { status: 'stopped' });
-        // Save the cancellation message
-        await createMessage({
-          task_id: taskId,
-          type: 'text',
-          content: '计划已取消。',
-        });
-      } catch (error) {
-        console.error('Failed to save plan rejection:', error);
-      }
-    }
-  }, [taskId]);
-
-  // Continue conversation with context
   const continueConversation = useCallback(
-    async (
-      reply: string,
-      attachments?: MessageAttachment[]
-    ): Promise<void> => {
-     if (!taskId) return;
+    async (reply: string, attachments?: MessageAttachment[]): Promise<void> => {
+      if (!taskId) return;
 
       // Slash commands bypass normal conversation flow (no DB save, no UI message)
       const isSlashCmd = !!matchSlashCommand(reply);
@@ -2226,7 +1638,9 @@ export function useAgent(): UseAgentReturn {
       try {
         // Build conversation history including the new reply
         // Exclude slash command itself from conversation history
-        const currentMessages = isSlashCmd ? messages : [...messages, userMessage];
+        const currentMessages = isSlashCmd
+          ? messages
+          : [...messages, userMessage];
         const conversationHistory = buildConversationHistory(
           initialPrompt,
           currentMessages
@@ -2269,123 +1683,10 @@ export function useAgent(): UseAgentReturn {
           console.log('[useAgent] Valid images for API:', images?.length || 0);
         }
 
-        const followUpStrategy = classifyAgentExecutionStrategy(reply, {
-          hasImages: Boolean(hasImages),
-          apiType: modelConfig?.apiType,
-        });
+        const followUpStrategy = classifyAgentExecutionStrategy(reply);
         const executionPrompt = applyAgentStrategyHint(reply, followUpStrategy);
 
-        // Route complex queries through planning (PLAN → approve → execute)
-        // Simple/direct queries skip planning and go straight to /agent
-        if (followUpStrategy.route === 'plan' && !hasImages) {
-          console.log(
-            `[useAgent] Follow-up "${followUpStrategy.intent}", routing to /agent/plan`
-          );
-          setPhase('planning');
-          pendingExecutePromptRef.current = executionPrompt;
-
-          const planResponse = await fetchWithRetry(
-            `${AGENT_SERVER_URL}/agent/plan`,
-            {
-              method: 'POST',
-              headers: await getRequestHeaders(),
-              body: JSON.stringify({
-                prompt: executionPrompt,
-                modelConfig,
-                language: getPreferredLanguage(),
-                userId: getCurrentBoundUid() ?? undefined,
-                accessToken: await getCurrentAccessToken(),
-              }),
-              signal: abortController.signal,
-            }
-          );
-
-          throwForBadResponse(planResponse, '/agent/plan');
-
-          // Process planning stream
-          const reader = planResponse.body?.getReader();
-          if (!reader) throw new Error('No response body');
-
-          const decoder = new TextDecoder();
-          let buffer = '';
-          let sawOutcome = false;
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-              if (!line.startsWith('data: ')) continue;
-              try {
-                const data = JSON.parse(line.slice(6)) as AgentMessage;
-                const isActive = activeTaskIdRef.current === taskId;
-
-                if (data.type === 'session') {
-                  if (isActive) sessionIdRef.current = data.sessionId || null;
-                } else if (data.type === 'direct_answer' && data.content) {
-                  sawOutcome = true;
-                  let actualContent = data.content;
-                  try {
-                    if (typeof data.content === 'string' && data.content.trim().startsWith('{')) {
-                      const parsed = JSON.parse(data.content);
-                      if (parsed.answer && typeof parsed.answer === 'string') {
-                        actualContent = parsed.answer;
-                      }
-                    }
-                  } catch { /* not JSON */ }
-                  if (isActive) {
-                    setMessages((prev) => [...prev, { type: 'text', content: actualContent }]);
-                    setPhase('idle');
-                  }
-                  try {
-                    await createMessage({ task_id: taskId, type: 'text', content: actualContent });
-                    await updateTask(taskId, { status: 'completed' });
-                  } catch (dbErr) {
-                    console.error('[useAgent] Failed to save direct answer:', dbErr);
-                  }
-                } else if (data.type === 'plan' && data.plan) {
-                  sawOutcome = true;
-                  if (isActive) {
-                    setPlan(data.plan);
-                    setPhase('awaiting_approval');
-                    setMessages((prev) => [...prev, data]);
-                  }
-                  try {
-                    await createMessage({ task_id: taskId, type: 'plan', content: JSON.stringify(data.plan) });
-                  } catch (dbErr) {
-                    console.error('[useAgent] Failed to save plan:', dbErr);
-                  }
-                } else if (data.type === 'text') {
-                  const content = data.content || '';
-                  const isPlanJson = content.includes('"type"') && content.includes('"plan"') && (content.includes('"steps"') || content.includes('"goal"'));
-                  if (isActive && !isPlanJson) {
-                    setMessages((prev) => [...prev, data]);
-                  }
-                } else if (data.type === 'done') {
-                  if (!sawOutcome) {
-                    sawOutcome = true;
-                    if (isActive) {
-                      setMessages((prev) => [...prev, { type: 'error', message: MODEL_EMPTY_RESPONSE_MESSAGE }]);
-                      setPhase('idle');
-                    }
-                  }
-                }
-              } catch { /* skip parse errors */ }
-            }
-          }
-
-          // Planning phase ends here. If awaiting_approval, execution
-          // resumes when the user clicks approve → approvePlan().
-          // If direct_answer or error, phase was already set above.
-          return;
-        }
-
-        // Direct execution path (simple queries, images, OpenAI providers)
-        pendingExecutePromptRef.current = '';
+        // Direct execution path (single-path architecture)
         const response = await fetchWithRetry(`${AGENT_SERVER_URL}/agent`, {
           method: 'POST',
           headers: await getRequestHeaders(),
@@ -2517,7 +1818,6 @@ export function useAgent(): UseAgentReturn {
     setPendingPermission(null);
     setPendingQuestion(null);
     setPhase('idle');
-    setPlan(null);
     setIsRunning(false);
     sessionIdRef.current = null;
     activeTaskIdRef.current = null;
@@ -2663,10 +1963,7 @@ export function useAgent(): UseAgentReturn {
     pendingPermission,
     pendingQuestion,
     phase,
-    plan,
     runAgent,
-    approvePlan,
-    rejectPlan,
     continueConversation,
     stopAgent,
     clearMessages,
