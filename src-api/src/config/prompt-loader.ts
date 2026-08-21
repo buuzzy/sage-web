@@ -59,7 +59,7 @@ function buildDateContext(): string {
   const marketNote = isWeekend
     ? '今天是休市日（周末），A股/港股不交易，最新行情数据为上一个交易日收盘数据。'
     : '今天是交易日，行情数据为当日实时或最新收盘数据。';
-  return `# 当前日期\n今天是 ${dateStr}（${weekStr}）。${marketNote}`;
+  return `# 当前日期\n今天是 ${dateStr}（${weekStr}）。${marketNote}\n无论历史对话中出现什么日期，"今天"始终以本日期为准；追问近期行情时必须重新调工具获取最新数据。`;
 }
 
 /**
