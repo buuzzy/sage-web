@@ -1,15 +1,11 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 
-import type { SandboxConfig } from '@/core/agent/types';
 import {
   createSession,
   deleteSession,
-  getPlan,
   getSession,
   runAgent,
-  runExecutionPhase,
-  runPlanningPhase,
 } from '@/shared/services/agent';
 import { generateTitle, runChat } from '@/shared/services/chat';
 import { appendEvent, getEvents, getTaskStatus, initTaskBuffer, markTaskComplete } from '@/shared/task-events';
@@ -312,128 +308,7 @@ agent.post('/chat', async (c) => {
   return new Response(readable, { headers: SSE_HEADERS });
 });
 
-// Phase 1: Create a plan (no execution)
-agent.post('/plan', async (c) => {
-  const body = await c.req.json<AgentRequest>();
-  const ownerId = applyVerifiedIdentity(c, body);
-
-  console.log('[AgentAPI] POST /plan received:', {
-    hasPrompt: !!body.prompt,
-    hasModelConfig: !!body.modelConfig,
-    modelConfig: body.modelConfig
-      ? {
-          hasApiKey: !!body.modelConfig.apiKey,
-          baseUrl: body.modelConfig.baseUrl,
-          model: body.modelConfig.model,
-        }
-      : null,
-  });
-
-  if (!body.prompt) {
-    return c.json({ error: 'prompt is required' }, 400);
-  }
-
-  // Slash command interception (safety net — frontend also intercepts)
-  const slashResponse = await handleSlashCommand(body);
-  if (slashResponse) return slashResponse;
-
- const session = createSession('plan', ownerId);
- const resolvedConfig = await resolveModelConfig(body.modelConfig, body.userId);
- const planConversation = await ensureConversation(body);
- const readable = createSSEStream(
-   runPlanningPhase(
-     body.prompt,
-     session,
-     resolvedConfig,
-     body.language,
-     body.userId,
-     body.accessToken,
-     planConversation
-   ),
-   body.taskId,
-   ownerId
- );
-
-  return new Response(readable, { headers: SSE_HEADERS });
-});
-
-// Phase 2: Execute an approved plan
-agent.post('/execute', async (c) => {
-  const body = await c.req.json<{
-    planId: string;
-    prompt: string;
-    workDir?: string;
-    taskId?: string;
-    modelConfig?: { apiKey?: string; baseUrl?: string; model?: string };
-    sandboxConfig?: SandboxConfig;
-    skillsConfig?: {
-      enabled: boolean;
-      userDirEnabled: boolean;
-      appDirEnabled: boolean;
-      skillsPath?: string;
-    };
-    mcpConfig?: {
-      enabled: boolean;
-      userDirEnabled: boolean;
-      appDirEnabled: boolean;
-      mcpConfigPath?: string;
-    };
-    language?: string;
-    userId?: string;
-    accessToken?: string;
-    conversation?: Array<{ role: 'user' | 'assistant'; content: string }>;
-  }>();
-  const ownerId = applyVerifiedIdentity(c, body);
-
-  console.log('[AgentAPI] POST /execute received:', {
-    planId: body.planId,
-    hasPrompt: !!body.prompt,
-    sandboxConfig: body.sandboxConfig
-      ? {
-          enabled: body.sandboxConfig.enabled,
-          provider: body.sandboxConfig.provider,
-        }
-      : null,
-    skillsConfig: body.skillsConfig,
-    mcpConfig: body.mcpConfig,
-  });
-
-  if (!body.planId) {
-    return c.json({ error: 'planId is required' }, 400);
-  }
-
-  const plan = getPlan(body.planId, ownerId);
-  if (!plan) {
-    return c.json({ error: 'Plan not found or expired' }, 404);
-  }
-
-const session = createSession('execute', ownerId);
-const resolvedConfig = await resolveModelConfig(body.modelConfig, body.userId);
-const execConversation = await ensureConversation(body);
-const readable = createSSEStream(
-  runExecutionPhase(
-    body.planId,
-     session,
-     body.prompt || '',
-     body.workDir,
-     body.taskId,
-     resolvedConfig,
-     body.sandboxConfig,
-     body.skillsConfig,
-     body.mcpConfig,
-     body.language,
-    body.userId,
-    body.accessToken,
-    execConversation
-  ),
-  body.taskId,
-  ownerId
- );
-
- return new Response(readable, { headers: SSE_HEADERS });
-});
-
-// Legacy: Direct execution (plan + execute in one call)
+// Direct execution (single-path architecture: no plan/approve phase)
 agent.post('/', async (c) => {
   const body = await c.req.json<AgentRequest>();
   const ownerId = applyVerifiedIdentity(c, body);
@@ -482,7 +357,7 @@ agent.post('/', async (c) => {
   const slashResponse = await handleSlashCommand(body);
   if (slashResponse) return slashResponse;
 
- const session = createSession('plan', ownerId);
+ const session = createSession(ownerId);
  const taskId = body.taskId || session.id;
  const resolvedConfig = await resolveModelConfig(body.modelConfig, body.userId);
  const conversation = await ensureConversation(body);
@@ -565,18 +440,6 @@ agent.get('/session/:sessionId', async (c) => {
     phase: session.phase,
     isAborted: session.abortController.signal.aborted,
   });
-});
-
-// Get plan by ID
-agent.get('/plan/:planId', async (c) => {
-  const planId = c.req.param('planId');
-  const plan = getPlan(planId, accessOwner(c));
-
-  if (!plan) {
-    return c.json({ error: 'Plan not found' }, 404);
-  }
-
-  return c.json(plan);
 });
 
 // ─── Event Catchup (iOS 后台恢复) ─────────────────────────────────────────

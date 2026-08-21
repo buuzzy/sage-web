@@ -67,9 +67,6 @@ export function defineAgentPlugin(plugin: AgentPlugin): AgentPlugin {
 
 export {
   BaseAgent,
-  PLANNING_INSTRUCTION,
-  formatPlanForExecution,
-  parsePlanFromResponse,
   getWorkspaceInstruction,
 } from '@/core/agent/base';
 

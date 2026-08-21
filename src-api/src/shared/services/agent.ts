@@ -16,7 +16,6 @@ import {
   type McpConfig,
   type SandboxConfig,
   type SkillsConfig,
-  type TaskPlan,
 } from '@/core/agent';
 
 import { getProviderManager } from '@/shared/provider/manager';
@@ -38,9 +37,6 @@ const activeSessions = new Map<
   string,
   { ownerId: string; abortController: AbortController }
 >();
-
-// Global plan store (shared across all agent instances)
-const globalPlanStore = new Map<string, { ownerId: string; plan: TaskPlan }>();
 
 /**
  * Get or create the global agent instance
@@ -85,16 +81,13 @@ export async function getAgent(config?: Partial<AgentConfig>): Promise<IAgent> {
 }
 
 /**
- * Create a new agent session
+ * Create a new agent session (single-path architecture: always executing)
  */
-export function createSession(
-  phase: 'plan' | 'execute' = 'plan',
-  ownerId = 'local'
-): AgentSession {
+export function createSession(ownerId = 'local'): AgentSession {
   const session: AgentSession = {
     id: nanoid(),
     createdAt: new Date(),
-    phase: phase === 'plan' ? 'planning' : 'executing',
+    phase: 'executing',
     isAborted: false,
     abortController: new AbortController(),
   };
@@ -138,129 +131,6 @@ export function deleteSession(sessionId: string, ownerId?: string): boolean {
     return true;
   }
   return false;
-}
-
-/**
- * Get a stored plan from global store
- */
-export function getPlan(planId: string, ownerId?: string): TaskPlan | undefined {
-  const entry = globalPlanStore.get(planId);
-  if (!entry) return undefined;
-  if (ownerId && entry.ownerId !== ownerId) return undefined;
-  return entry.plan;
-}
-
-/**
- * Save a plan to global store
- */
-export function savePlan(plan: TaskPlan, ownerId = 'local'): void {
-  globalPlanStore.set(plan.id, { ownerId, plan });
-  console.log(`[AgentService] Plan saved to global store: ${plan.id}`);
-}
-
-/**
- * Delete a plan from global store
- */
-export function deletePlan(planId: string, ownerId?: string): boolean {
-  const entry = globalPlanStore.get(planId);
-  if (!entry || (ownerId && entry.ownerId !== ownerId)) return false;
-  const deleted = globalPlanStore.delete(planId);
-  if (deleted) {
-    console.log(`[AgentService] Plan deleted from global store: ${planId}`);
-  }
-  return deleted;
-}
-
-/**
- * Run the planning phase
- */
-export async function* runPlanningPhase(
-  prompt: string,
-  session: AgentSession,
-  modelConfig?: { apiKey?: string; baseUrl?: string; model?: string; apiType?: 'anthropic-messages' | 'openai-completions' },
-  language?: string,
-  userId?: string,
-  accessToken?: string,
-  conversation?: ConversationMessage[]
-): AsyncGenerator<AgentMessage> {
-  const ownerId = userId ?? 'local';
-  const agent = await getAgent(modelConfig as Partial<AgentConfig>);
-
-  for await (const message of agent.plan(prompt, {
-    sessionId: session.id,
-    abortController: session.abortController,
-    language,
-    userId,
-    accessToken,
-    conversation,
-  })) {
-    // Intercept plan messages and save to global store
-    if (message.type === 'plan' && message.plan) {
-      savePlan(message.plan, ownerId);
-    }
-    yield message;
-  }
-}
-
-/**
- * Run the execution phase
- */
-export async function* runExecutionPhase(
-  planId: string,
-  session: AgentSession,
-  originalPrompt: string,
-  workDir?: string,
-  taskId?: string,
-  modelConfig?: { apiKey?: string; baseUrl?: string; model?: string; apiType?: 'anthropic-messages' | 'openai-completions' },
-  sandboxConfig?: SandboxConfig,
-  skillsConfig?: SkillsConfig,
-  mcpConfig?: McpConfig,
-  language?: string,
-  userId?: string,
-  accessToken?: string,
-  conversation?: ConversationMessage[]
-): AsyncGenerator<AgentMessage> {
-  const ownerId = userId ?? 'local';
-  const agent = await getAgent(modelConfig);
-
-  // Get the plan from global store to pass to agent
-  // This is necessary because each agent instance has its own plan store
-  const plan = getPlan(planId, ownerId);
-  if (!plan) {
-    yield { type: 'error', message: `Plan not found: ${planId}` };
-    yield { type: 'done' };
-    return;
-  }
-
-  serviceLogger.info(`[AgentService] Executing plan: ${planId} (${plan.goal})`);
-  // Log sandbox config for debugging - write to file for packaged app visibility
-  serviceLogger.info('[AgentService] runExecutionPhase sandbox config:', {
-    hasSandboxConfig: !!sandboxConfig,
-    sandboxEnabled: sandboxConfig?.enabled,
-    sandboxProvider: sandboxConfig?.provider,
-    apiEndpoint: sandboxConfig?.apiEndpoint,
-  });
-  serviceLogger.info('[AgentService] runExecutionPhase skills config:', skillsConfig);
-  serviceLogger.info('[AgentService] runExecutionPhase mcp config:', mcpConfig);
-
-  for await (const message of agent.execute({
-    planId,
-    plan, // Pass the plan directly so agent doesn't need to look it up
-    originalPrompt,
-    sessionId: session.id,
-    cwd: workDir,
-    taskId,
-    abortController: session.abortController,
-    sandbox: sandboxConfig,
-    skillsConfig,
-    mcpConfig,
-    language,
-    userId,
-    accessToken,
-    conversation,
-  })) {
-    yield message;
-  }
 }
 
 /**
@@ -311,21 +181,10 @@ export async function* runAgent(
   }
 }
 
-/**
- * Stop an agent execution
- */
-export function stopAgent(sessionId: string): void {
-  const session = activeSessions.get(sessionId);
-  if (session) {
-    session.abortController.abort();
-  }
-}
-
 // Re-export types for convenience
 export type {
   AgentMessage,
   AgentSession,
-  TaskPlan,
   ConversationMessage,
   AgentConfig,
   IAgent,

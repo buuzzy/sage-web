@@ -45,9 +45,6 @@ export {
 // Export base utilities
 export {
   BaseAgent,
-  PLANNING_INSTRUCTION,
-  formatPlanForExecution,
-  parsePlanFromResponse,
   getWorkspaceInstruction,
   type AgentCapabilities,
 } from '@/core/agent/base';
@@ -82,13 +79,6 @@ export function registerBuiltinAgentProviders(): void {
 }
 
 /**
- * Get list of available providers
- */
-export function getAvailableProviders(): AgentProvider[] {
-  return getAgentRegistry().getRegistered() as AgentProvider[];
-}
-
-/**
  * Create an agent instance
  */
 export function createAgent(config: AgentConfig): IAgent {
@@ -110,38 +100,8 @@ export const DEFAULT_AGENT_CONFIG: AgentConfig = {
 };
 
 /**
- * Create a default agent (CodeAny)
- */
-export function createDefaultAgent(overrides?: Partial<AgentConfig>): IAgent {
-  return createAgent({
-    ...DEFAULT_AGENT_CONFIG,
-    ...overrides,
-  });
-}
-
-/**
  * Get the default agent provider
  */
 export function getDefaultProvider(): AgentProvider {
   return 'codeany';
-}
-
-// ============================================================================
-// Initialization
-// ============================================================================
-
-let initialized = false;
-
-/**
- * Initialize the agents module with built-in providers
- */
-export async function initAgents(): Promise<void> {
-  if (initialized) {
-    return;
-  }
-
-  registerBuiltinAgentProviders();
-  initialized = true;
-
-  console.log('[Agents] Module initialized');
 }

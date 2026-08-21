@@ -8,9 +8,6 @@
 import { mkdir, writeFile } from 'fs/promises';
 import { homedir, platform } from 'os';
 import { join } from 'path';
-import {
- query,
-} from '@codeany/open-agent-sdk';
 import type { AgentOptions as SdkAgentOptions } from '@codeany/open-agent-sdk';
 
 import { createAgent as createSdkAgent } from '@codeany/open-agent-sdk';
@@ -21,11 +18,7 @@ import { refreshSkillsForPrompt } from '@/shared/skills/predictor';
 import {
   BaseAgent,
   buildLanguageInstruction,
-  formatPlanForExecution,
   getWorkspaceInstruction,
-  parsePlanFromResponse,
-  parsePlanningResponse,
-  PLANNING_INSTRUCTION,
   type SandboxOptions,
 } from '@/core/agent/base';
 import { CODEANY_METADATA, defineAgentPlugin } from '@/core/agent/plugin';
@@ -36,11 +29,8 @@ import type {
   AgentOptions,
   AgentProvider,
   ConversationMessage,
-  ExecuteOptions,
   ImageAttachment,
   McpConfig,
-  PlanOptions,
-  TokenUsageSnapshot,
 } from '@/core/agent/types';
 import {
   DEFAULT_API_HOST,
@@ -48,7 +38,7 @@ import {
   DEFAULT_WORK_DIR,
 } from '@/config/constants';
 import { getSageSystemPrompt } from '@/config/prompt-loader';
-import { loadMcpServers, type McpServerConfig } from '@/shared/mcp/loader';
+import { loadMcpServers } from '@/shared/mcp/loader';
 import { isSupabaseConfigured } from '@/shared/supabase/client';
 
 import { buildPersonaSection } from './persona-injector';
@@ -782,18 +772,6 @@ export class CodeAnyAgent extends BaseAgent {
       this.sessions.delete(session.id);
       yield { type: 'done' };
     }
-  }
-
-  // plan() and execute() are deprecated — single-path architecture.
-  // Both delegate to run() which has full tools + conversation context.
-  async *plan(prompt: string, options?: PlanOptions): AsyncGenerator<AgentMessage> {
-    logger.info('[CodeAny] plan() delegated to run() (single-path architecture)');
-    yield* this.run(prompt, options as AgentOptions);
-  }
-
-  async *execute(options: ExecuteOptions): AsyncGenerator<AgentMessage> {
-    logger.info('[CodeAny] execute() delegated to run() (single-path architecture)');
-    yield* this.run(options.originalPrompt, options as AgentOptions);
   }
 }
 

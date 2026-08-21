@@ -194,21 +194,6 @@ export interface AgentOptions {
   accessToken?: string;
 }
 
-export interface PlanOptions extends AgentOptions {
-  /** Planning-specific options */
-}
-
-export interface ExecuteOptions extends AgentOptions {
-  /** Plan ID to execute */
-  planId: string;
-  /** Original prompt that created the plan */
-  originalPrompt: string;
-  /** Sandbox configuration */
-  sandbox?: SandboxConfig;
-  /** Plan object (optional - if not provided, will look up by planId) */
-  plan?: TaskPlan;
-}
-
 // ============================================================================
 // Agent Interface
 // ============================================================================
@@ -227,29 +212,9 @@ export interface IAgent {
   run(prompt: string, options?: AgentOptions): AsyncGenerator<AgentMessage>;
 
   /**
-   * Run planning phase only (returns a plan for approval)
-   */
-  plan(prompt: string, options?: PlanOptions): AsyncGenerator<AgentMessage>;
-
-  /**
-   * Execute an approved plan
-   */
-  execute(options: ExecuteOptions): AsyncGenerator<AgentMessage>;
-
-  /**
    * Stop the current execution
    */
   stop(sessionId: string): Promise<void>;
-
-  /**
-   * Get a stored plan by ID
-   */
-  getPlan(planId: string): TaskPlan | undefined;
-
-  /**
-   * Delete a stored plan
-   */
-  deletePlan(planId: string): void;
 }
 
 // ============================================================================
@@ -259,36 +224,11 @@ export interface IAgent {
 export interface AgentSession {
   id: string;
   createdAt: Date;
-  phase: 'planning' | 'executing' | 'idle';
+  phase: 'executing' | 'idle';
   isAborted: boolean;
   abortController: AbortController;
   config?: AgentConfig;
 }
-
-// ============================================================================
-// Tool Definitions
-// ============================================================================
-
-export interface ToolDefinition {
-  name: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-}
-
-export const DEFAULT_ALLOWED_TOOLS = [
-  'Read',
-  'Edit',
-  'Write',
-  'Glob',
-  'Grep',
-  'Bash',
-  'WebSearch',
-  'WebFetch',
-  'Skill',
-  'Task',
-  'LSP',
-  'TodoWrite',
-];
 
 // ============================================================================
 // Factory Types
@@ -312,9 +252,6 @@ export interface AgentRequest {
     role: 'user' | 'assistant';
     content: string;
   }>;
-  // Two-phase execution control
-  phase?: 'plan' | 'execute';
-  planId?: string; // Reference to approved plan
   // Workspace settings
   workDir?: string; // Working directory for session outputs
   taskId?: string; // Task ID for session folder
