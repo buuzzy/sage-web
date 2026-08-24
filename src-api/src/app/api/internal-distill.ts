@@ -5,7 +5,7 @@
  * 鉴权方式：
  *   · 读取 process.env.SAGE_INTERNAL_TOKEN
  *   · 调用方必须带 Authorization: Bearer <SAGE_INTERNAL_TOKEN>
- *   · 桌面端 sidecar（无 token）调用此端点会被拒绝——这是 Railway 上才该有的能力
+ *   · 未带 token 的调用一律拒绝——这是服务端才该有的能力
  *
  * 调用模式：
  *   · POST /internal/distill-cron        → 跑所有用户

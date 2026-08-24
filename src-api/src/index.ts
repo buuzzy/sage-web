@@ -52,9 +52,10 @@ const desktopRoutesDisabledInCloud = async (c: Context, next: Next) => {
   await next();
 };
 
-// ── Execution-capable routes (local-only: Tauri desktop UI only) ────────────
+// ── Execution-capable routes (authenticated) ───────────────────────────────
 // These routes can execute shell commands, read/write files, invoke tools, etc.
-// They must never be exposed to remote callers.
+// In cloud mode (SAGE_API_TOKEN set) access requires service-token or Supabase
+// JWT auth; in local dev it is restricted to loopback callers.
 app.use('/agent/*', localOnlyMiddleware);
 app.use('/sandbox/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
 app.use('/preview/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
@@ -66,10 +67,9 @@ app.use('/skills/config/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
 app.use('/skills/toggle/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
 app.use('/skills/*', localOnlyMiddleware);
 
-// ── Management routes (local-only: config, cron — no external access) ─
+// ── Management routes (authenticated: config, cron — no external access) ─
 // These routes expose sensitive configuration and internal state.
-// In production the sidecar binds 127.0.0.1 so external access is already
-// blocked at TCP level; this is defence-in-depth for dev mode (0.0.0.0).
+// Same auth model as above: JWT/token in cloud mode, loopback in local dev.
 app.use('/providers/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
 app.use('/cron/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
 
@@ -118,7 +118,7 @@ app.onError((err, c) => {
   return c.json({ error: 'Internal Server Error' }, 500);
 });
 
-// Default port: 2026 for development, 2620 for production (set via Tauri sidecar env)
+// Default port: 2026 for development; production (Railway) injects PORT.
 const port = Number(process.env.PORT) || 2026;
 
 // Store server instance for hot reload cleanup
@@ -208,8 +208,9 @@ async function start() {
   initScheduler();
   console.log('⏰ Cron scheduler initialized');
 
-  // Phase 3: register background jobs (persona distill cron) - only on Railway
-  // gated by SAGE_ENABLE_BACKGROUND_JOBS=true to avoid running on desktop sidecars.
+  // Phase 3: register background jobs (persona distill cron).
+  // Registration is gated by SUPABASE_SERVICE_ROLE_KEY + MINIMAX_API_KEY —
+  // hosts without them (local dev) skip registration naturally.
   const { registerBackgroundJobs } = await import('@/jobs/scheduler');
   registerBackgroundJobs();
 

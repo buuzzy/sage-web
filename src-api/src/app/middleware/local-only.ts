@@ -13,7 +13,7 @@
  *
  * 3. **Local mode** (SAGE_API_TOKEN is NOT set):
  *    Restricts access to loopback addresses (127.x.x.x / ::1).
- *    Used when sage-api runs as Tauri desktop sidecar.
+ *    Used when running sage-api locally for development.
  *
  * Applied to execution-capable routes:
  *   /agent, /sandbox, /preview, /files, /mcp, /skills
@@ -121,7 +121,7 @@ export async function localOnlyMiddleware(c: Context, next: Next): Promise<Respo
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  // ── Local mode: loopback check (desktop sidecar) ──────────────────────────
+  // ── Local mode: loopback check (local dev) ────────────────────────────────
   let remoteAddr: string | undefined;
 
   try {

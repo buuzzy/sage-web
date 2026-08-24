@@ -7,16 +7,11 @@
  *   · persona-distill: 每天凌晨 2 点北京时间 → 跑所有用户的 persona 蒸馏
  *
  * 启动条件（同时满足才注册）：
- *   1. process.env.SAGE_ENABLE_BACKGROUND_JOBS === 'true'
- *      → Railway / 受控服务器才打开；桌面端 sidecar 默认关闭
- *   2. process.env.SUPABASE_SERVICE_ROLE_KEY 已配置
- *      → 没有 service-role 拉不到跨用户数据
-*   3. process.env.MINIMAX_API_KEY 已配置
-*      → 无 LLM key 蒸馏跑不了
-*
-* 注：调度器只在 Railway 上运行。桌面端用户的对话也走 Railway sage-api
-* 时会被纳入；本地纯 sidecar 模式下用户数据本来就同步到云端，由 Railway 蒸馏。
-*/
+ *   1. process.env.SUPABASE_SERVICE_ROLE_KEY 已配置
+ *      → 没有 service-role 拉不到跨用户数据；本地 dev 未配置时自然跳过
+ *   2. process.env.MINIMAX_API_KEY 已配置
+ *      → 无 LLM key 蒸馏跑不了
+ */
 
 import cron from 'node-cron';
 
@@ -34,16 +29,9 @@ let registered = false;
 export function registerBackgroundJobs(): void {
   if (registered) return;
 
-  if (process.env.SAGE_ENABLE_BACKGROUND_JOBS !== 'true') {
-    console.log(
-      '[scheduler] background jobs disabled (SAGE_ENABLE_BACKGROUND_JOBS != true)'
-    );
-    return;
-  }
-
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     console.warn(
-      '[scheduler] SAGE_ENABLE_BACKGROUND_JOBS=true but SUPABASE_SERVICE_ROLE_KEY missing — skipping registration'
+      '[scheduler] SUPABASE_SERVICE_ROLE_KEY missing — skipping registration'
     );
     return;
   }
