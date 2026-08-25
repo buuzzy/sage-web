@@ -254,12 +254,6 @@ function getBuiltinSkillsSourceDir(): string {
   // In tsc build: dist/shared/skills/ -> resources/skills/
   const prodPath = join(thisDir, '..', '..', 'resources', 'skills');
   if (existsSync(prodPath)) return prodPath;
-  // In pkg binary inside macOS .app bundle:
-  //   process.execPath = Contents/MacOS/sage-api-aarch64-apple-darwin
-  //   Tauri resources  = Contents/Resources/resources/skills/
-  const binaryDir = dirname(process.execPath);
-  const appBundlePath = join(binaryDir, '..', 'Resources', 'resources', 'skills');
-  if (existsSync(appBundlePath)) return appBundlePath;
   // Fallback: CWD-relative
   const pkgPath = join(process.cwd(), 'resources', 'skills');
   if (existsSync(pkgPath)) return pkgPath;

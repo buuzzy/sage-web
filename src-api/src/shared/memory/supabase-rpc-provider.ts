@@ -3,17 +3,15 @@
  *
  * 用 supabase.rpc('search_messages') 召回历史消息，支持两种鉴权模式：
  *
- *   1. user-scoped 模式（默认，桌面端 sidecar 用）
+ *   1. user-scoped 模式（带用户 JWT 的请求）
  *      - ctx.accessToken 不为空 → 用 anon key + 用户 JWT 创建临时 client
  *      - 受 RLS 保护，函数内部 COALESCE(auth.uid(), user_id_filter) 强制用 auth.uid()
  *      - 用户即使在 user_id_filter 里传别人 uid 也无效（物理隔离）
- *      - 桌面端 .env 不需要 service role key，零 god-mode 暴露
+ *      - 无 service role 暴露
  *
- *   2. service-role 模式（Railway 等受控服务器）
+ *   2. service-role 模式（后台任务 / 无 JWT 的调用）
  *      - ctx.accessToken 为空 + service role 已配置 → 用 service-role client
  *      - 绕过 RLS，按 ctx.userId 显式过滤
- *      - 用于 iOS / Web 等未来场景：前端传 userId，Railway sage-api 用
- *        service role 拉数据
  *
  * 任何模式都通过同一个 search_messages RPC，返回数据结构一致。
  */

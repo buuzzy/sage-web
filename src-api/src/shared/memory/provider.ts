@@ -6,10 +6,10 @@
  * 中转等都不需要改 tool 的协议层。
  *
  * 当前实现：
- *   - SupabaseRpcMemoryProvider：双模式（service-role 走 Railway，user-JWT 走桌面）
+ *   - SupabaseRpcMemoryProvider：双模式（带用户 JWT 走 user-scoped RLS，
+ *     无 JWT 走 service-role + 应用层过滤）
  *
  * 未来可能的实现：
- *   - LocalSqliteMemoryProvider：桌面端读 ~/.sage/users/{uid}/sage.db
  *   - RemoteHttpMemoryProvider：通过自家 BFF 中转（access token 模式）
  */
 

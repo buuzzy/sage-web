@@ -1,17 +1,11 @@
 /**
  * Platform detection utilities.
  *
- * Provides unified platform detection for conditional behavior across
- * Tauri desktop and plain web environments.
+ * Web-only product: the only platform signal left is the viewport size
+ * (mobile-sized vs desktop-sized layout).
  */
 
 import { useSyncExternalStore } from 'react';
-
-// ─── Platform Flags ─────────────────────────────────────────────────────────
-
-/** Running inside Tauri desktop shell */
-export const isTauri =
-  typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
 /** Running on a mobile-sized viewport */
 export const isMobile =

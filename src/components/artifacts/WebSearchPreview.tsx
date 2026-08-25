@@ -199,14 +199,9 @@ function getDomain(url: string): string {
   }
 }
 
-// Open URL in external browser
+// Open URL in a new browser tab
 async function openUrl(url: string) {
-  try {
-    const { openUrl: tauriOpenUrl } = await import('@tauri-apps/plugin-opener');
-    await tauriOpenUrl(url);
-  } catch {
-    window.open(url, '_blank');
-  }
+  window.open(url, '_blank', 'noopener');
 }
 
 interface SearchResultItemProps {

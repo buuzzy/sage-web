@@ -8,12 +8,6 @@
     "build": "tsc",
     "start": "pnpm bundle && node dist/bundle.cjs",
     "bundle": "node scripts/bundle.mjs",
-    "build:binary": "pnpm bundle && pkg dist/bundle.cjs --targets node20-macos-arm64 --output dist/sage-api-aarch64-apple-darwin --options expose-gc",
-    "build:binary:linux": "pnpm bundle && pkg dist/bundle.cjs --targets node20-linux-x64 --output dist/sage-api-x86_64-unknown-linux-gnu --options expose-gc",
-    "build:binary:windows": "pnpm bundle && pkg dist/bundle.cjs --targets node20-win-x64 --output dist/sage-api-x86_64-pc-windows-msvc.exe --options expose-gc",
-    "build:binary:mac-intel": "pnpm bundle && pkg dist/bundle.cjs --targets node20-macos-x64 --output dist/sage-api-x86_64-apple-darwin --options expose-gc",
-    "build:binary:mac-arm": "pnpm bundle && pkg dist/bundle.cjs --targets node18-macos-arm64 --output dist/sage-api-aarch64-apple-darwin --options max-old-space-size=4096",
-    "build:binary:all": "pnpm run build:binary:linux && pnpm run build:binary:windows && pnpm run build:binary:mac-intel && pnpm run build:binary:mac-arm",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
@@ -36,7 +30,6 @@
     "@types/node-cron": "^3.0.11",
     "@typescript-eslint/eslint-plugin": "^8.53.0",
     "@typescript-eslint/parser": "^8.53.0",
-    "@yao-pkg/pkg": "^6.0.0",
     "esbuild": "^0.24.0",
     "eslint": "^9.39.2",
     "eslint-plugin-unused-imports": "^4.3.0",
@@ -45,9 +38,5 @@
     "prettier-plugin-tailwindcss": "^0.7.2",
     "tsx": "^4.21.0",
     "typescript": "^5.8.3"
-  },
-  "pkg": {
-    "scripts": "dist/**/*.js",
-    "outputPath": "dist"
   }
 }

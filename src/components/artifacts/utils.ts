@@ -1,5 +1,3 @@
-import { API_BASE_URL } from '@/config';
-
 import type { Artifact } from './types';
 
 // Max file size for preview (50MB)
@@ -156,18 +154,11 @@ export function inlineAssets(html: string, allArtifacts: Artifact[]): string {
   return result;
 }
 
-// Open file in external application
+// Open file/URL in a new browser tab (remote URLs only)
 export async function openFileExternal(path: string): Promise<void> {
   if (!path) return;
-  try {
-    await fetch(`${API_BASE_URL}/files/open`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path }),
-    });
-  } catch (err) {
-    console.error('[Preview] Failed to open file:', err);
-  }
+  if (!isRemoteUrl(path)) return;
+  window.open(path, '_blank', 'noopener');
 }
 
 // Get MIME type for video files

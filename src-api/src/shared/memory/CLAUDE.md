@@ -1,4 +1,4 @@
-# shared/memory/ — 记忆系统核心（当前主线为桌面端）
+# shared/memory/ — 记忆系统核心
 
 提供「记忆召回」抽象，让 Agent 能按需检索用户历史对话。
 
@@ -35,8 +35,8 @@ interface MemoryProvider {
 
 | 模式 | 条件 | Supabase client | 数据隔离 |
 |------|------|----------------|---------|
-| 桌面端 sidecar | accessToken 必传 | anon + JWT | RLS 强制隔离 |
-| Railway 服务器 | accessToken 可选 | service-role | 应用层 user_id 过滤 |
+| 用户请求（web 前端） | accessToken 透传 | anon + JWT | RLS 强制隔离 |
+| 后台任务 / 无 JWT 调用 | accessToken 缺省 | service-role | 应用层 user_id 过滤 |
 
 ## Supabase RPC 函数
 

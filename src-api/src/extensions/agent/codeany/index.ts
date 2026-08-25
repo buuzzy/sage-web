@@ -249,9 +249,9 @@ export class CodeAnyAgent extends BaseAgent {
    * so even in cloud mode (Railway) it's a loopback fetch. When SAGE_API_TOKEN
    * is set we forward it as a Bearer header to satisfy localOnlyMiddleware.
    *
-   * When `accessToken` is supplied (desktop sidecar mode) it is forwarded as
-   * a query-string parameter so the memory MCP can talk to Supabase under
-   * user-scoped RLS. The query string never leaves loopback.
+   * When `accessToken` is supplied it is forwarded as a query-string
+   * parameter so the memory MCP can talk to Supabase under user-scoped RLS.
+   * The query string never leaves the process boundary.
    */
  private buildBuiltinMcpServers(
    userId?: string,

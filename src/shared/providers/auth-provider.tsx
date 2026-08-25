@@ -6,7 +6,6 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { USE_LOCAL_SQLITE } from '@/config';
 import { bindUserId, unbindUser } from '@/shared/db/database';
 import { reloadSettingsForCurrentUser } from '@/shared/db/settings';
 import { supabase, type Session, type User } from '@/shared/lib/supabase';
@@ -136,14 +135,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setDbReady(true);
         startMessageSyncWorker();
 
-        if (!USE_LOCAL_SQLITE) {
-          try {
-            const { incrementalCloudSync } =
-              await import('@/shared/sync/cloud-restore');
-            await incrementalCloudSync();
-          } catch (err) {
-            console.warn('[Auth] Cloud sync failed (non-blocking):', err);
-          }
+        try {
+          const { incrementalCloudSync } =
+            await import('@/shared/sync/cloud-restore');
+          await incrementalCloudSync();
+        } catch (err) {
+          console.warn('[Auth] Cloud sync failed (non-blocking):', err);
         }
       } catch (err) {
         console.error('[Auth] bindUserId failed:', err);

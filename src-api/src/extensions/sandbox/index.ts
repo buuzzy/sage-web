@@ -1,15 +1,12 @@
 // Import for registration
 import type { SandboxPlugin } from '@/core/sandbox/plugin';
 import { getSandboxRegistry } from '@/core/sandbox/registry';
-import { claudePlugin } from '@/extensions/sandbox/claude';
-import { codexPlugin } from '@/extensions/sandbox/codex';
 import { nativePlugin } from '@/extensions/sandbox/native';
 
 /**
  * Sandbox Providers Index
  *
- * Exports all available sandbox providers and registers them with the registry.
- * Now uses the plugin system for better extensibility.
+ * Registers the native sandbox provider with the registry.
  */
 
 // Export providers
@@ -18,25 +15,11 @@ export {
   createNativeProvider,
   nativePlugin,
 } from '@/extensions/sandbox/native';
-export {
-  CodexProvider,
-  createCodexProvider,
-  codexPlugin,
-} from '@/extensions/sandbox/codex';
-export {
-  ClaudeProvider,
-  createClaudeProvider,
-  claudePlugin,
-} from '@/extensions/sandbox/claude';
 
 /**
  * All built-in plugins
  */
-export const builtinPlugins: SandboxPlugin[] = [
-  nativePlugin,
-  codexPlugin,
-  claudePlugin,
-];
+export const builtinPlugins: SandboxPlugin[] = [nativePlugin];
 
 /**
  * Register all built-in sandbox providers

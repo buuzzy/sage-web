@@ -4,8 +4,8 @@ import { createClient } from '@supabase/supabase-js';
  * Supabase client
  *
  * URL / anon key 来自 Vite 环境变量，在打包时被 define 替换：
- *   - `pnpm tauri dev` → configs/env/.env.development (或默认 fallback 到 prod)
- *   - `pnpm tauri build` → configs/env/.env.production
+ *   - `pnpm dev` → configs/env/.env.development (或默认 fallback 到 prod)
+ *   - `pnpm build` → configs/env/.env.production
  *
  * 为什么 anon key 可以公开：
  *   它只授予"匿名访问"（由 RLS 政策限制），不是 service_role key。
@@ -26,18 +26,13 @@ const SUPABASE_ANON_KEY =
   import.meta.env.VITE_SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5bXFnd3RhZ3BzanVvbnNjbHllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3NTczNjEsImV4cCI6MjA5MjMzMzM2MX0.2MmvzN_EJYBtAZdcny8fqs9K5UoBLE8KsXU1NEwH94U';
 
-const isTauri =
-  typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    // 桌面端通过 deep link 手动处理 callback，关闭 URL 检测
     // Web 端需要 Supabase 自动从 URL 中提取 session
-    detectSessionInUrl: !isTauri,
-    // PKCE flow：桌面端用 exchangeCodeForSession，Web 用隐式检测
-    flowType: isTauri ? 'pkce' : 'implicit',
+    detectSessionInUrl: true,
+    flowType: 'implicit',
   },
 });
 
@@ -46,8 +41,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
  * 未登录或拿不到 session 时返回 undefined。
  *
  * 用途：useAgent 的 fetch 调用把 token 透传给 sage-api，
- * sage-api 用它 + anon key 在 user-scoped 模式下访问 Supabase（受 RLS 保护），
- * 避免桌面端 sidecar 持有 service-role key。
+ * sage-api 用它 + anon key 在 user-scoped 模式下访问 Supabase（受 RLS 保护）。
  *
  * 内部走 supabase 缓存的 session，绝大多数情况下零网络（命中本地存储）。
  * 仅在 token 即将过期需要 refresh 时才会触发请求。

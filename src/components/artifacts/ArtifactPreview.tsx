@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { API_BASE_URL } from '@/config';
 import { cn } from '@/shared/lib/utils';
 import { useLanguage } from '@/shared/providers/language-provider';
 import {
@@ -8,16 +7,13 @@ import {
   Copy,
   ExternalLink,
   Eye,
-  FileCode2,
   FileText,
   Maximize2,
-  Radio,
   X,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-import { VitePreview } from '@/components/task/VitePreview';
 import {
   Tooltip,
   TooltipContent,
@@ -34,16 +30,12 @@ import { FontPreview } from './FontPreview';
 import { ImagePreview } from './ImagePreview';
 import { PdfPreview } from './PdfPreview';
 import { PptxPreview } from './PptxPreview';
-import type {
-  Artifact,
-  ArtifactPreviewProps,
-  PreviewMode,
-  ViewMode,
-} from './types';
+import type { Artifact, ArtifactPreviewProps, ViewMode } from './types';
 import {
   getFileExtension,
   getOpenWithApp,
   inlineAssets,
+  isRemoteUrl,
   parseCSV,
   parseFrontmatter,
 } from './utils';
@@ -82,54 +74,13 @@ export function ArtifactPreview({
   artifact,
   onClose,
   allArtifacts = [],
-  livePreviewUrl,
-  livePreviewStatus = 'idle',
-  livePreviewError,
-  onStartLivePreview,
-  onStopLivePreview,
 }: ArtifactPreviewProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('preview');
-  const [previewMode, setPreviewMode] = useState<PreviewMode>('static');
   const [copied, setCopied] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [isNodeAvailable, setIsNodeAvailable] = useState<boolean | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { t, tt } = useLanguage();
-
-  // Check if Node.js is available (required for Live Preview)
-  useEffect(() => {
-    async function checkNodeAvailable() {
-      try {
-        const response = await fetch(`${API_BASE_URL}/preview/node-available`);
-        const data = await response.json();
-        setIsNodeAvailable(data.available);
-        console.log('[ArtifactPreview] Node.js available:', data.available);
-      } catch (error) {
-        console.error(
-          '[ArtifactPreview] Failed to check Node.js availability:',
-          error
-        );
-        setIsNodeAvailable(false);
-      }
-    }
-    checkNodeAvailable();
-  }, []);
-
-  // Check if live preview is available for this artifact
-  // Requires: HTML artifact + onStartLivePreview handler + Node.js installed
-  const canUseLivePreview = useMemo(() => {
-    if (!artifact) return false;
-    if (!isNodeAvailable) return false;
-    return artifact.type === 'html' && onStartLivePreview !== undefined;
-  }, [artifact, onStartLivePreview, isNodeAvailable]);
-
-  // Auto-switch to live mode if live preview is already running
-  useEffect(() => {
-    if (livePreviewStatus === 'running' && canUseLivePreview) {
-      setPreviewMode('live');
-    }
-  }, [livePreviewStatus, canUseLivePreview]);
 
   // Reset view mode and slide when artifact changes
   useEffect(() => {
@@ -161,29 +112,13 @@ export function ArtifactPreview({
     }
   };
 
-  // Handle open in external app via API
+  // Handle open in new browser tab (remote artifacts only)
   const handleOpenExternal = async () => {
     if (!artifact) return;
 
-    if (artifact.path) {
-      try {
-        console.log(
-          '[ArtifactPreview] Opening file with system app:',
-          artifact.path
-        );
-        const response = await fetch(`${API_BASE_URL}/files/open`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: artifact.path }),
-        });
-        const result = await response.json();
-        if (!result.success) {
-          console.error('[ArtifactPreview] Failed to open file:', result.error);
-        }
-        return;
-      } catch (err) {
-        console.error('[ArtifactPreview] Failed to open file:', err);
-      }
+    if (artifact.path && isRemoteUrl(artifact.path)) {
+      window.open(artifact.path, '_blank', 'noopener');
+      return;
     }
 
     // Fallback for HTML content without path
@@ -194,87 +129,9 @@ export function ArtifactPreview({
     }
   };
 
-  // Check if artifact is a code file
-  const isCodeFile = useMemo(() => {
-    if (!artifact) return false;
-    const codeTypes = ['code', 'jsx', 'css', 'json', 'text', 'markdown'];
-    if (codeTypes.includes(artifact.type)) return true;
-    const ext = getFileExtension(artifact.name);
-    const codeExtensions = [
-      'js',
-      'jsx',
-      'ts',
-      'tsx',
-      'py',
-      'rb',
-      'go',
-      'rs',
-      'java',
-      'cpp',
-      'c',
-      'h',
-      'hpp',
-      'css',
-      'scss',
-      'less',
-      'html',
-      'htm',
-      'json',
-      'xml',
-      'yaml',
-      'yml',
-      'md',
-      'sql',
-      'sh',
-      'bash',
-      'zsh',
-      'toml',
-      'ini',
-      'conf',
-      'env',
-      'gitignore',
-      'dockerfile',
-      'makefile',
-      'gradle',
-      'swift',
-      'kt',
-      'scala',
-      'php',
-      'vue',
-      'svelte',
-    ];
-    return codeExtensions.includes(ext);
-  }, [artifact]);
-
-  // Handle open in code editor via API
-  const handleOpenInEditor = async () => {
-    if (!artifact?.path) return;
-
-    try {
-      console.log('[ArtifactPreview] Opening in editor:', artifact.path);
-      const response = await fetch(`${API_BASE_URL}/files/open-in-editor`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: artifact.path }),
-      });
-      const result = await response.json();
-      if (result.success) {
-        console.log('[ArtifactPreview] Opened in', result.editor);
-      } else {
-        console.error(
-          '[ArtifactPreview] Failed to open in editor:',
-          result.error
-        );
-      }
-    } catch (err) {
-      console.error('[ArtifactPreview] Failed to open in editor:', err);
-    }
-  };
-
   // Generate iframe content for HTML with inlined assets
-  // Only compute when in static preview mode to avoid unnecessary blob URL creation/revocation
-  const shouldShowStaticPreview =
-    viewMode === 'preview' && previewMode === 'static';
+  // Only compute in preview mode to avoid unnecessary blob URL creation/revocation
+  const shouldShowStaticPreview = viewMode === 'preview';
 
   const iframeSrc = useMemo(() => {
     // Only create blob URL when we need to show static preview
@@ -437,22 +294,6 @@ export function ArtifactPreview({
               </Tooltip>
             )}
 
-            {isCodeFile && artifact.path && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={handleOpenInEditor}
-                    className="text-muted-foreground hover:bg-accent hover:text-foreground flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
-                  >
-                    <FileCode2 className="size-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p>{t.preview.openInEditor}</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
@@ -491,7 +332,7 @@ export function ArtifactPreview({
       </div>
 
       {/* View mode toggle - translations handled inline */}
-      {(hasCodeView || (canUseLivePreview && viewMode === 'preview')) && (
+      {hasCodeView && (
         <div className="bg-muted/20 border-border/30 flex shrink-0 items-center gap-2 border-b px-4 py-2">
           {hasPreview && hasCodeView && (
             <div className="bg-muted flex items-center gap-1 rounded-lg p-0.5">
@@ -518,48 +359,6 @@ export function ArtifactPreview({
               >
                 <Code className="size-3.5" />
                 {t.preview.code}
-              </button>
-            </div>
-          )}
-
-          {canUseLivePreview && viewMode === 'preview' && (
-            <div className="bg-muted flex items-center gap-1 rounded-lg p-0.5">
-              <button
-                onClick={() => setPreviewMode('static')}
-                className={cn(
-                  'flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-                  previewMode === 'static'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <Eye className="size-3.5" />
-                {t.preview.static}
-              </button>
-              <button
-                onClick={() => {
-                  setPreviewMode('live');
-                  if (livePreviewStatus === 'idle' && onStartLivePreview) {
-                    onStartLivePreview();
-                  }
-                }}
-                className={cn(
-                  'flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-                  previewMode === 'live'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <Radio
-                  className={cn(
-                    'size-3.5',
-                    livePreviewStatus === 'running' && 'text-green-500'
-                  )}
-                />
-                {t.preview.live}
-                {livePreviewStatus === 'running' && (
-                  <span className="size-1.5 animate-pulse rounded-full bg-green-500" />
-                )}
               </button>
             </div>
           )}
@@ -596,25 +395,15 @@ export function ArtifactPreview({
       {/* Content */}
       <div className="flex-1 overflow-hidden">
         {viewMode === 'preview' ? (
-          previewMode === 'live' && canUseLivePreview ? (
-            <VitePreview
-              previewUrl={livePreviewUrl || null}
-              status={livePreviewStatus}
-              error={livePreviewError || null}
-              onStart={onStartLivePreview}
-              onStop={onStopLivePreview}
-            />
-          ) : (
-            <PreviewContent
-              artifact={artifact}
-              iframeSrc={iframeSrc}
-              iframeRef={iframeRef}
-              csvData={csvData}
-              slides={slides}
-              currentSlide={currentSlide}
-              onSlideChange={setCurrentSlide}
-            />
-          )
+          <PreviewContent
+            artifact={artifact}
+            iframeSrc={iframeSrc}
+            iframeRef={iframeRef}
+            csvData={csvData}
+            slides={slides}
+            currentSlide={currentSlide}
+            onSlideChange={setCurrentSlide}
+          />
         ) : (
           <CodePreview artifact={artifact} />
         )}
@@ -641,22 +430,10 @@ function PreviewContent({
   currentSlide: number;
   onSlideChange: (slide: number) => void;
 }) {
-  // Open file in system application
+  // Open remote artifact in a new browser tab
   const handleOpenExternal = async () => {
-    if (!artifact.path) return;
-    try {
-      const response = await fetch(`${API_BASE_URL}/files/open`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: artifact.path }),
-      });
-      const data = await response.json();
-      if (!data.success) {
-        console.error('[Preview] Failed to open file:', data.error);
-      }
-    } catch (err) {
-      console.error('[Preview] Error opening file:', err);
-    }
+    if (!artifact.path || !isRemoteUrl(artifact.path)) return;
+    window.open(artifact.path, '_blank', 'noopener');
   };
 
   // File too large

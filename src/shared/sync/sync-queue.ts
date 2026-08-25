@@ -3,7 +3,7 @@
  *
  * 设计要点：
  *   • 通用：支持任意 table_name × operation（'insert' | 'update' | 'delete'）
- *   • 持久化：SQLite (Tauri) / IndexedDB (iOS) 双端实现，重启不丢失
+ *   • 持久化：IndexedDB，重启不丢失
  *   • 指数退避：retry_count 0/1/2/3/4/5+ → 5s/15s/45s/2m/5m/30m
  *   • 用户隔离：user_id 字段，drain 时只处理当前 bound user
  *
@@ -12,7 +12,7 @@
  *   • startSyncWorker() 后台 loop → drainBatch() / markDone() / markFailed()
  */
 
-import { getCurrentBoundUid, getSQLiteDatabase } from '@/shared/db/database';
+import { getCurrentBoundUid } from '@/shared/db/database';
 import { uuidv7 } from 'uuidv7';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -98,29 +98,9 @@ export async function enqueueSync(
     created_at: new Date().toISOString(),
   };
 
-  const db = await getSQLiteDatabase();
-  if (db) {
-    await db.execute(
-      `INSERT INTO sync_queue
-       (id, user_id, table_name, operation, payload, retry_count, last_error, next_retry_at, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        row.id,
-        row.user_id,
-        row.table_name,
-        row.operation,
-        row.payload,
-        row.retry_count,
-        row.last_error,
-        row.next_retry_at,
-        row.created_at,
-      ]
-    );
-  } else {
-    const idb = await getIDB();
-    const tx = idb.transaction('sync_queue', 'readwrite');
-    await idbRequest(tx.objectStore('sync_queue').add(row));
-  }
+  const idb = await getIDB();
+  const tx = idb.transaction('sync_queue', 'readwrite');
+  await idbRequest(tx.objectStore('sync_queue').add(row));
 }
 
 /**
@@ -131,17 +111,6 @@ export async function drainBatch(limit = 10): Promise<SyncQueueRow[]> {
   if (!userId) return [];
 
   const nowISO = new Date().toISOString();
-
-  const db = await getSQLiteDatabase();
-  if (db) {
-    return db.select<SyncQueueRow>(
-      `SELECT * FROM sync_queue
-       WHERE user_id = $1 AND next_retry_at <= $2
-       ORDER BY created_at ASC
-       LIMIT $3`,
-      [userId, nowISO, limit]
-    );
-  }
 
   const idb = await getIDB();
   const tx = idb.transaction('sync_queue', 'readonly');
@@ -158,11 +127,6 @@ export async function drainBatch(limit = 10): Promise<SyncQueueRow[]> {
  * 同步成功，从队列删除。
  */
 export async function markDone(id: string): Promise<void> {
-  const db = await getSQLiteDatabase();
-  if (db) {
-    await db.execute(`DELETE FROM sync_queue WHERE id = $1`, [id]);
-    return;
-  }
   const idb = await getIDB();
   const tx = idb.transaction('sync_queue', 'readwrite');
   await idbRequest(tx.objectStore('sync_queue').delete(id));
@@ -172,19 +136,6 @@ export async function markDone(id: string): Promise<void> {
  * 同步失败，更新 retry_count + next_retry_at（指数退避）。
  */
 export async function markFailed(id: string, errorMsg: string): Promise<void> {
-  const db = await getSQLiteDatabase();
-  if (db) {
-    const rows = await db.select<{ retry_count: number }>(
-      `SELECT retry_count FROM sync_queue WHERE id = $1`,
-      [id]
-    );
-    const newCount = (rows[0]?.retry_count ?? 0) + 1;
-    await db.execute(
-      `UPDATE sync_queue SET retry_count = $1, last_error = $2, next_retry_at = $3 WHERE id = $4`,
-      [newCount, errorMsg.slice(0, 500), computeNextRetryAt(newCount), id]
-    );
-    return;
-  }
   const idb = await getIDB();
   const tx = idb.transaction('sync_queue', 'readwrite');
   const store = tx.objectStore('sync_queue');

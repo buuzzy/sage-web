@@ -6,16 +6,11 @@ import type { Context, Next } from 'hono';
 import '@/config/env';
 import {
   agentRoutes,
-  cronRoutes,
-  filesRoutes,
   healthRoutes,
   internalDistillRoutes,
   mcpRoutes,
   mcpMemoryRoutes,
   personaRoutes,
-  previewRoutes,
-  providersRoutes,
-  sandboxRoutes,
   skillsRoutes,
 } from '@/app/api';
 import { corsMiddleware, localOnlyMiddleware } from '@/app/middleware/index.js';
@@ -24,7 +19,6 @@ import {
   initProviderManager,
   shutdownProviderManager,
 } from '@/shared/provider/manager';
-import { getPreviewManager } from '@/shared/services/preview';
 
 const app = new Hono();
 
@@ -45,46 +39,31 @@ app.use('*', corsMiddleware);
 // Route registration
 // ---------------------------------------------------------------------------
 
-const desktopRoutesDisabledInCloud = async (c: Context, next: Next) => {
+// Local-only feature routes (MCP server config, skills config/toggle) are not
+// exposed in cloud mode — only meaningful when running locally for development.
+const localFeatureGuard = async (c: Context, next: Next) => {
   if (process.env.SAGE_API_TOKEN) {
     return c.json({ error: 'Not Found' }, 404);
   }
   await next();
 };
 
-// ── Execution-capable routes (authenticated) ───────────────────────────────
-// These routes can execute shell commands, read/write files, invoke tools, etc.
-// In cloud mode (SAGE_API_TOKEN set) access requires service-token or Supabase
-// JWT auth; in local dev it is restricted to loopback callers.
+// ── Authenticated routes (cloud: service token or Supabase JWT; dev: loopback)
 app.use('/agent/*', localOnlyMiddleware);
-app.use('/sandbox/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
-app.use('/preview/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
-app.use('/files/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
-app.use('/mcp/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
+app.use('/mcp/*', localFeatureGuard, localOnlyMiddleware);
 app.use('/mcp-memory/*', localOnlyMiddleware);
 app.use('/persona/*', localOnlyMiddleware);
-app.use('/skills/config/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
-app.use('/skills/toggle/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
+app.use('/skills/config/*', localFeatureGuard, localOnlyMiddleware);
+app.use('/skills/toggle/*', localFeatureGuard, localOnlyMiddleware);
 app.use('/skills/*', localOnlyMiddleware);
-
-// ── Management routes (authenticated: config, cron — no external access) ─
-// These routes expose sensitive configuration and internal state.
-// Same auth model as above: JWT/token in cloud mode, loopback in local dev.
-app.use('/providers/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
-app.use('/cron/*', desktopRoutesDisabledInCloud, localOnlyMiddleware);
 
 // Routes
 app.route('/health', healthRoutes);
 app.route('/agent', agentRoutes);
-app.route('/sandbox', sandboxRoutes);
-app.route('/preview', previewRoutes);
-app.route('/providers', providersRoutes);
-app.route('/files', filesRoutes);
 app.route('/mcp', mcpRoutes);
 app.route('/mcp-memory', mcpMemoryRoutes);
 app.route('/persona', personaRoutes);
 app.route('/skills', skillsRoutes);
-app.route('/cron', cronRoutes);
 app.route('/internal', internalDistillRoutes);
 
 // Root endpoint
@@ -95,14 +74,10 @@ app.get('/', (c) => {
     endpoints: {
       health: '/health',
       agent: '/agent',
-      sandbox: '/sandbox',
-      preview: '/preview',
-      providers: '/providers',
-      files: '/files',
       mcp: '/mcp',
       mcpMemory: '/mcp-memory',
+      persona: '/persona',
       skills: '/skills',
-      cron: '/cron',
     },
   });
 });
@@ -126,22 +101,6 @@ let server: ServerType | null = null;
 
 // Cleanup function
 const cleanup = async () => {
-  // Shutdown cron scheduler (stops all scheduled tasks)
-  try {
-    const { shutdownScheduler } = await import('@/shared/cron/scheduler');
-    shutdownScheduler();
-  } catch (error) {
-    console.error('Error shutting down cron scheduler:', error);
-  }
-
-  // Stop all preview servers
-  try {
-    const previewManager = getPreviewManager();
-    await previewManager.stopAll();
-  } catch (error) {
-    console.error('Error stopping preview servers:', error);
-  }
-
   // Shutdown provider manager
   try {
     await shutdownProviderManager();
@@ -200,13 +159,6 @@ async function start() {
   import('@/shared/context/session-store').then(({ cleanupOldSessions }) => {
     cleanupOldSessions(7);
   });
-
-  // Initialize cron scheduler (loads persisted jobs, schedules enabled ones).
-  // Phase 2 移除了 sys-memory-consolidation 这个内置任务；scheduler 在启动时
-  // 会主动清理历史中可能残留的同名 job。
-  const { initScheduler } = await import('@/shared/cron/scheduler');
-  initScheduler();
-  console.log('⏰ Cron scheduler initialized');
 
   // Phase 3: register background jobs (persona distill cron).
   // Registration is gated by SUPABASE_SERVICE_ROLE_KEY + MINIMAX_API_KEY —

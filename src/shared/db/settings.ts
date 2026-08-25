@@ -398,16 +398,6 @@ function normalizeSettingsProviders(settings: Settings): void {
   Object.assign(minimaxProvider, MINIMAX_ANTHROPIC_CONFIG);
 }
 
-// Check if running in Tauri environment synchronously
-function isTauriSync(): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-  const hasTauriInternals = '__TAURI_INTERNALS__' in window;
-  const hasTauri = '__TAURI__' in window;
-  return hasTauriInternals || hasTauri;
-}
-
 // In-memory cache for settings
 let settingsCache: Settings | null = null;
 
@@ -425,20 +415,6 @@ let settingsCache: Settings | null = null;
   }
 })();
 
-/**
- * Initialize database connection (only in Tauri).
- *
- * M1 之后：共用 database.ts 的 user-scoped 连接，避免维护两份连接导致
- * 用户切换时有一份没关闭。未绑定用户时返回 null（调用方会降级到 localStorage）。
- */
-async function getDatabase() {
-  if (!isTauriSync()) {
-    return null;
-  }
-  const { getSQLiteDatabase } = await import('./database');
-  return getSQLiteDatabase();
-}
-
 // Get settings from database (async version)
 async function getSettingsAsync(): Promise<Settings> {
   // Return cached settings if available
@@ -448,54 +424,6 @@ async function getSettingsAsync(): Promise<Settings> {
       defaultModel: settingsCache.defaultModel,
     });
     return settingsCache;
-  }
-
-  const isTauri = isTauriSync();
-  console.log('[Settings] getSettingsAsync - isTauri:', isTauri);
-
-  const database = await getDatabase();
-  console.log(
-    '[Settings] getSettingsAsync - database:',
-    database ? 'connected' : 'null'
-  );
-
-  if (database) {
-    try {
-      const result = await database.select<{ key: string; value: string }>(
-        'SELECT key, value FROM settings'
-      );
-
-      console.log('[Settings] Database query result rows:', result.length);
-
-      if (result.length > 0) {
-        // Build settings object from key-value pairs
-        const settings = { ...defaultSettings };
-        for (const row of result) {
-          try {
-            const value = JSON.parse(row.value);
-            (settings as Record<string, unknown>)[row.key] = value;
-          } catch {
-            // Skip invalid JSON values
-          }
-        }
-        normalizeSettingsProviders(settings);
-        // Debug: Log loaded settings
-        console.log('[Settings] Loaded from database:', {
-          defaultProvider: settings.defaultProvider,
-          defaultModel: settings.defaultModel,
-          sandboxEnabled: settings.sandboxEnabled,
-          sandboxProvider: settings.defaultSandboxProvider,
-        });
-        settingsCache = settings;
-        return settings;
-      } else {
-        console.log(
-          '[Settings] Database has no settings rows, falling back to localStorage'
-        );
-      }
-    } catch (error) {
-      console.error('[Settings] Failed to load from database:', error);
-    }
   }
 
   // Fallback to localStorage for browser mode
@@ -568,25 +496,7 @@ export function getSettings(): Settings {
 async function saveSettingsAsync(settings: Settings): Promise<void> {
   settingsCache = settings;
 
-  const database = await getDatabase();
-
-  if (database) {
-    try {
-      // Save each setting key individually using REPLACE
-      const keys = Object.keys(settings) as (keyof Settings)[];
-      for (const key of keys) {
-        const value = JSON.stringify(settings[key]);
-        await database.execute(
-          `INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ($1, $2, datetime('now'))`,
-          [key, value]
-        );
-      }
-    } catch (error) {
-      console.error('[Settings] Failed to save to database:', error);
-    }
-  }
-
-  // Also save to localStorage as fallback
+  // Persist to localStorage
   try {
     localStorage.setItem('sage_settings', JSON.stringify(settings));
   } catch (error) {

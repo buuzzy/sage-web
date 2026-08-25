@@ -1,6 +1,6 @@
 # src/ — React 前端
 
-桌面端共享的 React 19 SPA。Vite 7 构建，TailwindCSS 4 样式，无全局状态库
+React 19 SPA（纯 Web）。Vite 7 构建，TailwindCSS 4 样式，无全局状态库
 
 ## 子目录职责
 
@@ -33,16 +33,16 @@
 - 跨组件共享用 Context Provider（auth, theme, language, sidebar）
 - Agent 通信统一走 `shared/hooks/useAgent.ts`，不在其他地方直接 fetch
 
-## 平台分叉逻辑
+## 平台
 
 ```typescript
-// src/config/index.ts（现状：所有平台默认连 Railway 云端）
+// src/config/index.ts
 const RAILWAY_URL = 'https://sage.nakocai.com';
 export const API_BASE_URL = import.meta.env.VITE_API_URL || RAILWAY_URL;
 ```
 
-- 纯 Web 部署（Vite SPA），不再有桌面 OAuth deep-link / sidecar 探测
-- tauri-stub 过渡层（vite alias + `src/shared/lib/tauri-stub.ts`）保留：所有 `@tauri-apps/*` 动态 import 在 web 下不可达
+- 纯 Web 部署（Vite SPA），桌面形态已移除
+- 唯一的"平台"维度是视口宽度（`isMobile` / `useIsMobile`），见 `shared/lib/platform.ts`
 
 ## 不变量
 

@@ -12,8 +12,8 @@
  * 详见 docs/memory/phase3-design.md 「Phase 4」补充章节
  *
  * 双模式（与 persona-injector / mcp-memory 一致）：
- *   · 桌面端 sidecar：accessToken 必传 → user-scoped client，受 RLS 保护
- *   · Railway 等服务器：accessToken 可选 → service-role client，应用层显式按 user_id 过滤
+ *   · 带用户 JWT（web 前端请求）：accessToken → user-scoped client，受 RLS 保护
+ *   · 无 JWT（后台任务）：accessToken 缺省 → service-role client，应用层显式按 user_id 过滤
  *
  * Feature flag：
  *   process.env.SAGE_ENABLE_ACTIVE_RECALL
@@ -115,7 +115,7 @@ export interface BuildActiveRecallOptions {
   prompt: string;
   /** Supabase auth.uid()——必传，否则跳过 */
   userId?: string;
-  /** 用户 JWT，桌面端必传；Railway 等可不传（走 service-role）*/
+  /** 用户 JWT；不传则走 service-role */
   accessToken?: string;
   /** Run mode 才传 conversation 用于首轮判断（仅看 length，不解构内部字段）*/
   conversation?: readonly unknown[];

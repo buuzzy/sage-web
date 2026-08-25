@@ -10,8 +10,8 @@
  * 详见 docs/memory/phase3-design.md 决策 4 + memory-philosophy.md §1
  *
  * 双模式（与 mcp-memory 一致）：
- *   · 桌面端 sidecar：accessToken 必传 → user-scoped client，受 RLS 保护
- *   · Railway 等服务器：accessToken 可选 → service-role client，应用层显式按 user_id 过滤
+ *   · 带用户 JWT（web 前端请求）：accessToken → user-scoped client，受 RLS 保护
+ *   · 无 JWT（后台任务）：accessToken 缺省 → service-role client，应用层显式按 user_id 过滤
  *
  * Feature flag：
  *   process.env.SAGE_INJECT_PERSONA
@@ -64,7 +64,7 @@ async function fetchPersonaRow(
 ): Promise<PersonaMemoryRow | null> {
   if (!isSupabaseConfigured()) return null;
 
-  // 优先 user-scoped（桌面端常态），fallback service-role（Railway 服务器）
+  // 优先 user-scoped（带 JWT 的请求），fallback service-role（后台任务）
   const client = accessToken
     ? createUserScopedSupabase(accessToken)
     : isServiceRoleAvailable()
@@ -73,7 +73,7 @@ async function fetchPersonaRow(
 
   if (!client) return null;
 
-  // 桌面端 user-scoped 模式下 RLS 自动按 auth.uid() 过滤；service-role 显式 .eq()
+  // user-scoped 模式下 RLS 自动按 auth.uid() 过滤；service-role 显式 .eq()
   let query = client.from('persona_memory').select('*');
   if (!accessToken) {
     query = query.eq('user_id', userId);
@@ -224,7 +224,7 @@ function renderRecentThreads(threads: RecentThread[]): string {
  * 没有 persona / 注入关闭 / 任何错误 → 返回空字符串（不污染 prompt）。
  *
  * @param userId Supabase auth.uid()
- * @param accessToken 当前用户 JWT（桌面端必传），不传则尝试用 service-role
+ * @param accessToken 当前用户 JWT，不传则尝试用 service-role
  */
 export async function buildPersonaSection(
   userId: string | undefined,

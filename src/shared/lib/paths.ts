@@ -1,74 +1,27 @@
 /**
  * Path utilities for Sage
  *
- * Uses ~/.sage/ as the standard data directory across all platforms.
- * This follows the Unix dotfile convention used by developer tools like:
- * - ~/.claude/ (Claude Code)
- * - ~/.npm/ (npm)
- * - ~/.docker/ (Docker)
+ * Web mode: paths are display-only logical strings (~/.sage/…), used to
+ * label artifacts and prompt the agent. No local filesystem access.
  */
 
 // Cache for resolved paths
 let cachedAppDataDir: string | null = null;
-let cachedSeparator: string | null = null;
-
-/**
- * Check if running in Tauri environment
- */
-function isTauri(): boolean {
-  if (typeof window === 'undefined') return false;
-  return '__TAURI_INTERNALS__' in window || '__TAURI__' in window;
-}
 
 /**
  * Get the path separator for the current platform
  */
 export async function getPathSeparator(): Promise<string> {
-  if (cachedSeparator) {
-    return cachedSeparator;
-  }
-
-  if (isTauri()) {
-    try {
-      const { sep } = await import('@tauri-apps/api/path');
-      cachedSeparator = sep();
-      return cachedSeparator;
-    } catch {
-      // Fallback
-    }
-  }
-
-  // Default to Unix separator
-  cachedSeparator = '/';
-  return cachedSeparator;
+  return '/';
 }
 
 /**
- * Get the application data directory
- * Returns ~/.sage on all platforms (using correct path separator)
+ * Get the application data directory (logical, display-only)
  */
 export async function getAppDataDir(): Promise<string> {
-  if (cachedAppDataDir) {
-    return cachedAppDataDir;
+  if (!cachedAppDataDir) {
+    cachedAppDataDir = '~/.sage';
   }
-
-  if (isTauri()) {
-    try {
-      const { homeDir, sep } = await import('@tauri-apps/api/path');
-      const home = await homeDir();
-      const separator = sep();
-      // Remove trailing slash/backslash if present
-      const homeClean =
-        home.endsWith('/') || home.endsWith('\\') ? home.slice(0, -1) : home;
-      cachedAppDataDir = `${homeClean}${separator}.sage`;
-      return cachedAppDataDir;
-    } catch (error) {
-      console.warn('[Paths] Failed to get home dir:', error);
-    }
-  }
-
-  // Fallback for browser mode
-  cachedAppDataDir = '~/.sage';
   return cachedAppDataDir;
 }
 
@@ -77,8 +30,7 @@ export async function getAppDataDir(): Promise<string> {
  */
 export async function getMcpConfigPath(): Promise<string> {
   const appDir = await getAppDataDir();
-  const sep = await getPathSeparator();
-  return `${appDir}${sep}mcp.json`;
+  return `${appDir}/mcp.json`;
 }
 
 /**

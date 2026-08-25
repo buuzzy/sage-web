@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { cn } from '@/shared/lib/utils';
-// @ts-ignore @tauri-apps/plugin-fs removed for web build
 import JSZip from 'jszip';
 import {
   ChevronLeft,
@@ -12,7 +11,7 @@ import {
 
 import { FileTooLarge } from './FileTooLarge';
 import type { PptxSlide, PreviewComponentProps } from './types';
-import { isRemoteUrl, MAX_PREVIEW_SIZE, openFileExternal } from './utils';
+import { MAX_PREVIEW_SIZE, openFileExternal } from './utils';
 
 export function PptxPreview({ artifact }: PreviewComponentProps) {
   const [slides, setSlides] = useState<PptxSlide[]>([]);
@@ -40,35 +39,22 @@ export function PptxPreview({ artifact }: PreviewComponentProps) {
       console.log('[PPTX Preview] Loading PPTX from path:', artifact.path);
 
       try {
-        // Check file size first
-        if (!isRemoteUrl(artifact.path)) {
-          const { stat } = await import('@tauri-apps/plugin-fs');
-          const fileInfo = await stat(artifact.path);
-          if (fileInfo.size > MAX_PREVIEW_SIZE) {
-            console.log('[PPTX Preview] File too large:', fileInfo.size);
-            setFileTooLarge(fileInfo.size);
-            setLoading(false);
-            return;
-          }
+        const url = artifact.path.startsWith('//')
+          ? `https:${artifact.path}`
+          : artifact.path;
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(
+            `Failed to fetch PPTX: ${response.status} ${response.statusText}`
+          );
         }
 
-        let arrayBuffer: ArrayBuffer;
-
-        if (isRemoteUrl(artifact.path)) {
-          const url = artifact.path.startsWith('//')
-            ? `https:${artifact.path}`
-            : artifact.path;
-          const response = await fetch(url);
-          if (!response.ok) {
-            throw new Error(
-              `Failed to fetch PPTX: ${response.status} ${response.statusText}`
-            );
-          }
-          arrayBuffer = await response.arrayBuffer();
-        } else {
-          const { readFile } = await import('@tauri-apps/plugin-fs');
-          const data = await readFile(artifact.path);
-          arrayBuffer = data.buffer;
+        const arrayBuffer: ArrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength > MAX_PREVIEW_SIZE) {
+          console.log('[PPTX Preview] File too large:', arrayBuffer.byteLength);
+          setFileTooLarge(arrayBuffer.byteLength);
+          setLoading(false);
+          return;
         }
 
         console.log('[PPTX Preview] Loaded', arrayBuffer.byteLength, 'bytes');

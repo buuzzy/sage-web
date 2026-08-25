@@ -1,15 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-// @ts-ignore @tauri-apps/plugin-fs removed for web build
 import { ExternalLink, Loader2, Video } from 'lucide-react';
 
 import { FileTooLarge } from './FileTooLarge';
 import type { PreviewComponentProps } from './types';
-import {
-  getVideoMimeType,
-  isRemoteUrl,
-  MAX_PREVIEW_SIZE,
-  openFileExternal,
-} from './utils';
+import { isRemoteUrl, MAX_PREVIEW_SIZE, openFileExternal } from './utils';
 
 export function VideoPreview({ artifact }: PreviewComponentProps) {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -48,18 +42,6 @@ export function VideoPreview({ artifact }: PreviewComponentProps) {
       console.log('[Video Preview] Loading video from path:', artifact.path);
 
       try {
-        // Check file size first for local files
-        if (!isRemoteUrl(artifact.path)) {
-          const { stat } = await import('@tauri-apps/plugin-fs');
-          const fileInfo = await stat(artifact.path);
-          if (fileInfo.size > MAX_PREVIEW_SIZE) {
-            console.log('[Video Preview] File too large:', fileInfo.size);
-            setFileTooLarge(fileInfo.size);
-            setLoading(false);
-            return;
-          }
-        }
-
         if (isRemoteUrl(artifact.path)) {
           // Remote URL - use directly
           const url = artifact.path.startsWith('//')
@@ -67,15 +49,22 @@ export function VideoPreview({ artifact }: PreviewComponentProps) {
             : artifact.path;
           setVideoUrl(url);
         } else {
-          // Local file - read as blob using Tauri fs plugin
-          console.log('[Video Preview] Reading local video file...');
+          // Data URL / relative path - fetch as blob
+          console.log('[Video Preview] Fetching video...');
 
-          const ext = artifact.path.split('.').pop()?.toLowerCase() || '';
-          const mimeType = getVideoMimeType(ext);
-
-          const { readFile } = await import('@tauri-apps/plugin-fs');
-          const data = await readFile(artifact.path);
-          const blob = new Blob([data], { type: mimeType });
+          const response = await fetch(artifact.path);
+          if (!response.ok) {
+            throw new Error(
+              `Failed to fetch video: ${response.status} ${response.statusText}`
+            );
+          }
+          const blob = await response.blob();
+          if (blob.size > MAX_PREVIEW_SIZE) {
+            console.log('[Video Preview] File too large:', blob.size);
+            setFileTooLarge(blob.size);
+            setLoading(false);
+            return;
+          }
           console.log('[Video Preview] Loaded', blob.size, 'bytes');
 
           blobUrl = URL.createObjectURL(blob);

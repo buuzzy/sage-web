@@ -105,7 +105,7 @@ const AGENT_SERVER_URL = API_BASE_URL;
 
 // ─── 通用请求 header（所有环境统一注入 Bearer token）─────────
 //
-// Auth strategy (all platforms — Tauri desktop + Web + iOS):
+// Auth strategy (web):
 // 1. Prefer: Supabase JWT from getCurrentAccessToken() (user-scoped)
 // 2. Fallback: VITE_RAILWAY_API_TOKEN env var (for testing/CI)
 //

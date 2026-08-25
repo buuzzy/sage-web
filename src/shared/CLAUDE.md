@@ -6,10 +6,10 @@
 
 | 目录 | 职责 | 谁调用 | 它依赖谁 |
 |------|------|--------|---------|
-| hooks/ | Agent 通信 + Provider 配置 + 频道同步 | pages, components | db, sync, lib, config |
-| db/ | 本地 SQLite CRUD（tasks, messages, sessions, files, settings） | hooks, sync, pages | - |
+| hooks/ | Agent 通信（useAgent 及子模块） | pages, components | db, sync, lib, config |
+| db/ | 本地 IndexedDB CRUD（tasks, messages, sessions, files, settings）+ 云端双写 | hooks, sync, pages | - |
 | sync/ | 云端同步队列（Supabase） | hooks（写入时触发） | db, lib/supabase |
-| lib/ | 工具函数（路径、格式化、token 估算、artifact 解析、**平台检测**） | 任何模块 | - |
+| lib/ | 工具函数（路径、格式化、token 估算、artifact 解析、视口检测） | 任何模块 | - |
 | providers/ | React Context（auth, theme, language, antd-theme, update） | App.tsx 包裹 | lib/supabase |
 | types/ | TypeScript 类型定义（artifact, persona-memory） | 任何模块 | - |
 | config/ | artifactMapping（URL→组件类型映射） | htui/ArtifactRenderer | - |
@@ -20,8 +20,6 @@
 |------|------|--------|
 | useAgent.ts | Agent 请求路由核心（~2431 行主文件 + useAgent/ 子目录 7 个模块 ~1248 行）。策略分类 + SSE stream + 标题生成 + 错误分类 | ⚠️ 核心 |
 | useAgent/ | useAgent 子模块（types / strategy / config / errors / conversation / files / title） | ⚠️ 核心 |
-| useProviders.ts | 读取/切换模型 Provider 配置 | 🔧 |
-| useVitePreview.ts | Vite 预览模式检测 | 🔒 |
 
 ## useAgent.ts 核心概念（修改前必读）
 
@@ -35,7 +33,7 @@
 
 | 文件 | 职责 |
 |------|------|
-| database.ts | 核心基础设施（IndexedDB/SQLite 连接、schema 管理、用户绑定） |
+| database.ts | 核心基础设施（IndexedDB 连接、schema 管理、用户绑定） |
 | sessions.ts | Session CRUD |
 | tasks.ts | Task CRUD |
 | messages.ts | Message CRUD + 备份导入 |
@@ -63,8 +61,8 @@
 
 | 文件 | 职责 |
 |------|------|
-| platform.ts | 平台检测（isTauri / isMobile 窄屏 Web viewport）；原生 iOS 不在本目录检测范围 |
-| supabase.ts | Supabase client 初始化（isTauri 分叉 detectSessionInUrl/flowType） |
+| platform.ts | 视口检测（isMobile 窄屏 <768px / useIsMobile 响应式 hook） |
+| supabase.ts | Supabase client 初始化 + getCurrentAccessToken（JWT 透传给 sage-api） |
 | attachments.ts | 附件存储/加载 |
 | background-tasks.ts | 背景任务生命周期管理 |
 | context-usage.ts | 上下文 token 估算（前端侧） |
@@ -79,4 +77,4 @@
 - sync/ 入队后不阻塞主流程（fire-and-forget）
 - providers/ 的 Context 不能有副作用（pure context value）
 - 新增 sync 模块必须注册到 `sync/index.ts`
-- 桌面端走 `isTauri=true` 路径；窄屏 Web UI 走 `isTauri=false + isMobile=true` 路径（窗口宽度 <768px）
+- 唯一布局分叉是视口宽度：`isMobile=true`（窗口宽度 <768px）

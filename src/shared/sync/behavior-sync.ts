@@ -23,8 +23,7 @@ import { enqueueSync } from './sync-queue';
 /**
  * sha256(input) → 前 16 字节十六进制字符串（32 字符）。
  *
- * 浏览器 / Tauri WebView / iOS WKWebView 都自带 crypto.subtle，桌面端
- * Vite 同样可用。无 polyfill 风险。
+ * 浏览器自带 crypto.subtle，无 polyfill 风险。
  */
 async function sha256Hex16(input: string): Promise<string> {
   if (!input) return '';

@@ -109,10 +109,9 @@ export interface AgentRequest {
   /**
    * Supabase access token (JWT) of the current end-user.
    *
-   * Required for desktop sidecar mode: sage-api forwards this to the
-   * built-in memory MCP, which uses it together with the public anon key
-   * to talk to Supabase under user-scoped RLS — so the desktop binary
-   * never needs to ship a service-role key.
+   * sage-api forwards this to the built-in memory MCP, which uses it
+   * together with the public anon key to talk to Supabase under
+   * user-scoped RLS — no service-role key involved.
    *
    * Optional in service-role contexts (Railway etc.): when omitted,
    * the memory provider falls back to the server's service-role client

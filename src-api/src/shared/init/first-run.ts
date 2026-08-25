@@ -1,13 +1,13 @@
 /**
  * First-Run Initialization
  *
- * Ensures ~/.sage/ (or sandbox container equivalent) is fully set up before the server starts.
+ * Ensures ~/.sage/ is fully set up before the server starts.
  * This runs on every startup but is idempotent — it only creates
  * files and directories that don't already exist, never overwriting
  * user data.
  *
- * Sandbox-aware: Automatically adapts to macOS App Store container paths via
- * SAGE_APP_DIR environment variable or automatic detection in constants.ts
+ * The app directory can be overridden via the SAGE_APP_DIR environment
+ * variable (see getAppDir() in constants.ts).
  *
  * Execution order in index.ts:
  *   ensureAppDirInitialized()  ← this file
@@ -20,12 +20,7 @@ import { existsSync, mkdirSync } from 'fs';
 import fs from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { getAppDir, isRunningInSandbox } from '@/config/constants';
-import {
-  shouldPerformSandboxMigration,
-  migrateToSandboxContainer,
-  validateMigration,
-} from './sandbox-migration';
+import { getAppDir } from '@/config/constants';
 import { migrateFromHTclaw } from './migration';
 
 // ============================================================================
@@ -34,10 +29,8 @@ import { migrateFromHTclaw } from './migration';
 
 /**
  * Resolve the bundled defaults source directory.
- * Uses the same three-tier strategy as getBuiltinSkillsSourceDir() in loader.ts:
  *   Dev (tsx):   src-api/src/shared/init/ → src-api/resources/defaults/
  *   TSC build:   dist/shared/init/        → resources/defaults/  (two levels up)
- *   Pkg binary:  process.cwd()/resources/defaults/
  */
 function getDefaultsSourceDir(): string {
   let thisDir: string;
@@ -52,14 +45,7 @@ function getDefaultsSourceDir(): string {
   const srcPath = join(thisDir, '..', '..', '..', 'resources', 'defaults');
   if (existsSync(srcPath)) return srcPath;
 
-  // Pkg binary in macOS .app bundle:
-  //   process.execPath = Contents/MacOS/sage-api-aarch64-apple-darwin
-  //   Tauri resources  = Contents/Resources/resources/defaults/
-  const binaryDir = dirname(process.execPath);
-  const appBundlePath = join(binaryDir, '..', 'Resources', 'resources', 'defaults');
-  if (existsSync(appBundlePath)) return appBundlePath;
-
-  // Fallback: CWD-relative (for non-Tauri or dev overrides)
+  // Fallback: CWD-relative (dev overrides)
   const pkgPath = join(process.cwd(), 'resources', 'defaults');
   if (existsSync(pkgPath)) return pkgPath;
 
@@ -140,11 +126,6 @@ async function installDefaultFiles(appDir: string): Promise<void> {
     await copyAlways(join(defaultsDir, 'AGENTS.md'), join(appDir, 'AGENTS.md'));
     await copyAlways(join(defaultsDir, 'SOUL.md'), join(appDir, 'SOUL.md'));
     await copyIfMissing(join(defaultsDir, 'skills-config.json'), join(appDir, 'skills-config.json'));
-    // NOTE: .env is intentionally NOT copied here. Environment variable injection
-    // must happen BEFORE the sidecar process starts, otherwise this process's
-    // process.env is already frozen and the copied .env has no effect this run.
-    // The Tauri Rust shell (src-tauri/src/lib.rs) handles loading + mirroring
-    // the bundled defaults/.env to ~/.sage/.env at spawn time.
   } else {
     console.warn(`[Init] Defaults source directory not found: ${defaultsDir}`);
   }
@@ -169,7 +150,7 @@ async function installDefaultFiles(appDir: string): Promise<void> {
  * embedding 索引」体系，现在已被 supabase 云端记忆 + 工具召回取代。
  *
  * 这是 destructive 操作但安全：所有用户对话已通过 messages-sync 双写到
- * 云端，本地 md 只是冗余拷贝。清理后 sidecar 不会再把它们注入 prompt。
+ * 云端，本地 md 只是冗余拷贝。清理后不再把它们注入 prompt。
  *
  * 幂等：文件不存在也不报错。
  */
@@ -210,29 +191,6 @@ async function cleanupLegacyMemoryFiles(appDir: string): Promise<void> {
  */
 export async function ensureAppDirInitialized(): Promise<void> {
   const appDir = getAppDir();
-
-  // Log sandbox status for diagnostics
-  if (isRunningInSandbox()) {
-    console.log('[Init] Running in sandbox environment');
-    console.log(`[Init] App directory: ${appDir}`);
-    
-    // Check if data migration from standard location is needed
-    if (await shouldPerformSandboxMigration()) {
-      console.log('[Init] Performing sandbox data migration...');
-      const migrationResult = await migrateToSandboxContainer();
-      if (migrationResult.success) {
-        console.log(`[Init] ✓ Migration successful: ${migrationResult.itemCount} items migrated`);
-      } else {
-        console.warn('[Init] ⚠ Migration had issues:', migrationResult.errors);
-      }
-      
-      // Validate migration
-      const validation = await validateMigration();
-      if (!validation.valid) {
-        console.warn('[Init] ⚠ Migration validation issues:', validation.issues);
-      }
-    }
-  }
 
   try {
     // 1. Ensure all required directories exist

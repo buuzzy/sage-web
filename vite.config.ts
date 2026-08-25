@@ -4,8 +4,6 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
-const host = process.env.TAURI_DEV_HOST;
-
 // Generate build date in YYYY.MM.DD format
 const buildDate = new Date().toISOString().slice(0, 10).replace(/-/g, '.');
 
@@ -27,13 +25,7 @@ export default defineConfig(async () => ({
   },
 
   resolve: {
-    alias: [
-      { find: '@', replacement: path.resolve(__dirname, './src') },
-      {
-        find: /^@tauri-apps\/.+/,
-        replacement: path.resolve(__dirname, './src/shared/lib/tauri-stub.ts'),
-      },
-    ],
+    alias: [{ find: '@', replacement: path.resolve(__dirname, './src') }],
   },
 
   build: {
@@ -59,9 +51,9 @@ export default defineConfig(async () => ({
     // Allow connections from both IPv4 and IPv6 localhost — some browsers
     // resolve localhost to ::1 first, and a strict bind to 127.0.0.1 causes
     // ERR_CONNECTION_REFUSED on OAuth callbacks.
-    host: host || true,
+    host: true,
     watch: {
-      ignored: ['**/node_modules/**', '**/src-tauri/**'],
+      ignored: ['**/node_modules/**'],
     },
   },
 }));

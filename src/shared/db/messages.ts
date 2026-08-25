@@ -12,7 +12,6 @@ import {
   asRecord,
   currentUid,
   getIndexedDB,
-  getSQLiteDatabase,
   idbRequest,
   nullableJsonString,
   nullableStr,
@@ -61,39 +60,10 @@ export async function createMessage(
     updated_at: now,
   };
 
-  const database = await getSQLiteDatabase();
-
-  if (database) {
-    await database.execute(
-      `INSERT INTO messages
-       (id, user_id, task_id, type, content, tool_name, tool_input, tool_output,
-        tool_use_id, tool_metadata, subtype, error_message, attachments, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-      [
-        message.id,
-        message.user_id,
-        message.task_id,
-        message.type,
-        message.content,
-        message.tool_name,
-        message.tool_input,
-        message.tool_output,
-        message.tool_use_id,
-        message.tool_metadata,
-        message.subtype,
-        message.error_message,
-        message.attachments,
-        message.created_at,
-        message.updated_at,
-      ]
-    );
-  } else {
-    const db = await getIndexedDB();
-    const tx = db.transaction('messages', 'readwrite');
-    const store = tx.objectStore('messages');
-    await idbRequest(store.add(message));
-  }
-
+  const db = await getIndexedDB();
+  const tx = db.transaction('messages', 'readwrite');
+  const store = tx.objectStore('messages');
+  await idbRequest(store.add(message));
   // Phase 1: 火忘式双写，不阻塞当前调用
   enqueueMessageInsert(message);
   // Phase 4 / L4-light: user message 同步打点到 user_behavior（非 user 自动跳过）
@@ -131,106 +101,6 @@ export async function importBackupData(
     messages: 0,
     files: 0,
   };
-
-  const database = await getSQLiteDatabase();
-
-  if (database) {
-    for (const raw of sessions) {
-      const row = asRecord(raw);
-      if (!row?.id) continue;
-      await database.execute(
-        `INSERT OR REPLACE INTO sessions (id, prompt, task_count, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [
-          str(row.id),
-          str(row.prompt),
-          Number(row.task_count ?? 0),
-          str(row.created_at, now),
-          str(row.updated_at, now),
-        ]
-      );
-      result.sessions++;
-    }
-
-    for (const raw of tasks) {
-      const row = asRecord(raw);
-      if (!row?.id || !row?.session_id) continue;
-      await database.execute(
-        `INSERT OR REPLACE INTO tasks
-         (id, session_id, task_index, prompt, status, cost, duration, provider_usage, favorite, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-        [
-          str(row.id),
-          str(row.session_id),
-          Number(row.task_index ?? 1),
-          str(row.prompt),
-          str(row.status, 'completed'),
-          row.cost ?? null,
-          row.duration ?? null,
-          nullableJsonString(row.provider_usage),
-          row.favorite ? 1 : 0,
-          str(row.created_at, now),
-          str(row.updated_at, now),
-        ]
-      );
-      result.tasks++;
-    }
-
-    for (const raw of messages) {
-      const row = asRecord(raw);
-      if (!row?.id || !row?.task_id || !row?.type) continue;
-      await database.execute(
-        `INSERT OR REPLACE INTO messages
-         (id, user_id, task_id, type, content, tool_name, tool_input, tool_output,
-          tool_use_id, tool_metadata, subtype, error_message, attachments, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-        [
-          str(row.id),
-          userId,
-          str(row.task_id),
-          str(row.type),
-          nullableStr(row.content),
-          nullableStr(row.tool_name),
-          nullableStr(row.tool_input),
-          nullableStr(row.tool_output),
-          nullableStr(row.tool_use_id),
-          nullableStr(row.tool_metadata),
-          nullableStr(row.subtype),
-          nullableStr(row.error_message),
-          nullableStr(row.attachments),
-          str(row.created_at, now),
-          str(row.updated_at, now),
-        ]
-      );
-      result.messages++;
-    }
-
-    for (const raw of files) {
-      const row = asRecord(raw);
-      if (!row?.id || !row?.task_id || !row?.name || !row?.path) continue;
-      await database.execute(
-        `INSERT OR REPLACE INTO files
-         (id, user_id, task_id, name, type, path, preview, thumbnail, is_favorite, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-        [
-          str(row.id),
-          userId,
-          str(row.task_id),
-          str(row.name),
-          str(row.type, 'document'),
-          str(row.path),
-          nullableStr(row.preview),
-          nullableStr(row.thumbnail),
-          row.is_favorite ? 1 : 0,
-          str(row.created_at, now),
-          str(row.updated_at, now),
-        ]
-      );
-      result.files++;
-    }
-
-    return result;
-  }
 
   const db = await getIndexedDB();
   const tx = db.transaction(
@@ -328,47 +198,28 @@ export async function importBackupData(
 }
 
 export async function getMessagesByTaskId(taskId: string): Promise<Message[]> {
-  const database = await getSQLiteDatabase();
-
-  if (database) {
-    return database.select<Message>(
-      'SELECT * FROM messages WHERE task_id = $1 ORDER BY created_at ASC',
-      [taskId]
-    );
-  } else {
-    const db = await getIndexedDB();
-    const tx = db.transaction('messages', 'readonly');
-    const store = tx.objectStore('messages');
-    const index = store.index('task_id');
-    const messages = await idbRequest(index.getAll(taskId));
-    return messages.sort(
-      (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    );
-  }
+  const db = await getIndexedDB();
+  const tx = db.transaction('messages', 'readonly');
+  const store = tx.objectStore('messages');
+  const index = store.index('task_id');
+  const messages = await idbRequest(index.getAll(taskId));
+  return messages.sort(
+    (a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  );
 }
 
 export async function deleteMessagesByTaskId(taskId: string): Promise<number> {
-  const database = await getSQLiteDatabase();
+  const db = await getIndexedDB();
+  const tx = db.transaction('messages', 'readwrite');
+  const store = tx.objectStore('messages');
+  const index = store.index('task_id');
+  const messages = await idbRequest(index.getAll(taskId));
 
-  if (database) {
-    const result = await database.execute(
-      'DELETE FROM messages WHERE task_id = $1',
-      [taskId]
-    );
-    return result.rowsAffected;
-  } else {
-    const db = await getIndexedDB();
-    const tx = db.transaction('messages', 'readwrite');
-    const store = tx.objectStore('messages');
-    const index = store.index('task_id');
-    const messages = await idbRequest(index.getAll(taskId));
-
-    for (const message of messages) {
-      await idbRequest(store.delete(message.id));
-    }
-    return messages.length;
+  for (const message of messages) {
+    await idbRequest(store.delete(message.id));
   }
+  return messages.length;
 }
 
 // Helper function to update task status based on message type

@@ -1,4 +1,4 @@
-# shared/context/ — 对话上下文管理（桌面端 + 历史 iOS 共用；iOS 归档不影响本模块）
+# shared/context/ — 对话上下文管理
 
 为模型组装对话上下文：控制 token 预算，必要时压缩历史消息。
 

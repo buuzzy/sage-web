@@ -12,9 +12,9 @@
  *   - 调用方（codeany 内的 SDK MCP client）通过 query string 传 user_id
  *     和可选 access_token。
  *   - 实际数据访问委托给 MemoryProvider，按 ctx 自适应：
- *     * 桌面端 sidecar：access_token 必传 → user-scoped client（anon + JWT），
+ *     * 带用户 JWT 的请求：access_token → user-scoped client（anon + JWT），
  *       受 RLS 强制隔离，无 service role 暴露。
- *     * Railway 等服务器：access_token 可选 → 退化为 service-role client，
+ *     * 无 JWT 的调用：access_token 缺省 → 退化为 service-role client，
  *       绕 RLS 但应用层手动按 user_id 过滤。
  *
  * 请求只在 sage-api 进程的 loopback / Bearer-protected 范围内流动，
@@ -248,7 +248,7 @@ async function callSearchMemory(
  * "YYYY-MM-DD HH:mm:ss" 的上海时间字符串。
  *
  * 实现说明：之前用 toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' })，
- * 但 pkg/Tauri sidecar 默认编译用 small-icu，sv-SE locale 会 fallback 成
+ * 但部分运行时（small-icu 编译）里 sv-SE locale 会 fallback 成
  * en-US 格式（"4/30/2026, 12:29:02 PM"）。手动 +8h 拼接最稳，没有 ICU
  * 依赖，输出固定 ISO-like 格式让 LLM 直接复用。
  */
@@ -305,8 +305,8 @@ mcpMemoryRoutes.post('/', async (c) => {
   }
 
   // access_token 可选：
-  //   - 桌面端 sidecar 模式：buildBuiltinMcpServers 会带上前端透传的 JWT
-  //   - Railway 模式：service role 已配置时不需要（provider 会 fallback）
+  //   - 带用户 JWT 的请求：直接复用已验证的 authAccessToken
+  //   - 其它调用：service role 已配置时不需要（provider 会 fallback）
   // 长度上限 4096 防止日志膨胀；JWT 一般 ~1KB
   const rawAccessToken =
     authKind === 'user' ? c.get('authAccessToken') : c.req.query('access_token');
