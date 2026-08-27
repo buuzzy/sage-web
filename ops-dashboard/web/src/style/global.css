@@ -1,0 +1,63 @@
+/* ops-dashboard theme tokens.
+ * Dark is the default (founder-facing internal tool). Light via media query.
+ * Categorical series colors validated by dataviz/scripts/validate_palette.js.
+ */
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+
+  --surface-page: #0d0d0d;
+  --surface-card: #1a1a19;
+  --surface-elevated: #232321;
+  --border: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  --ink-primary: #ffffff;
+  --ink-secondary: #c3c2b7;
+  --ink-muted: #898781;
+  --ink-disabled: #5a5a55;
+
+  --series-1: #3987e5; /* blue, DAU */
+  --series-2: #d95926; /* orange, messages */
+
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+
+    --surface-page: #f9f9f7;
+    --surface-card: #ffffff;
+    --surface-elevated: #fcfcfb;
+    --border: rgba(11, 11, 11, 0.10);
+    --border-strong: rgba(11, 11, 11, 0.18);
+
+    --ink-primary: #0b0b0b;
+    --ink-secondary: #52514e;
+    --ink-muted: #898781;
+
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+  }
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--surface-page);
+  color: var(--ink-primary);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-feature-settings: "tnum";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* antd table inside this theme: antd 6 honors the ConfigProvider token tree,
+   which we set in main.tsx to match the CSS vars above. */

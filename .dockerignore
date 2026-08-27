@@ -7,3 +7,13 @@ docs/
 .git/
 .github/
 *.md
+
+# Secrets: never let any .env reach image layers (Dockerfile.web does COPY . .)
+**/.env
+**/.env.local
+
+# ops-dashboard local build artifacts
+ops-dashboard/node_modules/
+ops-dashboard/dist/
+ops-dashboard/web/node_modules/
+ops-dashboard/web/dist/

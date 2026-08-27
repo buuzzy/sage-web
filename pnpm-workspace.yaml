@@ -1,3 +1,5 @@
 packages:
   - "."
   - "src-api"
+  - "ops-dashboard"
+  - "ops-dashboard/web"

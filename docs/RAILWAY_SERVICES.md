@@ -146,3 +146,50 @@ Check that the output contains the expected fields (e.g., "流动比率" and "�
 **Prevention**: Always run `railway status` before `railway up` to confirm the linked project and service. When deploying from `/private/tmp/tushare_MCP`, always pass explicit `--project 72cb39ad... --service c1bde52b...`.
 
 **Golden rule**: "Online" status on Railway only means the container is running — it does not mean the correct code is deployed. Always verify via endpoint response or log content.
+
+---
+
+## Project: `sage-ops` — Internal Ops Dashboard
+
+> Independent Railway project. **Not part of `sage`** — separate domain, separate env vars, zero code coupling. Lives at `/Users/nakocai/Documents/Projects/sage-web/ops-dashboard/` in the `buuzzy/sage-web` repo (Dockerfile at `ops-dashboard/Dockerfile`).
+
+### `ops-dashboard` (TBD — populate after `railway init`)
+
+| Field | Value |
+|---|---|
+| Purpose | Internal admin dashboard for Sage beta ops |
+| Repository | `buuzzy/sage-web` |
+| Branch | `main` |
+| Dockerfile | `ops-dashboard/Dockerfile`, selected via `RAILWAY_DOCKERFILE_PATH` variable. **Build context = repo root** (the Dockerfile `COPY`s root `pnpm-lock.yaml` / `pnpm-workspace.yaml`; deploying with `ops-dashboard/` as context will fail) |
+| Public URL | TBD after `railway domain` |
+| Service ID | TBD after `railway init --name sage-ops` |
+
+Required variable families:
+
+- Supabase (read-only): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+- Auth: `ADMIN_TOKEN` (Bearer; sole gate, no Supabase JWT fallback)
+
+**Endpoints**:
+- `GET  /` — built React/Vite frontend (the dashboard UI)
+- `GET  /api/metrics` — full aggregated JSON for the dashboard (Bearer ADMIN_TOKEN)
+- `POST /api/codes` — generate invite code (Bearer ADMIN_TOKEN)
+- `PATCH /api/codes/:id` — toggle / adjust invite code (Bearer ADMIN_TOKEN)
+
+**Verification protocol**:
+```bash
+curl https://<your-domain>/api/metrics                    # → 401
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+     https://<your-domain>/api/metrics                    # → 200 + full payload
+# Visit <your-domain>/ in browser, paste ADMIN_TOKEN, see dashboard render with real data.
+```
+
+**Deploy** (from **repo root**, not `ops-dashboard/` — see Dockerfile note above):
+```bash
+railway init --name sage-ops
+railway variables --set "RAILWAY_DOCKERFILE_PATH=ops-dashboard/Dockerfile"
+railway variables --set "SUPABASE_URL=<url>"
+railway variables --set "SUPABASE_SERVICE_ROLE_KEY=<key>"
+railway variables --set "ADMIN_TOKEN=<secret>"
+railway up --detach
+```
+
