@@ -153,16 +153,19 @@ Check that the output contains the expected fields (e.g., "流动比率" and "�
 
 > Independent Railway project. **Not part of `sage`** — separate domain, separate env vars, zero code coupling. Lives at `/Users/nakocai/Documents/Projects/sage-web/ops-dashboard/` in the `buuzzy/sage-web` repo (Dockerfile at `ops-dashboard/Dockerfile`).
 
-### `ops-dashboard` (TBD — populate after `railway init`)
+### `ops-dashboard` (e7d66b22) — deployed 2026-08-29
 
 | Field | Value |
 |---|---|
 | Purpose | Internal admin dashboard for Sage beta ops |
 | Repository | `buuzzy/sage-web` |
 | Branch | `main` |
-| Dockerfile | `ops-dashboard/Dockerfile`, selected via `RAILWAY_DOCKERFILE_PATH` variable. **Build context = repo root** (the Dockerfile `COPY`s root `pnpm-lock.yaml` / `pnpm-workspace.yaml`; deploying with `ops-dashboard/` as context will fail) |
-| Public URL | TBD after `railway domain` |
-| Service ID | TBD after `railway init --name sage-ops` |
+| Project ID | `1f39c738-b3ad-492e-b8a9-aac6a14c242e` |
+| Environment | `production` (`b61b7be1-82f3-4598-b769-2a119cf74cb5`) |
+| Dockerfile | `ops-dashboard/Dockerfile`, selected via `RAILWAY_DOCKERFILE_PATH` variable. **Build context = repo root** (the Dockerfile `COPY`s root `pnpm-lock.yaml` / `pnpm-workspace.yaml` / `patches/`; deploying with `ops-dashboard/` as context will fail) |
+| Public URL | `https://ops-dashboard-production-44fb.up.railway.app` |
+| Service ID | `e7d66b22-5d34-410d-ac6f-ba0a8c4ce2b2` |
+| Domain ID | `7c427c65-9f24-45e1-930d-0f394aea7900` |
 
 Required variable families:
 
@@ -183,13 +186,12 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
 # Visit <your-domain>/ in browser, paste ADMIN_TOKEN, see dashboard render with real data.
 ```
 
-**Deploy** (from **repo root**, not `ops-dashboard/` — see Dockerfile note above):
+**Deploy / redeploy** (from **repo root**, not `ops-dashboard/` — see Dockerfile note above; project already exists, always pass explicit IDs so the `sage` link is never touched):
 ```bash
-railway init --name sage-ops
-railway variables --set "RAILWAY_DOCKERFILE_PATH=ops-dashboard/Dockerfile"
-railway variables --set "SUPABASE_URL=<url>"
-railway variables --set "SUPABASE_SERVICE_ROLE_KEY=<key>"
-railway variables --set "ADMIN_TOKEN=<secret>"
-railway up --detach
+railway up --project 1f39c738-b3ad-492e-b8a9-aac6a14c242e \
+           --service e7d66b22-5d34-410d-ac6f-ba0a8c4ce2b2 \
+           --environment b61b7be1-82f3-4598-b769-2a119cf74cb5 \
+           --detach
 ```
+Variables are managed in the Railway console or via `railway variables --set "KEY=value" --project <id> --service <id>`.
 

@@ -52,30 +52,29 @@ cd ops-dashboard
 node dist/bundle.cjs                # 监听 2027，静态前端来自 web/dist/
 ```
 
-## 部署到 Railway（railway-cli）
+## 部署（Railway）
 
-完整步骤见本文档末尾。**先在 Railway 上新建一个独立项目**（不要复用 sage 项目的 `d5dd1df3-…`）。
+**已于 2026-08-29 部署上线**，独立项目 `sage-ops`（非 sage 主项目）：
 
-> ⚠️ **必须在仓库根目录执行 `railway up`**（不是 `ops-dashboard/`）。
-> Dockerfile 里 `COPY pnpm-lock.yaml pnpm-workspace.yaml` 指向仓库根文件，
-> 构建上下文（build context）必须是整个 sage-web 仓库根，
-> 再用 `RAILWAY_DOCKERFILE_PATH=ops-dashboard/Dockerfile` 指定用哪个 Dockerfile
-> （与 sage-web-api 的部署方式完全同款）。
+| 项 | 值 |
+|---|---|
+| URL | https://ops-dashboard-production-44fb.up.railway.app |
+| Railway 项目 ID | `1f39c738-b3ad-492e-b8a9-aac6a14c242e` |
+| 服务 ID | `e7d66b22-5d34-410d-ac6f-ba0a8c4ce2b2` |
+| 环境 | `production` (`b61b7be1-82f3-4598-b769-2a119cf74cb5`) |
+
+**更新部署**（在**仓库根目录**执行——Dockerfile 的构建上下文是仓库根，不是 ops-dashboard/；
+始终传显式 ID，绝不依赖目录 link 状态，避免误部署到 sage 项目）：
 
 ```bash
-# 在仓库根目录
-railway init --name sage-ops        # 新建独立项目
-railway variables --set "RAILWAY_DOCKERFILE_PATH=ops-dashboard/Dockerfile"
-railway variables --set "SUPABASE_URL=https://..."
-railway variables --set "SUPABASE_SERVICE_ROLE_KEY=..."
-railway variables --set "ADMIN_TOKEN=<长随机 secret>"
-railway up --detach
+railway up --project 1f39c738-b3ad-492e-b8a9-aac6a14c242e \
+           --service e7d66b22-5d34-410d-ac6f-ba0a8c4ce2b2 \
+           --environment b61b7be1-82f3-4598-b769-2a119cf74cb5 \
+           --detach
 ```
 
-（`railway variables` 的具体语法以 `railway variables --help` 为准；也可以直接在
-Railway 控制台网页里加变量，效果一样。）
-
-部署成功后 Railway 给你一个 `*.up.railway.app` 域名。打开 → 输入 `ADMIN_TOKEN` → 看数据。
+环境变量在 Railway 控制台或 `railway variables --set "KEY=value" --project … --service …` 管理。
+详见 `docs/RAILWAY_SERVICES.md` 的 `sage-ops` 条目。
 
 ## API 速查
 
@@ -88,61 +87,19 @@ Railway 控制台网页里加变量，效果一样。）
 所有 `/api/*` 必须 `Authorization: Bearer <ADMIN_TOKEN>`，否则 401。
 不接 Supabase JWT，单纯用 ADMIN_TOKEN。
 
-## 部署到 Railway — 完整步骤
-
-1. **确认 railway-cli 已登录**：
-   ```bash
-   railway whoami
-   ```
-
-2. **新建独立 Railway 项目（在仓库根目录执行）**：
-   ```bash
-   railway init --name sage-ops
-   ```
-   这会创建一个新项目，不会影响 sage 主项目。
-
-3. **设置环境变量**（CLI 语法以 `railway variables --help` 为准，或直接在 Railway 控制台网页加）：
-   ```bash
-   railway variables --set "RAILWAY_DOCKERFILE_PATH=ops-dashboard/Dockerfile"
-   railway variables --set "SUPABASE_URL=https://wymqgwtagpsjuonsclye.supabase.co"
-   railway variables --set "SUPABASE_SERVICE_ROLE_KEY=<service role key>"
-   railway variables --set "ADMIN_TOKEN=<新长随机 secret>"
-   ```
-   `RAILWAY_DOCKERFILE_PATH` 告诉 Railway 用 `ops-dashboard/Dockerfile`（构建上下文仍是仓库根）。
-
-4. **首次部署（必须在仓库根目录）**：
-   ```bash
-   railway up --detach
-   ```
-
-5. **生成公网域名**（如果 Railway 没自动给）：
-   ```bash
-   railway domain
-   ```
-
-6. **验证**：
-   ```bash
-   # 401 (no token)
-   curl https://<your-domain>/api/metrics
-   # 200 (with token)
-   curl -H "Authorization: Bearer $ADMIN_TOKEN" https://<your-domain>/api/metrics
-   ```
-
-7. **浏览器打开域名**，输入 `ADMIN_TOKEN`，看到数据即部署完成。
-
 ## 后续运维
 
-- **更新代码**：`git push` 后 `railway up --detach` 触发重新构建部署
-- **看日志**：`railway logs`
-- **更新变量**：`railway variables set KEY=value`
-- **完全拆除**（不想要这个服务）：Railway 控制台删项目，不影响 sage
+- **更新代码**：上面「更新部署」命令（改完代码在仓库根执行）
+- **看日志**：`railway logs --project <id> --service <id>`
+- **更新变量**：Railway 控制台或 `railway variables --set`（变量改动会触发自动重新部署）
+- **完全拆除**（不想要这个服务）：Railway 控制台删 `sage-ops` 项目，不影响 sage
 
 ## 与 sage 主项目的关系
 
 | 维度 | sage | ops-dashboard |
 |---|---|---|
-| Railway 项目 | `sage` (`d5dd1df3-…`) | `sage-ops`（独立新项目） |
-| 公网域名 | `app.nakocai.com` / `sage.nakocai.com` | `*.up.railway.app`（或自有域名） |
+| Railway 项目 | `sage` (`d5dd1df3-…`) | `sage-ops` (`1f39c738-…`) |
+| 公网域名 | `app.nakocai.com` / `sage.nakocai.com` | `ops-dashboard-production-44fb.up.railway.app` |
 | 数据库访问 | sage-web-api 用的同一套 Supabase | 只读，service-role key |
 | 代码耦合 | — | 零（独立 package.json / Dockerfile） |
 | Schema 改动 | — | 零（不写表、不加触发器） |

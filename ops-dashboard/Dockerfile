@@ -2,7 +2,10 @@
 FROM node:22-alpine AS web-builder
 WORKDIR /work
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+# pnpm-lock.yaml references patches/ (workspace-wide patchedDependencies);
+# pnpm validates them on every install, filtered or not.
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY patches/ patches/
 COPY ops-dashboard/package.json ./ops-dashboard/
 COPY ops-dashboard/web/package.json ./ops-dashboard/web/
 RUN pnpm install --frozen-lockfile --filter ops-dashboard-web...
@@ -14,6 +17,7 @@ FROM node:22-alpine AS server-builder
 WORKDIR /work
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY patches/ patches/
 COPY ops-dashboard/package.json ./ops-dashboard/
 RUN pnpm install --frozen-lockfile --filter ops-dashboard... --prod=false
 COPY ops-dashboard ./ops-dashboard
@@ -26,6 +30,7 @@ ENV NODE_ENV=production
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY patches/ patches/
 COPY ops-dashboard/package.json ./ops-dashboard/
 RUN pnpm install --frozen-lockfile --filter ops-dashboard... --prod
 
