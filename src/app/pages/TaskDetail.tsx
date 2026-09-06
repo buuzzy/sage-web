@@ -15,7 +15,10 @@ import { cn } from '@/shared/lib/utils';
 import { useLanguage } from '@/shared/providers/language-provider';
 import { ArrowDown, PanelLeft, Pencil } from 'lucide-react';
 
-import { CanvasPanel } from '@/components/canvas/CanvasPanel';
+import {
+  CanvasPanel,
+  preloadHtmlCanvas,
+} from '@/components/canvas/CanvasPanel';
 import { LeftSidebar, SidebarProvider, useSidebar } from '@/components/layout';
 import { ChatInput } from '@/components/shared/ChatInput';
 import { QuestionInput } from '@/components/task/QuestionInput';
@@ -157,6 +160,15 @@ function TaskDetailContent() {
 
   // Extract all canvases (typed artifacts + free HTML) from messages
   const canvases = useMemo(() => extractAllCanvases(messages), [messages]);
+
+  // Warm the canvas runtime as soon as the task has canvas content. The
+  // dynamic import starts after the current chat render, but before the
+  // auto-expanded panel needs to mount its iframe.
+  useEffect(() => {
+    if (canvases.length > 0) {
+      preloadHtmlCanvas();
+    }
+  }, [canvases.length]);
 
   // Scroll to bottom button state
   const [showScrollButton, setShowScrollButton] = useState(false);

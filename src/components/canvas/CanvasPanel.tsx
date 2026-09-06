@@ -1,14 +1,96 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ComponentType } from 'react';
 import type { CanvasItem } from '@/shared/lib/canvasExtract';
 import { cn } from '@/shared/lib/utils';
 import { ChevronLeft, ChevronRight, PanelRight, X } from 'lucide-react';
 
-import { HtmlCanvas } from './HtmlCanvas';
+import { ErrorBoundary } from '@/components/error-boundary';
+
+type HtmlCanvasComponent = ComponentType<{ html: string }>;
+
+let htmlCanvasPromise: Promise<HtmlCanvasComponent> | null = null;
+
+function loadHtmlCanvas(): Promise<HtmlCanvasComponent> {
+  if (!htmlCanvasPromise) {
+    htmlCanvasPromise = import('./HtmlCanvas').then(
+      ({ HtmlCanvas }) => HtmlCanvas
+    );
+  }
+
+  return htmlCanvasPromise;
+}
+
+export function preloadHtmlCanvas(): void {
+  void loadHtmlCanvas().catch(() => undefined);
+}
 
 interface CanvasPanelProps {
   canvases: CanvasItem[];
   onClose: () => void;
   className?: string;
+}
+
+function CanvasLoading() {
+  return (
+    <div aria-busy="true" className="flex size-full flex-col gap-4 p-4">
+      <div className="bg-muted h-5 w-1/3 animate-pulse rounded-md" />
+      <div className="bg-muted size-full animate-pulse rounded-xl" />
+      <span className="sr-only">画布加载中</span>
+    </div>
+  );
+}
+
+function CanvasRuntime({ html }: { html: string }) {
+  const [HtmlCanvas, setHtmlCanvas] = useState<HtmlCanvasComponent>();
+  const [loadError, setLoadError] = useState<Error>();
+  const [retryToken, setRetryToken] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setLoadError(undefined);
+
+    loadHtmlCanvas()
+      .then((component) => {
+        if (active) setHtmlCanvas(component);
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setLoadError(
+            error instanceof Error ? error : new Error('画布运行时加载失败')
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [retryToken]);
+
+  if (loadError) {
+    return (
+      <div className="flex size-full flex-col items-center justify-center gap-3 p-6 text-center">
+        <p className="text-foreground text-sm font-medium">画布加载失败</p>
+        <p className="text-muted-foreground max-w-xs text-xs">
+          {loadError.message || '画布运行时未能加载，请稍后重试。'}
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            htmlCanvasPromise = null;
+            setRetryToken((token) => token + 1);
+          }}
+          className="border-border hover:bg-accent rounded-lg border px-3 py-1.5 text-sm transition-colors"
+        >
+          重试
+        </button>
+      </div>
+    );
+  }
+
+  if (!HtmlCanvas) {
+    return <CanvasLoading />;
+  }
+
+  return <HtmlCanvas html={html} />;
 }
 
 export function CanvasPanel({
@@ -28,7 +110,7 @@ export function CanvasPanel({
         .pop();
       setSelectedIndex(lastInTurn ? lastInTurn.i : canvases.length - 1);
     }
-  }, [canvases.length, canvases[canvases.length - 1]?.turnIndex]);
+  }, [canvases]);
 
   const selected = canvases[Math.min(selectedIndex, canvases.length - 1)];
 
@@ -80,7 +162,28 @@ export function CanvasPanel({
 
       <div className="scrollbar-soft flex-1 overflow-hidden">
         {selected?.html ? (
-          <HtmlCanvas html={selected.html} />
+          <ErrorBoundary
+            key={selected.id}
+            fallback={(error, reset) => (
+              <div className="flex size-full flex-col items-center justify-center gap-3 p-6 text-center">
+                <p className="text-foreground text-sm font-medium">
+                  画布渲染失败
+                </p>
+                <p className="text-muted-foreground max-w-xs text-xs">
+                  {error.message || '画布内容发生运行时错误，请稍后重试。'}
+                </p>
+                <button
+                  type="button"
+                  onClick={reset}
+                  className="border-border hover:bg-accent rounded-lg border px-3 py-1.5 text-sm transition-colors"
+                >
+                  重试
+                </button>
+              </div>
+            )}
+          >
+            <CanvasRuntime html={selected.html} />
+          </ErrorBoundary>
         ) : (
           <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
             暂无画布

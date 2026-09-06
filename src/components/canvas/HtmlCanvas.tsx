@@ -96,7 +96,7 @@ function convertColor(val: string): string {
 // This handles the browser-refresh case where the panel transitions
 // from hidden → visible and the iframe initially renders with a
 // stale/zero width before CSS layout completes.
-const ECHARTS_BOOTSTRAP = `<script>
+const ECHARTS_BOOTSTRAP = String.raw`<script>
 (function(){
   // ─── Canvas color resolver ───────────────────────────────────
   // ECharts canvas renderer cannot parse oklch(). On hover, echarts
@@ -219,7 +219,8 @@ interface HtmlCanvasProps {
 }
 
 export function HtmlCanvas({ html }: HtmlCanvasProps) {
-  const { resolvedTheme, backgroundStyle } = useTheme();
+  const { resolvedTheme, backgroundStyle, accentColor } = useTheme();
+  const themeSignature = `${resolvedTheme}:${accentColor}:${backgroundStyle}`;
   const wrapperRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -258,7 +259,7 @@ ${LINK_HANDLER}
 ${html}
 </body>
 </html>`;
-  }, [html, resolvedTheme, backgroundStyle]);
+  }, [html, themeSignature]);
 
   // Propagate parent resize events into the iframe as a backup signal.
   // The inner poll script is the primary mechanism; this covers edge
@@ -280,7 +281,7 @@ ${html}
     ro.observe(wrapper);
 
     return () => ro.disconnect();
-  }, [html]);
+  }, []);
 
   return (
     <div ref={wrapperRef} className="size-full overflow-hidden">
