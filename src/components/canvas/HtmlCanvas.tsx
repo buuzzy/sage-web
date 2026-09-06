@@ -1,7 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTheme } from '@/shared/providers/theme-provider';
-// Inline echarts runtime (~1.1MB, loaded once at module level).
-import echartsSource from 'echarts/dist/echarts.min.js?raw';
 
 const THEME_VARS = [
   '--background',
@@ -218,15 +216,74 @@ interface HtmlCanvasProps {
   html: string;
 }
 
+let echartsSourcePromise: Promise<string> | null = null;
+
+function loadEchartsSource(): Promise<string> {
+  if (!echartsSourcePromise) {
+    echartsSourcePromise = import('echarts/dist/echarts.min.js?raw').then(
+      (module) => module.default
+    );
+  }
+
+  return echartsSourcePromise;
+}
+
+export function preloadHtmlCanvas(): void {
+  void loadEchartsSource().catch(() => undefined);
+}
+
 export function HtmlCanvas({ html }: HtmlCanvasProps) {
   const { resolvedTheme, backgroundStyle, accentColor } = useTheme();
   const themeSignature = `${resolvedTheme}:${accentColor}:${backgroundStyle}`;
+  const [echartsSource, setEchartsSource] = useState<string>();
+  const [loadError, setLoadError] = useState<Error>();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    loadEchartsSource()
+      .then((source) => {
+        if (active) setEchartsSource(source);
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setLoadError(
+            error instanceof Error ? error : new Error('画布运行时加载失败')
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    const iframe = iframeRef.current;
+    if (!wrapper || !iframe) return;
+
+    const triggerResize = () => {
+      try {
+        iframe.contentWindow?.dispatchEvent(new Event('resize'));
+      } catch {
+        /* cross-origin guard */
+      }
+    };
+
+    const ro = new ResizeObserver(() => triggerResize());
+    ro.observe(wrapper);
+
+    return () => ro.disconnect();
+  }, []);
 
   const srcDoc = useMemo(() => {
     const vars = readThemeVars();
     const isFullDoc = /^\s*<!doctype|^\s*<html/i.test(html);
+
+    if (!echartsSource) return '';
 
     if (isFullDoc) return html;
 
@@ -259,29 +316,33 @@ ${LINK_HANDLER}
 ${html}
 </body>
 </html>`;
-  }, [html, themeSignature]);
+  }, [echartsSource, html, themeSignature]);
 
-  // Propagate parent resize events into the iframe as a backup signal.
-  // The inner poll script is the primary mechanism; this covers edge
-  // cases where the user drags the panel divider.
-  useEffect(() => {
-    const wrapper = wrapperRef.current;
-    const iframe = iframeRef.current;
-    if (!wrapper || !iframe) return;
+  if (loadError) {
+    return (
+      <div className="flex size-full flex-col items-center justify-center gap-3 p-6 text-center">
+        <p className="text-foreground text-sm font-medium">画布加载失败</p>
+        <p className="text-muted-foreground max-w-xs text-xs">
+          {loadError.message || '画布运行时未能加载，请稍后重试。'}
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            echartsSourcePromise = null;
+            setLoadError(undefined);
+            setEchartsSource(undefined);
+          }}
+          className="border-border hover:bg-accent rounded-lg border px-3 py-1.5 text-sm transition-colors"
+        >
+          重试
+        </button>
+      </div>
+    );
+  }
 
-    const triggerResize = () => {
-      try {
-        iframe.contentWindow?.dispatchEvent(new Event('resize'));
-      } catch {
-        /* cross-origin guard */
-      }
-    };
-
-    const ro = new ResizeObserver(() => triggerResize());
-    ro.observe(wrapper);
-
-    return () => ro.disconnect();
-  }, []);
+  if (!srcDoc) {
+    return <div className="size-full" />;
+  }
 
   return (
     <div ref={wrapperRef} className="size-full overflow-hidden">
