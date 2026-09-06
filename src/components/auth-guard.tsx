@@ -1,6 +1,5 @@
 import { type ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
-import ImageLogo from '@/assets/logo.png';
 import { useAuth } from '@/shared/providers/auth-provider';
 
 interface AuthGuardProps {
@@ -21,11 +20,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
   if (status === 'loading' || (status === 'authenticated' && !dbReady)) {
     return (
       <div className="bg-background flex min-h-svh items-center justify-center">
-        <img
-          src={ImageLogo}
-          alt="Sage"
-          className="size-12 animate-pulse rounded-xl"
-        />
+        <div className="border-primary animate-spin rounded-full border-2 border-t-transparent p-3" />
       </div>
     );
   }

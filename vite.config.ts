@@ -28,22 +28,6 @@ export default defineConfig(async () => ({
     alias: [{ find: '@', replacement: path.resolve(__dirname, './src') }],
   },
 
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-antd': ['antd', '@ant-design/icons'],
-          'vendor-echarts': ['echarts', 'echarts-for-react'],
-          'vendor-charts': ['lightweight-charts'],
-          'vendor-markdown': ['react-markdown', 'remark-gfm'],
-          'vendor-syntax': ['react-syntax-highlighter'],
-          'vendor-office': ['xlsx', 'jszip'],
-        },
-      },
-    },
-  },
-
   clearScreen: false,
   server: {
     port: 1420,

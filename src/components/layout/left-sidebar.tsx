@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ImageLogo from '@/assets/logo.png';
 import type { Task } from '@/shared/db';
@@ -26,7 +26,6 @@ import {
   Trash2,
 } from 'lucide-react';
 
-import { SettingsModal } from '@/components/settings';
 import {
   Dialog,
   DialogContent,
@@ -53,6 +52,12 @@ import {
 import { AvatarImage } from './avatar-image';
 import { AvatarStatusBadge } from './avatar-status-badge';
 import { useSidebar } from './sidebar-context';
+
+const SettingsModal = lazy(() =>
+  import('@/components/settings').then(({ SettingsModal }) => ({
+    default: SettingsModal,
+  }))
+);
 
 interface LeftSidebarProps {
   tasks: Task[];
@@ -755,7 +760,11 @@ export function LeftSidebar({
       </aside>
 
       {/* Settings Modal */}
-      <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+      {settingsOpen && (
+        <Suspense fallback={null}>
+          <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+        </Suspense>
+      )}
 
       {/* Delete Confirmation Dialog */}
       <DeleteConfirmDialog

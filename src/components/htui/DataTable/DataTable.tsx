@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { AntdThemeProvider } from '@/shared/providers/antd-theme-provider';
 import type { DataTableData } from '@/shared/types/artifact';
 import { Table, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -29,23 +30,25 @@ function DataTable({ data }: DataTableProps) {
   );
 
   return (
-    <div className="data-table-card">
-      {data.title && (
-        <Title level={5} style={{ marginBottom: 12 }}>
-          {data.title}
-        </Title>
-      )}
-      <Table
-        columns={columns}
-        dataSource={dataSource}
-        rowKey="_key"
-        size="small"
-        pagination={
-          dataSource.length > 10 ? { pageSize: 10, size: 'small' } : false
-        }
-        scroll={{ x: 'max-content' }}
-      />
-    </div>
+    <AntdThemeProvider>
+      <div className="data-table-card">
+        {data.title && (
+          <Title level={5} style={{ marginBottom: 12 }}>
+            {data.title}
+          </Title>
+        )}
+        <Table
+          columns={columns}
+          dataSource={dataSource}
+          rowKey="_key"
+          size="small"
+          pagination={
+            dataSource.length > 10 ? { pageSize: 10, size: 'small' } : false
+          }
+          scroll={{ x: 'max-content' }}
+        />
+      </div>
+    </AntdThemeProvider>
   );
 }
 

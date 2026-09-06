@@ -1,15 +1,11 @@
-import '@ant-design/v5-patch-for-react-19';
-
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
-import ImageLogo from '@/assets/logo.png';
 
 import { router } from './app/router';
 import { ErrorBoundary } from './components/error-boundary';
 import { initializeSettings } from './shared/db/settings';
 import { installFetchInterceptor } from './shared/lib/api/fetch-interceptor';
-import { AntdThemeProvider } from './shared/providers/antd-theme-provider';
 import { AuthProvider } from './shared/providers/auth-provider';
 import { LanguageProvider } from './shared/providers/language-provider';
 import { ThemeProvider } from './shared/providers/theme-provider';
@@ -32,52 +28,39 @@ function AppProviders() {
   return (
     <LanguageProvider>
       <ThemeProvider>
-        <AntdThemeProvider>
-          <AuthProvider>
-            <ProfileProvider>
-              <SettingsSyncProvider>
-                <SessionSyncProvider>
-                  <RouterProvider router={router} />
-                </SessionSyncProvider>
-              </SettingsSyncProvider>
-            </ProfileProvider>
-          </AuthProvider>
-        </AntdThemeProvider>
+        <AuthProvider>
+          <ProfileProvider>
+            <SettingsSyncProvider>
+              <SessionSyncProvider>
+                <RouterProvider router={router} />
+              </SessionSyncProvider>
+            </SettingsSyncProvider>
+          </ProfileProvider>
+        </AuthProvider>
       </ThemeProvider>
     </LanguageProvider>
   );
 }
 
 function BootstrapRoot() {
-  const [settingsReady, setSettingsReady] = useState(false);
-
-  const boot = useCallback(async () => {
-    try {
-      await initializeSettings();
-      setSettingsReady(true);
-      void flushErrorQueue();
-    } catch (error) {
-      console.error('[startup] initializeSettings failed:', error);
-      // Settings failure is non-fatal — render anyway with defaults
-      setSettingsReady(true);
-    }
-  }, []);
-
   useEffect(() => {
-    void boot();
-  }, [boot]);
+    let active = true;
 
-  if (!settingsReady) {
-    return (
-      <div className="bg-background flex min-h-svh items-center justify-center">
-        <img
-          src={ImageLogo}
-          alt="Sage"
-          className="size-12 animate-pulse rounded-xl"
-        />
-      </div>
-    );
-  }
+    const boot = async () => {
+      try {
+        await initializeSettings();
+        if (active) void flushErrorQueue();
+      } catch (error) {
+        console.error('[startup] initializeSettings failed:', error);
+      }
+    };
+
+    void boot();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return <AppProviders />;
 }

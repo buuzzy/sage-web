@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import ImageLogo from '@/assets/logo.png';
 import {
   getSettings,
@@ -12,12 +12,33 @@ import { useLanguage } from '@/shared/providers/language-provider';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
 import { categoryIcons } from './constants';
-import { AboutSettings } from './tabs/AboutSettings';
-import { AccountSettings } from './tabs/AccountSettings';
-import { GeneralSettings } from './tabs/GeneralSettings';
-import { PersonaSettings } from './tabs/PersonaSettings';
-import { SkillsSettings } from './tabs/SkillsSettings';
 import type { SettingsCategory } from './types';
+
+const AboutSettings = lazy(() =>
+  import('./tabs/AboutSettings').then(({ AboutSettings }) => ({
+    default: AboutSettings,
+  }))
+);
+const AccountSettings = lazy(() =>
+  import('./tabs/AccountSettings').then(({ AccountSettings }) => ({
+    default: AccountSettings,
+  }))
+);
+const GeneralSettings = lazy(() =>
+  import('./tabs/GeneralSettings').then(({ GeneralSettings }) => ({
+    default: GeneralSettings,
+  }))
+);
+const PersonaSettings = lazy(() =>
+  import('./tabs/PersonaSettings').then(({ PersonaSettings }) => ({
+    default: PersonaSettings,
+  }))
+);
+const SkillsSettings = lazy(() =>
+  import('./tabs/SkillsSettings').then(({ SkillsSettings }) => ({
+    default: SkillsSettings,
+  }))
+);
 
 interface SettingsModalProps {
   open: boolean;
@@ -124,25 +145,31 @@ export function SettingsModal({
 
             {/* Content Area */}
             <div className="min-h-0 flex-1 overflow-y-auto p-6">
-              {activeCategory === 'account' && (
-                <AccountSettings
-                  settings={settings}
-                  onSettingsChange={handleSettingsChange}
-                />
-              )}
+              <Suspense
+                fallback={
+                  <div className="text-muted-foreground text-sm">加载中...</div>
+                }
+              >
+                {activeCategory === 'account' && (
+                  <AccountSettings
+                    settings={settings}
+                    onSettingsChange={handleSettingsChange}
+                  />
+                )}
 
-              {activeCategory === 'general' && (
-                <GeneralSettings
-                  settings={settings}
-                  onSettingsChange={handleSettingsChange}
-                />
-              )}
+                {activeCategory === 'general' && (
+                  <GeneralSettings
+                    settings={settings}
+                    onSettingsChange={handleSettingsChange}
+                  />
+                )}
 
-              {activeCategory === 'skills' && <SkillsSettings />}
+                {activeCategory === 'skills' && <SkillsSettings />}
 
-              {activeCategory === 'persona' && <PersonaSettings />}
+                {activeCategory === 'persona' && <PersonaSettings />}
 
-              {activeCategory === 'about' && <AboutSettings />}
+                {activeCategory === 'about' && <AboutSettings />}
+              </Suspense>
             </div>
           </div>
         </div>

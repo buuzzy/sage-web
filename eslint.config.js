@@ -1,11 +1,11 @@
 import eslint from '@eslint/js';
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
+import prettierConfig from 'eslint-config-prettier';
+import prettier from 'eslint-plugin-prettier';
 import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import unusedImports from 'eslint-plugin-unused-imports';
-import prettier from 'eslint-plugin-prettier';
-import prettierConfig from 'eslint-config-prettier';
 import globals from 'globals';
 
 export default [
@@ -28,6 +28,7 @@ export default [
         ...globals.es2022,
         React: 'readonly',
         __BUILD_DATE__: 'readonly',
+        __APP_VERSION__: 'readonly',
         NodeJS: 'readonly',
       },
     },
