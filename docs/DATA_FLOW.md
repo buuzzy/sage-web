@@ -78,6 +78,9 @@ Tushare data API (quotes, financials, news, announcements, fund data)
 | 基金 | `fund_daily`, `fund_portfolio`, `fund_nav`, `fund_basic` | Tushare via TINYSHARE_TOKEN |
 | 互联互通 | `hsgt_top10`, `ggt_top10`, `ggt_daily` | Tushare via TINYSHARE_TOKEN |
 | 龙虎榜 | `top_list` | Tushare via TINYSHARE_TOKEN |
+| 港美股行情 | `hk_daily/weekly/monthly`, `us_daily/weekly/monthly`, `global_index_daily` | 东财 via akshare（限频+熔断+缓存见 `tools/global_market/em_client.py`） |
+| 港美股财务 | `hk_fina_indicator`, `us_fina_indicator`, `hk_/us_ income/balancesheet/cashflow` | 东财 F10 via akshare |
+| 港美股代码/公告 | `search_symbol`, `us_filings`(SEC EDGAR), `hk_announcements`(披露易) | 东财列表 + 官方 API |
 
 ## MCP deployment verification
 
