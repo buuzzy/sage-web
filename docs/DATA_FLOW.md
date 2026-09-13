@@ -21,9 +21,13 @@ sage.nakocai.com (sage-web-api, Node.js)
   │  MCP SSE connection (MINISHARE_MCP_URL env var)
   ▼
 minishare-mcp-production.up.railway.app (minishare-mcp, Python FastMCP)
-  │  TinyShare/MiniShare SDK
+  │  TinyShare/MiniShare SDK          → A 股行情/财务/基金（Tushare data API）
+  │  akshare + requests (多源限频)    → 港美股财务/代码表（东财 datacenter）
+  │  requests (ifzq)                  → 港美股与全球指数 K 线
+  │  requests (官方 API)              → SEC EDGAR 申报 / 披露易公告
   ▼
-Tushare data API (quotes, financials, news, announcements, fund data)
+数据经 tools/global_market 统一限频（域名组令牌桶+熔断）与 TTL 缓存后
+以 key:value 文本返回；对 Agent 隐藏数据供应商细节
 ```
 
 ## Request lifecycle

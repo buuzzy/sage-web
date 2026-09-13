@@ -8,11 +8,15 @@
 
 ### 股票代码格式
 
-| 市场 | 后缀 | 示例 |
-|------|------|------|
-| 沪市 | `.SH` | `600519.SH` |
-| 深市 | `.SZ` | `000001.SZ` |
-| 港股 | `.HK` | `00700.HK` |
+| 市场 | 格式 | 示例 | 适用工具 |
+|------|------|------|---------|
+| 沪市 | 后缀 `.SH` | `600519.SH` | A股工具（`daily` 等） |
+| 深市 | 后缀 `.SZ` | `000001.SZ` | A股工具（`daily` 等） |
+| 港股 | 5位数字，无后缀 | `00700` | `hk_*` 工具 |
+| 美股 | ticker，无后缀 | `AAPL` | `us_*` 工具 |
+| 全球指数 | 代码或中文名 | `HSI` `SPX` `恒指` | `global_index_daily` |
+
+港美股代码不确定时先用 `search_symbol` 查询。不要把 `.HK` 等后缀传给 `hk_*`/`us_*` 工具。
 
 日期参数用 `YYYYMMDD` 格式。
 
@@ -20,15 +24,24 @@
 
 | 类别 | 工具 | 用途 |
 |------|------|------|
-| 行情 | `daily` `weekly` `monthly` | 日/周/月线 OHLCV |
+| 行情 | `daily` `weekly` `monthly` | A股日/周/月线 OHLCV |
 | 指标 | `daily_basic` | PE/PB/换手率/流通市值 |
-| 财务 | `income` `balancesheet` `cashflow` | 利润表/资产负债表/现金流 |
+| 财务 | `income` `balancesheet` `cashflow` | A股利润表/资产负债表/现金流 |
 | 业绩 | `forecast` `dividend` `fina_indicator` `express` | 预告/分红/财务指标/快报 |
 | 资金 | `moneyflow` `hsgt_top10` `top_list` | 资金流向/北向Top10/龙虎榜 |
 | 基金 | `fund_daily` `fund_nav` `fund_portfolio` | 基金行情/净值/持仓 |
 | 资讯 | `news` `major_news` `cctv_news` `research_report` | 新闻/研报 |
-| 公司 | `anns_d` `irm_qa` `stock_basic` `stock_company` | 公告/董秘问答/基础信息 |
+| 公司 | `anns_d` `irm_qa` `stock_basic` `stock_company` | A股公告/董秘问答/基础信息 |
 | 其他 | `npr` `new_share` `fina_mainbz` | 政策/新股/主营构成 |
+| 港美股行情 | `hk_daily` `us_daily`（另有 `hk_/us_ weekly` `monthly`） | 港美股日/周/月线（复权可选） |
+| 全球指数 | `global_index_daily` | 恒指/恒生科技/道指/标普500/纳指 K线 |
+| 港美股财务 | `hk_fina_indicator` `us_fina_indicator` | 港美股财务指标（ROE/毛利率/EPS 等） |
+| 港美股报表 | `hk_income` `hk_balancesheet` `hk_cashflow` | 港股三大报表 |
+| | `us_income` `us_balancesheet` `us_cashflow` | 美股三大报表 |
+| 港美股公告 | `us_filings` `hk_announcements` | SEC 申报 / 披露易公告（含原文链接） |
+| 代码搜索 | `search_symbol` | 港美股代码/名称互查 |
+
+A股专属工具（`daily` `daily_basic` `moneyflow` 等）不适用于港美股，反之亦然；按上表选择。
 
 `anns_d` 和 `research_report` 仅返回标题和链接，不含全文。获取后如实告知用户，不要自行补充内容。
 

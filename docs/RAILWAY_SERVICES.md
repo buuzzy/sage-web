@@ -53,7 +53,7 @@ railway up --project d5dd1df3-18e9-48e3-9cdb-a6334927cc6e \
 
 | Field | Value |
 |---|---|
-| Purpose | MCP SSE server: financial data tools (A-share quotes, financials, news, announcements, fund data) |
+| Purpose | MCP SSE server: financial data tools (A-share + HK/US equities quotes & financials, global index klines, news, announcements, filings, fund data) |
 | Repository | `buuzzy/tushare_MCP` |
 | Branch | `main` |
 | Builder | Dockerfile (`python:3.10-slim`) |

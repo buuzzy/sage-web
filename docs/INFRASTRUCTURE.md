@@ -37,7 +37,7 @@
 - Service: `minishare-mcp` (`c1bde52b-d01e-4f5a-8128-e8badfd82226`)
   - Public URL: `https://minishare-mcp-production.up.railway.app`
   - Repository: `buuzzy/tushare_MCP`, branch `main`
-  - Purpose: MCP SSE server providing financial data tools to the Agent
+  - Purpose: MCP SSE server providing financial data tools to the Agent (A-share + HK/US equities, global index klines, filings)
   - Connected to `sage-web-api` via `MINISHARE_MCP_URL` env var
 
 > **Critical**: The local Railway CLI defaults to the `sage` project. Always pass explicit `--project 72cb39ad...` when deploying MCP tools.
