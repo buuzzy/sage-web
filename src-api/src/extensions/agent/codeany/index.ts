@@ -492,10 +492,16 @@ export class CodeAnyAgent extends BaseAgent {
            // the HTML as a canvas:html text block the frontend already renders.
            if (block.name === CANVAS_TOOL_FULL_NAME || block.name === 'render_canvas') {
              const toolInput = block.input as Record<string, unknown> | undefined;
-             const html = toolInput?.html as string;
-             if (html && html.length > 10) {
+             const html = toolInput?.html;
+             if (typeof html === 'string' && html.length > 10) {
                logger.info(`[processMessage] render_canvas intercepted: ${html.length} chars HTML, yielding as canvas text`);
                yield { type: 'text', content: '```canvas:html\n' + html + '\n```' };
+             } else {
+               // 模型把 html 拆成对象等非字符串形态：canvas-tool 已返回
+               // is_error 指引其改用 render_chart，此处仅记录不投递
+               logger.warn(
+                 `[processMessage] render_canvas dropped: html is ${typeof html}`
+               );
              }
            }
            // Structured chart: generate HTML server-side from cached data.

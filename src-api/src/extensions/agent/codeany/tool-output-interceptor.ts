@@ -59,6 +59,25 @@ const TOOL_CHART_TYPE: Record<string, string> = {
   fund_portfolio: 'table',
   stk_factor: 'table',
   bak_basic: 'table',
+  // 港美股（2026-09-14 接入）：输出同为 key:value | key:value 行格式，
+  // data-cache 解析器与 candlestick/line/table 模板列名直接兼容。
+  // 此前未注册导致 LLM 手抄 10KB HTML 生成画布——挤压/空白/数字
+  // 不一致等事故均源于此。
+  hk_daily: 'candlestick',
+  hk_weekly: 'candlestick',
+  hk_monthly: 'candlestick',
+  us_daily: 'candlestick',
+  us_weekly: 'candlestick',
+  us_monthly: 'candlestick',
+  global_index_daily: 'line',
+  hk_fina_indicator: 'line',
+  us_fina_indicator: 'line',
+  hk_income: 'table',
+  hk_balancesheet: 'table',
+  hk_cashflow: 'table',
+  us_income: 'table',
+  us_balancesheet: 'table',
+  us_cashflow: 'table',
 };
 
 // Tools that return text/lists — optional canvas (unchanged behavior)
@@ -74,6 +93,10 @@ const TEXT_CANVAS_TOOLS = [
   'new_share',
   'stk_managers',
   'hsgt_top10',
+  // 港美股：搜索/公告类为轻结构文本，同 A 股 anns_d 待遇
+  'search_symbol',
+  'us_filings',
+  'hk_announcements',
 ];
 
 // ---------------------------------------------------------------------------

@@ -58,11 +58,29 @@ export function createCanvasMcpServer() {
           return '渲染可视化画布到右侧面板';
         },
         async call(input: { html?: string; title?: string }) {
-          const htmlLen = input?.html?.length || 0;
+          // 工程兜底：html 必须是字符串。模型偶发把长 HTML 拆成
+          // {$text, script, style...} 对象（2026-09-14 实测），此前会以
+          // "0 字符 HTML" 假成功放行，画布静默空白。错误指引转向
+          // render_chart（数据服务端注入）而非让模型重抄一遍 HTML。
+          const html = input?.html;
+          if (typeof html !== 'string' || html.length < 10) {
+            logger.warn(
+              `[render_canvas] rejected: html is ${typeof html}, ${typeof html === 'string' ? html.length : 0} chars`
+            );
+            return {
+              type: 'tool_result' as const,
+              tool_use_id: '',
+              content:
+                'render_canvas 调用失败：html 参数必须是完整的字符串（本次收到的是 ' +
+                `${typeof html}）。渲染行情/财务图表请改用 render_chart(chart_type, data_key, title)` +
+                '，数据由系统自动注入，无需手写 HTML。',
+              is_error: true,
+            };
+          }
           logger.info(
-            `[render_canvas] called with ${htmlLen} chars of HTML${input?.title ? `, title="${input.title}"` : ''}`
+            `[render_canvas] called with ${html.length} chars of HTML${input?.title ? `, title="${input.title}"` : ''}`
           );
-          const text = `画布已渲染${input?.title ? `：${input.title}` : ''}（${htmlLen} 字符 HTML）。继续输出文字分析即可。`;
+          const text = `画布已渲染${input?.title ? `：${input.title}` : ''}（${html.length} 字符 HTML）。继续输出文字分析即可。`;
           return {
             type: 'tool_result' as const,
             tool_use_id: '',
