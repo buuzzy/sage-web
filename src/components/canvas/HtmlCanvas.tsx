@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { stripExternalScripts } from '@/shared/lib/canvasSanitize';
 import { useTheme } from '@/shared/providers/theme-provider';
 
 const THEME_VARS = [
@@ -168,23 +169,43 @@ const ECHARTS_BOOTSTRAP = String.raw`<script>
   document.body.appendChild(_probe);
   
   var charts = [];
-  var origInit = null;
-  if (window.echarts) {
-    origInit = echarts.init;
-    echarts.init = function() {
+  function trackEcharts(ec) {
+    if (!ec || !ec.init) return;
+    var origInit = ec.init;
+    if (origInit.__canvasTracked) return;
+    var wrapped = function() {
       var c = origInit.apply(this, arguments);
       charts.push(c);
       return c;
     };
+    wrapped.__canvasTracked = true;
+    ec.init = wrapped;
   }
+  trackEcharts(window.echarts);
   function resizeAll() {
     charts.forEach(function(c) { try { c.resize(); } catch(e) {} });
+    // 兜底：治愈未被登记的实例（如外链脚本覆盖 window.echarts 后创建的图表）
+    try {
+      if (window.echarts && window.echarts.getInstanceByDom) {
+        var nodes = document.querySelectorAll('[_echarts_instance_]');
+        for (var i = 0; i < nodes.length; i++) {
+          var inst = window.echarts.getInstanceByDom(nodes[i]);
+          if (inst) { try { inst.resize(); } catch(e) {} }
+        }
+      }
+    } catch(e) {}
   }
   window.addEventListener('resize', resizeAll);
   // Poll for width stabilization. On first load the iframe viewport
   // width can be 0 or very small; we keep resizing until it stabilizes.
-  var lastW = -1, stable = 0;
+  // Also re-patch if window.echarts got replaced by stray scripts.
+  var lastW = -1, stable = 0, lastEc = window.echarts;
   var pollId = setInterval(function() {
+    if (window.echarts !== lastEc) {
+      lastEc = window.echarts;
+      trackEcharts(lastEc);
+      stable = 0;
+    }
     var w = document.documentElement.clientWidth || document.body.clientWidth || 0;
     if (w !== lastW) {
       lastW = w;
@@ -287,6 +308,15 @@ export function HtmlCanvas({ html }: HtmlCanvasProps) {
 
     if (isFullDoc) return html;
 
+    // 画布运行时自带 echarts；外链脚本会在覆盖 window.echarts 后脱离
+    // 尺寸自愈（图表固化在初始小宽度），在渲染汇合点强制剥离。
+    const { html: safeHtml, stripped } = stripExternalScripts(html);
+    if (stripped > 0) {
+      console.warn(
+        `[canvas] removed ${stripped} external <script src> tag(s); the canvas runtime injects echarts itself`
+      );
+    }
+
     return `<!DOCTYPE html>
 <html lang="zh">
 <head>
@@ -313,7 +343,7 @@ a { color: var(--primary); }
 <body>
 ${ECHARTS_BOOTSTRAP}
 ${LINK_HANDLER}
-${html}
+${safeHtml}
 </body>
 </html>`;
   }, [echartsSource, html, themeSignature]);
