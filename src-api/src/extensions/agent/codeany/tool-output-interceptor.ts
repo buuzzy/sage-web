@@ -82,6 +82,8 @@ const TOOL_CHART_TYPE: Record<string, string> = {
   // 走服务端 table（链接列渲染为锚点）零转录
   hk_announcements: 'table',
   us_filings: 'table',
+  // 港股每日回购明细：数字密集，table 零转录（与 A 股 repurchase 同待遇）
+  hk_buyback: 'table',
 };
 
 // Tools that return text/lists — optional canvas (unchanged behavior)

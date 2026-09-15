@@ -39,6 +39,7 @@
 | 港美股报表 | `hk_income` `hk_balancesheet` `hk_cashflow` | 港股三大报表 |
 | | `us_income` `us_balancesheet` `us_cashflow` | 美股三大报表 |
 | 港美股公告 | `us_filings` `hk_announcements` | SEC 申报 / 披露易公告（含原文链接） |
+| 港股回购 | `hk_buyback` | 港股每日回购明细（股数/均价/金额，港元） |
 | 代码搜索 | `search_symbol` | 港美股代码/名称互查 |
 
 A股专属工具（`daily` `daily_basic` `moneyflow` 等）不适用于港美股，反之亦然；按上表选择。
