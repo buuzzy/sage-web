@@ -112,6 +112,9 @@ const TEXT_CANVAS_TOOLS = [
  *      so chart HTML is generated server-side from real data.
  *   3. Falls back to the old render_canvas hint if parsing fails.
  */
+const CHART_PARAMS_DOC =
+  '多标的对比（如两指数/同一公司多地上市）可传入 2-5 个 data_key 组成的 data_keys 数组，系统自动按日期对齐并归一化（起点=100），无需手写 HTML。';
+
 export function createMinishareCanvasHooks(): Array<{
   matcher: string;
   hooks: Array<(input: { toolOutput?: unknown }) => Promise<{ modifiedOutput: string } | undefined>>;
@@ -145,12 +148,12 @@ export function createMinishareCanvasHooks(): Array<{
                 `\n\n[系统提示] 数据已自动结构化缓存（data_key: "${dataKey}"）。` +
                 `请调用 render_chart(chart_type="${suggestedType}", data_key="${dataKey}", title="...") 渲染图表。` +
                 `可在 series 参数中指定要绘制的指标列名（如 ["PE","PB"]），省略则自动选择。` +
-                `系统自动注入真实数据，无需手动抄写数字。渲染后继续撰写文字分析。`;
+                `系统自动注入真实数据，无需手动抄写数字。${CHART_PARAMS_DOC}渲染后继续撰写文字分析。`;
             } else {
               hint =
                 `\n\n[系统提示] 数据已自动结构化缓存（data_key: "${dataKey}"）。` +
                 `请调用 render_chart(chart_type="${suggestedType}", data_key="${dataKey}", title="...") 渲染图表。` +
-                `系统自动注入真实数据，无需手动抄写数字。渲染后继续撰写文字分析。`;
+                `系统自动注入真实数据，无需手动抄写数字。${CHART_PARAMS_DOC}渲染后继续撰写文字分析。`;
             }
           } else {
             logger.info(

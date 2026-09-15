@@ -47,10 +47,10 @@ import {
   createMinishareCanvasHooks,
   createWebSearchInterceptorHook,
 } from './tool-output-interceptor';
-import { createCanvasMcpServer, CANVAS_TOOL_FULL_NAME } from './canvas-tool';
+import { createCanvasMcpServer, CANVAS_TOOL_FULL_NAME, findUnfilledPlaceholder } from './canvas-tool';
 import { createChartMcpServer, CHART_TOOL_FULL_NAME } from './chart-tool';
 import { getCachedData } from './data-cache';
-import { generateChartHTML } from './chart-templates';
+import { generateChartHTML, generateComparisonHTML } from './chart-templates';
 import { createLogger } from '@/shared/utils/logger';
 import { stripHashSuffix } from '@/shared/utils/url';
 
@@ -494,8 +494,17 @@ export class CodeAnyAgent extends BaseAgent {
              const toolInput = block.input as Record<string, unknown> | undefined;
              const html = toolInput?.html;
              if (typeof html === 'string' && html.length > 10) {
-               logger.info(`[processMessage] render_canvas intercepted: ${html.length} chars HTML, yielding as canvas text`);
-               yield { type: 'text', content: '```canvas:html\n' + html + '\n```' };
+               // 占位符模板（如 __HSI_DATA__）投递后必现 ReferenceError 空白画布：
+               // 不投递，由 canvas-tool 的 is_error 指引模型填数或改用 render_chart
+               const placeholder = findUnfilledPlaceholder(html);
+               if (placeholder) {
+                 logger.warn(
+                   `[processMessage] render_canvas dropped: unfilled placeholder ${placeholder}`
+                 );
+               } else {
+                 logger.info(`[processMessage] render_canvas intercepted: ${html.length} chars HTML, yielding as canvas text`);
+                 yield { type: 'text', content: '```canvas:html\n' + html + '\n```' };
+               }
              } else {
                // 模型把 html 拆成对象等非字符串形态：canvas-tool 已返回
                // is_error 指引其改用 render_chart，此处仅记录不投递
@@ -513,21 +522,53 @@ export class CodeAnyAgent extends BaseAgent {
              const chartSubtitle = chartInput?.subtitle as string | undefined;
              const chartSeries = chartInput?.series as string[] | undefined;
 
-             const cachedData = dataKey ? getCachedData(dataKey) : undefined;
-             if (cachedData) {
-               const html = generateChartHTML(chartType || 'table', cachedData, {
-                 title: chartTitle,
-                 ...(chartSubtitle ? { subtitle: chartSubtitle } : {}),
-                 ...(chartSeries ? { series: chartSeries } : {}),
-               });
-               logger.info(
-                 `[processMessage] render_chart: type=${chartType}, key=${dataKey}, ${html.length} chars HTML`
-               );
-               yield { type: 'text', content: '```canvas:html\n' + html + '\n```' };
+             // 多数据集对比模式：服务端按日期对齐 + 归一化（起点=100）
+             const rawKeys = Array.isArray(chartInput?.data_keys)
+               ? (chartInput.data_keys as unknown[]).filter(
+                   (k): k is string => typeof k === 'string' && k.trim() !== ''
+                 )
+               : [];
+             const names = Array.isArray(chartInput?.names)
+               ? (chartInput.names as unknown[]).filter(
+                   (n): n is string => typeof n === 'string'
+                 )
+               : [];
+
+             if (rawKeys.length >= 2) {
+               const datasets = rawKeys
+                 .map((k, i) => ({ name: names[i] || '', data: getCachedData(k) }))
+                 .filter((d): d is { name: string; data: NonNullable<ReturnType<typeof getCachedData>> } => !!d.data);
+               if (datasets.length >= 2) {
+                 const html = generateComparisonHTML(datasets, {
+                   title: chartTitle,
+                   ...(chartSubtitle ? { subtitle: chartSubtitle } : {}),
+                 });
+                 logger.info(
+                   `[processMessage] render_chart comparison: ${rawKeys.length} keys, ${html.length} chars HTML`
+                 );
+                 yield { type: 'text', content: '```canvas:html\n' + html + '\n```' };
+               } else {
+                 logger.warn(
+                   `[processMessage] render_chart comparison: cache miss for ${rawKeys.join(', ')}`
+                 );
+               }
              } else {
-               logger.warn(
-                 `[processMessage] render_chart: data_key "${dataKey}" not found in cache`
-               );
+               const cachedData = dataKey ? getCachedData(dataKey) : undefined;
+               if (cachedData) {
+                 const html = generateChartHTML(chartType || 'table', cachedData, {
+                   title: chartTitle,
+                   ...(chartSubtitle ? { subtitle: chartSubtitle } : {}),
+                   ...(chartSeries ? { series: chartSeries } : {}),
+                 });
+                 logger.info(
+                   `[processMessage] render_chart: type=${chartType}, key=${dataKey}, ${html.length} chars HTML`
+                 );
+                 yield { type: 'text', content: '```canvas:html\n' + html + '\n```' };
+               } else {
+                 logger.warn(
+                   `[processMessage] render_chart: data_key "${dataKey}" not found in cache`
+                 );
+               }
              }
            }
          }

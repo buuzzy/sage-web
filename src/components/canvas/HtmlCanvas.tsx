@@ -167,7 +167,24 @@ const ECHARTS_BOOTSTRAP = String.raw`<script>
     }
   }
   document.body.appendChild(_probe);
-  
+
+  // 画布脚本错误可见化：iframe 内脚本异常不传给父页 ErrorBoundary，
+  // 此前表现为静默空白（2026-09-15 __HSI_DATA__ 占位符事故）。资源加载
+  // 失败的事件无 message，跳过。
+  window.addEventListener('error', function(e) {
+    var msg = e && e.message ? String(e.message) : '';
+    if (!msg) return;
+    try {
+      var css2 = getComputedStyle(document.documentElement);
+      var bar = document.createElement('div');
+      bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:2147483647;'
+        + 'padding:8px 12px;font-size:11px;line-height:1.5;'
+        + 'background:' + (css2.getPropertyValue('--destructive').trim() || '#ef4444') + ';color:#fff;';
+      bar.textContent = '画布脚本错误：' + msg;
+      document.body.appendChild(bar);
+    } catch (err) {}
+  });
+
   var charts = [];
   function trackEcharts(ec) {
     if (!ec || !ec.init) return;

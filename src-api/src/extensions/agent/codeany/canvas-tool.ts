@@ -19,6 +19,20 @@ export const CANVAS_TOOL_NAME = 'render_canvas';
 export const CANVAS_SERVER_NAME = 'canvas';
 export const CANVAS_TOOL_FULL_NAME = `mcp__${CANVAS_SERVER_NAME}__${CANVAS_TOOL_NAME}`;
 
+/**
+ * Detect unreplaced template placeholders (e.g. __HSI_DATA__). The model
+ * occasionally emits a data template without filling in real values
+ * (2026-09-15 实测 __HSI_DATA__/__HST_DATA__), which throws ReferenceError at
+ * iframe runtime and leaves the chart silently blank. Only SCREAMING_CASE
+ * names are flagged so JS dunders (__proto__, __init__) never match.
+ */
+const PLACEHOLDER_RE = /__[A-Z][A-Z0-9_]*__/;
+
+export function findUnfilledPlaceholder(html: string): string | null {
+  const m = html.match(PLACEHOLDER_RE);
+  return m ? m[0] : null;
+}
+
 /** Plain JSON schema for the render_canvas tool input (no Zod) */
 const RENDER_CANVAS_SCHEMA = {
   type: 'object' as const,
@@ -74,6 +88,18 @@ export function createCanvasMcpServer() {
                 'render_canvas 调用失败：html 参数必须是完整的字符串（本次收到的是 ' +
                 `${typeof html}）。渲染行情/财务图表请改用 render_chart(chart_type, data_key, title)` +
                 '，数据由系统自动注入，无需手写 HTML。',
+              is_error: true,
+            };
+          }
+          const placeholder = findUnfilledPlaceholder(html);
+          if (placeholder) {
+            logger.warn(`[render_canvas] rejected: unfilled placeholder ${placeholder}`);
+            return {
+              type: 'tool_result' as const,
+              tool_use_id: '',
+              content:
+                `render_canvas 调用失败：HTML 中存在未填充的数据占位符 ${placeholder}（模板未替换为真实数据）。` +
+                '请把真实数据填入后再调用；行情/财务图表请改用 render_chart（支持 data_keys 多数据集对比），数据由系统自动注入，无需手写。',
               is_error: true,
             };
           }

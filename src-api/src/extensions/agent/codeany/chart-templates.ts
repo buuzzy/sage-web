@@ -340,6 +340,182 @@ export function generateLineHTML(
 }
 
 // ---------------------------------------------------------------------------
+// Comparison (multi-dataset: date-aligned, normalized to base=100)
+// ---------------------------------------------------------------------------
+
+export interface ComparisonSeries {
+  /** 图例名称；空串时自动从数据的 名称 列或 source 取 */
+  name: string;
+  data: ParsedDataset;
+}
+
+function normDateKey(d: string): string {
+  // "2026-09-14" / "20260914" -> "20260914"（统一键，兼容 A股 tushare 与港美格式）
+  const digits = d.replace(/[^0-9]/g, '');
+  return digits.length >= 8 ? digits.slice(0, 8) : digits;
+}
+
+export function generateComparisonHTML(
+  datasets: ComparisonSeries[],
+  opts: ChartOpts
+): string {
+  // 每个序列取收盘列（缺列退回首个数值列），建 date -> value 映射
+  const seriesInfo = datasets
+    .map((ds) => {
+      const dateCol =
+        findCol(ds.data, ['日期', '报告期', 'trade_date', 'date']) ||
+        ds.data.columns[0];
+      let valCol = findCol(ds.data, ['收盘', 'close']);
+      if (!valCol) {
+        const skip = new Set([dateCol, '代码', 'ts_code', '股票代码', '名称']);
+        valCol = ds.data.columns.find(
+          (c) => !skip.has(c) && ds.data.rows.some((r) => parseNum(r[c]) !== null)
+        );
+      }
+      const name =
+        ds.name || String(ds.data.rows[0]?.['名称'] ?? '') || ds.data.source;
+      const map = new Map<string, number>();
+      if (dateCol && valCol) {
+        for (const r of ds.data.rows) {
+          const k = normDateKey(r[dateCol] || '');
+          const v = parseNum(r[valCol]);
+          if (k && v !== null && !map.has(k)) map.set(k, v);
+        }
+      }
+      return { name, map, ok: map.size > 0 };
+    })
+    .filter((s) => s.ok);
+
+  const fallbackData = datasets[0]?.data;
+  if (seriesInfo.length === 0 || !fallbackData) {
+    return generateTableHTML(fallbackData ?? { columns: [], rows: [], source: 'comparison' }, opts);
+  }
+
+  // 日期交集：只画全部序列共有的交易日，升序
+  let dates = [...seriesInfo[0].map.keys()];
+  for (const s of seriesInfo.slice(1)) {
+    dates = dates.filter((d) => s.map.has(d));
+  }
+  dates.sort();
+
+  // 交集不足 2 天无法画趋势，退回表格
+  if (dates.length < 2) {
+    return generateTableHTML(fallbackData, opts);
+  }
+
+  // 归一化：起点 = 100；同时保留原始末值与区间涨跌供 meta 展示
+  const chartSeries = seriesInfo.map((s) => {
+    const base = s.map.get(dates[0]) as number;
+    const norm = dates.map((d) => +(((s.map.get(d) as number) / base) * 100).toFixed(2));
+    const raw = dates.map((d) => s.map.get(d) as number);
+    const lastRaw = raw[raw.length - 1];
+    const pct = +(((lastRaw / base - 1) * 100).toFixed(2));
+    return { name: s.name, norm, raw, lastRaw, pct };
+  });
+
+  const titleHtml = escapeHtml(opts.title);
+  const subtitleHtml = opts.subtitle ? escapeHtml(opts.subtitle) : '';
+  const xLabels = dates.map((d) => fmtDate(d));
+  const chartData = JSON.stringify({ x: xLabels, series: chartSeries });
+  const legendItems = chartSeries
+    .map(
+      (s, i) =>
+        `<span><span class="swatch" style="background:${LINE_COLORS[i % LINE_COLORS.length]};"></span>${escapeHtml(s.name)}</span>`
+    )
+    .join('\n    ');
+  const metaItems = chartSeries
+    .map(
+      (s) =>
+        `<span>${escapeHtml(s.name)}：<b>${s.lastRaw.toLocaleString('en-US')}</b>（区间 ${s.pct >= 0 ? '+' : ''}${s.pct}%）</span>`
+    )
+    .join('\n    ');
+
+  return `<style>
+  .chart-panel { padding: 12px; }
+  .chart-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .chart-subtitle { font-size: 11px; color: var(--muted-foreground); margin-bottom: 8px; }
+  .chart-meta { display: flex; gap: 16px; font-size: 11px; color: var(--muted-foreground); margin-bottom: 8px; flex-wrap: wrap; }
+  .chart-meta b { color: var(--foreground); font-size: 13px; }
+  .chart-legend { display: flex; gap: 16px; margin-top: 8px; font-size: 11px; color: var(--muted-foreground); flex-wrap: wrap; }
+  .chart-legend span { display: inline-flex; align-items: center; }
+  .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 4px; border-radius: 2px; }
+</style>
+<div class="chart-panel">
+  <div class="chart-title">${titleHtml}</div>
+  ${subtitleHtml ? `<div class="chart-subtitle">${subtitleHtml}</div>` : ''}
+  <div class="chart-meta">
+    ${metaItems}
+  </div>
+  <div id="chart-compare" style="width:100%;height:400px;"></div>
+  <div class="chart-legend">
+    ${legendItems}
+  </div>
+</div>
+<script>
+(function() {
+  var css = getComputedStyle(document.documentElement);
+  var FG = css.getPropertyValue('--foreground').trim();
+  var META = css.getPropertyValue('--muted-foreground').trim();
+  var BORDER = css.getPropertyValue('--border').trim();
+  var BG = css.getPropertyValue('--background').trim();
+  var COLORS = ${JSON.stringify(LINE_COLORS)};
+
+  var d = ${chartData};
+
+  var series = d.series.map(function(s, i) {
+    return {
+      name: s.name,
+      type: 'line',
+      data: s.norm,
+      smooth: true,
+      symbol: 'none',
+      lineStyle: { width: 2, color: COLORS[i % COLORS.length] },
+      itemStyle: { color: COLORS[i % COLORS.length] }
+    };
+  });
+
+  var el = document.getElementById('chart-compare');
+  var chart = echarts.init(el);
+  chart.setOption({
+    grid: { left: 50, right: 30, top: 20, bottom: 50 },
+    xAxis: {
+      type: 'category',
+      data: d.x,
+      boundaryGap: false,
+      axisLabel: { color: META, fontSize: 11, rotate: 30, interval: Math.floor(d.x.length / 8) },
+      axisLine: { lineStyle: { color: BORDER } },
+      splitLine: { show: false }
+    },
+    yAxis: {
+      type: 'value',
+      scale: true,
+      axisLabel: { color: META, fontSize: 11, formatter: function(v) { return v; } },
+      splitLine: { lineStyle: { color: BORDER, type: 'dashed' } },
+      axisLine: { show: false }
+    },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: BG, borderColor: BORDER,
+      textStyle: { color: FG, fontSize: 12 },
+      formatter: function(params) {
+        var html = '<div style="margin-bottom:4px;color:' + META + ';">' + params[0].axisValue + '</div>';
+        params.forEach(function(p) {
+          var s = d.series[p.dataIndex];
+          html += '<div>' + p.marker + ' ' + p.seriesName + ': <b>' + p.value + '</b>' +
+            (s ? '（原始 ' + Number(s.raw[p.dataIndex]).toLocaleString('en-US') + '）' : '') + '</div>';
+        });
+        return html;
+      }
+    },
+    legend: { show: false },
+    series: series
+  });
+  new ResizeObserver(function() { chart.resize(); }).observe(el);
+})();
+</script>`;
+}
+
+// ---------------------------------------------------------------------------
 // Table (for financial statements, lists, etc.)
 // ---------------------------------------------------------------------------
 
