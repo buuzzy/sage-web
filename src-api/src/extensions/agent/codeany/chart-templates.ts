@@ -586,7 +586,17 @@ export function generateTableHTML(
   const headerCells = columns.map((c) => `<th>${escapeHtml(c)}</th>`).join('');
   const bodyRows = rows
     .map((r) => {
-      const cells = columns.map((c) => `<td>${escapeHtml(r[c] || '')}</td>`).join('');
+      const cells = columns
+        .map((c) => {
+          const v = r[c] || '';
+          // URL 值渲染为紧凑链接（公告/申报清单的原文 PDF 等），
+          // 避免整条长 URL 以裸文本撑爆表格宽度
+          if (/^https?:\/\//.test(v)) {
+            return `<td><a href="${escapeHtml(v)}" target="_blank" rel="noopener">查看</a></td>`;
+          }
+          return `<td>${escapeHtml(v)}</td>`;
+        })
+        .join('');
       return `<tr>${cells}</tr>`;
     })
     .join('');
@@ -597,6 +607,7 @@ export function generateTableHTML(
   .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
   .data-table th { text-align: left; padding: 6px 10px; color: var(--muted-foreground); font-weight: 500; border-bottom: 1px solid var(--border); white-space: nowrap; }
   .data-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .data-table td a { color: var(--primary); }
   .data-table tr:hover td { background: var(--accent); }
 </style>
 <div class="chart-panel">

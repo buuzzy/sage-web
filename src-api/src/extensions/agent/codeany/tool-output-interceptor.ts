@@ -78,6 +78,10 @@ const TOOL_CHART_TYPE: Record<string, string> = {
   us_income: 'table',
   us_balancesheet: 'table',
   us_cashflow: 'table',
+  // 公告/申报清单：行数多且每行带长 PDF 链接，手抄 URL 必有死链风险，
+  // 走服务端 table（链接列渲染为锚点）零转录
+  hk_announcements: 'table',
+  us_filings: 'table',
 };
 
 // Tools that return text/lists — optional canvas (unchanged behavior)
@@ -93,10 +97,8 @@ const TEXT_CANVAS_TOOLS = [
   'new_share',
   'stk_managers',
   'hsgt_top10',
-  // 港美股：搜索/公告类为轻结构文本，同 A 股 anns_d 待遇
+  // 港美股：搜索为中间消歧步骤（2-10 行短值），保持自判轻提示不做强制画布
   'search_symbol',
-  'us_filings',
-  'hk_announcements',
 ];
 
 // ---------------------------------------------------------------------------
@@ -184,6 +186,44 @@ export function createMinishareCanvasHooks(): Array<{
   }
 
   return hooks;
+}
+
+// ---------------------------------------------------------------------------
+// WebFetch PDF guard
+// ---------------------------------------------------------------------------
+
+/**
+ * WebFetch PostToolUse hook — replace PDF binary payloads with a short notice.
+ *
+ * Fetching a HKEX/SEC PDF returns ~100KB of raw `%PDF...` bytes. That garbage
+ * lands in the model context and the model retries (2026-09-15 实测连抓 3 份，
+ * 每份 ~100KB）。Replace it with a one-line notice so the model stops retrying
+ * and switches strategy.
+ */
+export function createWebFetchPdfGuardHook() {
+  return {
+    matcher: 'WebFetch',
+    hooks: [
+      async (input: {
+        toolOutput?: unknown;
+      }): Promise<{ modifiedOutput: string } | undefined> => {
+        const toolOutput =
+          typeof input.toolOutput === 'string' ? input.toolOutput : '';
+        if (!toolOutput) return undefined;
+        if (toolOutput.trimStart().slice(0, 4).toUpperCase() === '%PDF') {
+          logger.info(
+            `[PostToolUse] WebFetch returned PDF binary (~${Math.round(toolOutput.length / 1024)}KB), replacing with short notice`
+          );
+          return {
+            modifiedOutput:
+              `[系统提示] WebFetch 抓取到的是 PDF 二进制文件（约 ${Math.round(toolOutput.length / 1024)}KB），无法解析为文本，` +
+              '请勿再次抓取该 PDF 或其他 PDF 链接。如需其内容，请引导用户直接打开原文链接查看，或改用其他数据工具获取结构化数据。',
+          };
+        }
+        return undefined;
+      },
+    ],
+  };
 }
 
 // ---------------------------------------------------------------------------

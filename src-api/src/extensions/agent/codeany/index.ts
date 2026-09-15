@@ -45,6 +45,7 @@ import { buildPersonaSection } from './persona-injector';
 import { buildActiveRecallSection } from './active-recall';
 import {
   createMinishareCanvasHooks,
+  createWebFetchPdfGuardHook,
   createWebSearchInterceptorHook,
 } from './tool-output-interceptor';
 import { createCanvasMcpServer, CANVAS_TOOL_FULL_NAME, findUnfilledPlaceholder } from './canvas-tool';
@@ -345,6 +346,7 @@ export class CodeAnyAgent extends BaseAgent {
       ...((sdkOpts as any).hooks || {}),
       PostToolUse: [
         ...createMinishareCanvasHooks(),
+        createWebFetchPdfGuardHook(),
         createWebSearchInterceptorHook(),
       ],
     };

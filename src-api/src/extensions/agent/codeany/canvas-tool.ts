@@ -106,7 +106,9 @@ export function createCanvasMcpServer() {
           logger.info(
             `[render_canvas] called with ${html.length} chars of HTML${input?.title ? `, title="${input.title}"` : ''}`
           );
-          const text = `画布已渲染${input?.title ? `：${input.title}` : ''}（${html.length} 字符 HTML）。继续输出文字分析即可。`;
+          const text =
+            `画布已渲染${input?.title ? `：${input.title}` : ''}（${html.length} 字符 HTML）。` +
+            '继续输出文字分析即可；画布 HTML 不要再在回复正文中重复输出。';
           return {
             type: 'tool_result' as const,
             tool_use_id: '',
