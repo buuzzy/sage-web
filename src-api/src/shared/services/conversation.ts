@@ -12,6 +12,13 @@
  * a model that sees tool calls narrated in assistant voice ("[Used tool: X]
  * [X result]: ...") starts mimicking that format and fabricates tool output
  * in its own replies (incident 2026-08-11).
+ *
+ * NOTE: this flat projection is only for the reconstruct-fallback path. When
+ * the agent pool cold-starts with history, extensions/agent/codeany/history.ts
+ * rebuilds NATIVE tool_use/tool_result blocks from the same table instead —
+ * flat text there made the model skip tools entirely and fabricate quotes
+ * (incident 2026-09-15). Structured blocks are safe; assistant-voice narration
+ * is what triggers mimicry.
  */
 
 import { getServiceSupabase } from '@/shared/supabase/client';

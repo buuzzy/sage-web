@@ -48,6 +48,8 @@ export interface AgentMessage {
   type: AgentMessageType;
   sessionId?: string;
   content?: string;
+  /** Result completion subtype (e.g. 'success' / 'error_max_turns') */
+  subtype?: string;
   name?: string;
   id?: string;
   input?: unknown;

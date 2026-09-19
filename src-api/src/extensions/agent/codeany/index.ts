@@ -9,9 +9,11 @@ import { mkdir, writeFile } from 'fs/promises';
 import { homedir, platform } from 'os';
 import { join } from 'path';
 import type { AgentOptions as SdkAgentOptions } from '@codeany/open-agent-sdk';
+import type { NormalizedMessageParam } from '@codeany/open-agent-sdk';
 
 import { createAgent as createSdkAgent } from '@codeany/open-agent-sdk';
-import { getOrCreateAgent, toNormalizedMessages, evictAgent } from './agent-pool';
+import { getOrCreateAgent, hasAgent, toNormalizedMessages, evictAgent } from './agent-pool';
+import { buildStructuredPriorMessages } from './history';
 
 import { refreshSkillsForPrompt } from '@/shared/skills/predictor';
 
@@ -187,6 +189,44 @@ const ALLOWED_TOOLS = [
   CANVAS_TOOL_FULL_NAME,
   CHART_TOOL_FULL_NAME,
 ];
+
+// ============================================================================
+// 报价硬门禁
+//
+// 模型在没有任何工具调用的情况下给出具体代码/价格 = 大概率编造
+// （2026-09-15 事故：MiniMax-M3 在池冷启动后凭记忆编出港股代码和价格）。
+// 命中即拦截文本并强制模型先调工具核实。刻意保持窄匹配（代码 + 带币种
+// 价格），避免把概念讨论里的百分比/指数点位误伤。
+// ============================================================================
+
+const QUOTE_GATE_PATTERNS: RegExp[] = [
+  /\b0\d{4}\b/, // 港股 5 位代码（0 开头）
+  /\b[036]\d{5}\b/, // A 股 6 位代码（沪 6 / 深主板 0 含 000xxx·002xxx / 深创 3）
+  /\d+(?:\.\d+)?\s*(?:HKD|USD|港元|港币|美元)/i, // 价格 + 币种
+];
+
+function matchesQuoteGate(text: string): boolean {
+  return QUOTE_GATE_PATTERNS.some((p) => p.test(text));
+}
+
+const QUOTE_GATE_VERIFY_PROMPT = [
+  '你刚才的回答包含具体股票代码和价格数字，但本轮没有调用任何数据工具，这些数字可能不真实。请立即：',
+  '1. 调用 search_symbol（market=all）搜索用户问题中提到的标的名称，确认真实代码与上市地（用户说的市场不一定准确）；',
+  '2. 用对应行情工具（hk_daily / us_daily 等）获取真实数据；',
+  '3. 基于工具返回的真实数据重新完整回答用户的问题。若搜索不到，明确告知用户。',
+].join('\n');
+
+const QUOTE_GATE_FALLBACK_NOTICE =
+  '\n\n---\n⚠️ 注意：本次回答中的代码/价格未能通过数据工具核实，可能来自模型记忆，请谨慎对待。';
+
+const QUOTE_GATE_INTERCEPT_NOTICE =
+  '⚠️ 检测到回答包含具体股票代码/价格，但本轮未调用数据工具。为避免不实数据，我先核实数据再作答。';
+
+// 池冷启动（TTL/LRU 逐出后以持久化历史重建）时注入的上下文说明
+const COLD_START_HISTORY_NOTE = [
+  '[会话恢复] 本会话历史从持久化存储恢复。历史中出现的所有行情、价格、财务数据均来自当时的工具调用结果，可能已过时。',
+  '回答任何涉及具体股票代码、价格、涨跌幅的问题前，必须重新调用数据工具获取最新数据；禁止把历史数据当作当前数据直接复述。',
+].join('\n');
 
 // ============================================================================
 // CodeAny Agent class
@@ -472,6 +512,7 @@ export class CodeAnyAgent extends BaseAgent {
       subtype?: string;
       total_cost_usd?: number;
       duration_ms?: number;
+      duration_api_ms?: number;
       usage?: { input_tokens: number; output_tokens: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number };
       result?: { tool_use_id?: string; tool_name?: string; output?: string };
     };
@@ -593,7 +634,11 @@ export class CodeAnyAgent extends BaseAgent {
     if (msg.type === 'result') {
       yield {
         type: 'result', content: msg.subtype,
-        cost: msg.total_cost_usd, duration: msg.duration_ms,
+        // subtype 单独透传：content 只存 DB，前端 [完成] 行读的是 subtype
+        subtype: msg.subtype,
+        cost: msg.total_cost_usd,
+        // SDK 引擎实际发的是 duration_api_ms，duration_ms 不存在（恒为空）
+        duration: msg.duration_ms ?? msg.duration_api_ms,
         usage: msg.usage,
       };
     }
@@ -659,22 +704,40 @@ export class CodeAnyAgent extends BaseAgent {
     // Dynamically swap in relevant skills
     await refreshSkillsForPrompt(prompt);
 
+    // 池冷启动判定：池内没有该会话的 Agent 且带有历史 → 上一实例被 TTL/LRU
+    // 逐出（或进程重启）。此时必须用结构化历史重建，否则模型看不到任何
+    // tool_use 结构，会跳过工具直接编数据（2026-09-15 事故）。
+    const taskId = options?.taskId || session.id;
+    const ownerId = options?.userId || 'local';
+    const isColdStartWithHistory =
+      !!options?.conversation && options.conversation.length > 0 &&
+      !hasAgent(taskId, ownerId);
+
+    let sageSystemPromptEffective = sageSystemPrompt;
+    if (isColdStartWithHistory) {
+      sageSystemPromptEffective += '\n\n' + COLD_START_HISTORY_NOTE;
+    }
+
     // Build SDK options for this turn
     const sdkOpts = this.buildSdkOptions(sessionCwd, options, {
       abortController: options?.abortController || session.abortController,
-    }, sageSystemPrompt);
+    }, sageSystemPromptEffective);
 
     if (Object.keys(allMcpServers).length > 0) {
       sdkOpts.mcpServers = allMcpServers;
     }
 
-    // Convert conversation history to structured messages for bootstrap
-    const priorMessages = options?.conversation && options.conversation.length > 0
-      ? toNormalizedMessages(options.conversation)
-      : undefined;
-
-    const taskId = options?.taskId || session.id;
-    const ownerId = options?.userId || 'local';
+    // Convert conversation history to structured messages for bootstrap.
+    // 冷启动时优先从 Supabase 重建含 tool_use/tool_result 的原生消息块；
+    // 失败才退回扁平文本（历史会丢工具结构，属已知劣化）。
+    let priorMessages: NormalizedMessageParam[] | undefined =
+      options?.conversation && options.conversation.length > 0
+        ? toNormalizedMessages(options.conversation)
+        : undefined;
+    if (isColdStartWithHistory) {
+      priorMessages =
+        (await buildStructuredPriorMessages(taskId, ownerId)) ?? priorMessages;
+    }
 
     logger.info('[CodeAny ' + session.id + '] ========== AGENT START (pooled) ==========');
     logger.info('[CodeAny ' + session.id + '] Model: ' + (this.config.model || '(default)'));
@@ -726,6 +789,58 @@ export class CodeAnyAgent extends BaseAgent {
       let sawToolActivity = false;
       let sawFinalTextAfterTool = false;
       let finalResultSubtype: string | undefined;
+      // 报价硬门禁状态：本轮无工具调用却给出代码/价格时拦截文本并强制核实
+      let quoteGateTriggered = false;
+      let quoteGateRetried = false;
+      let quoteGateSuppressed = false;
+
+      const processMsg = this.processMessage.bind(this);
+
+      // 统一消费一条 SDK query 流：更新守门状态并按门禁规则放行/拦截文本。
+      // enforceGate=false 用于信任来源的内部重查（当前所有路径都开 true）。
+      const drainQuery = async function* (
+        stream: AsyncGenerator<unknown>,
+        enforceGate: boolean
+      ): AsyncGenerator<AgentMessage> {
+        for await (const message of stream) {
+          if (session.abortController.signal.aborted) break;
+          for (const msg of processMsg(message, session.id, sentTextHashes, sentToolIds)) {
+            if (msg.type === 'tool_use') {
+              totalToolCalls++;
+              sawToolActivity = true;
+              sawFinalTextAfterTool = false;
+              quoteGateSuppressed = false;
+            } else if (msg.type === 'tool_result') {
+              sawToolActivity = true;
+              sawFinalTextAfterTool = false;
+            } else if (msg.type === 'text' && msg.content && !isArtifactBlock(msg.content)) {
+              if (
+                enforceGate &&
+                !quoteGateRetried &&
+                totalToolCalls === 0 &&
+                matchesQuoteGate(msg.content)
+              ) {
+                quoteGateTriggered = true;
+                quoteGateSuppressed = true;
+                // 被拦截的编造文本不算"最终回答"，核实后仍无文本时
+                // forced-summary 兜底要能触发
+                sawFinalTextAfterTool = false;
+                logger.warn('[CodeAny ' + session.id + '] Quote gate: blocked text with unverified codes/prices');
+                yield { type: 'text', content: QUOTE_GATE_INTERCEPT_NOTICE };
+                continue;
+              }
+              if (enforceGate && quoteGateSuppressed) {
+                sawFinalTextAfterTool = false;
+                continue;
+              }
+              sawFinalTextAfterTool = true;
+            } else if (msg.type === 'result') {
+              finalResultSubtype = msg.content;
+            }
+            yield msg;
+          }
+        }
+      };
 
       // Use the pooled agent's query() method instead of stateless query()
       // CRITICAL: do NOT pass allowedTools/mcpServers in overrides — they would
@@ -735,26 +850,29 @@ export class CodeAnyAgent extends BaseAgent {
       const queryOverrides: any = {
         abortController: options?.abortController || session.abortController,
       };
-      for await (const message of sdkAgent.query(finalPrompt, queryOverrides)) {
-        if (session.abortController.signal.aborted) break;
-        for (const msg of this.processMessage(message, session.id, sentTextHashes, sentToolIds)) {
-          if (msg.type === 'tool_use') {
-            totalToolCalls++;
-            sawToolActivity = true;
-            sawFinalTextAfterTool = false;
-          } else if (msg.type === 'tool_result') {
-            sawToolActivity = true;
-            sawFinalTextAfterTool = false;
-          } else if (msg.type === 'text' && msg.content && !isArtifactBlock(msg.content)) {
-            sawFinalTextAfterTool = true;
-          } else if (msg.type === 'result') {
-            finalResultSubtype = msg.content;
-          }
-          yield msg;
-        }
-        if (totalToolCalls >= MAX_TOOL_CALLS && !warnedToolLimit) {
+      for await (const msg of drainQuery(sdkAgent.query(finalPrompt, queryOverrides), true)) {
+        yield msg;
+        if (msg.type === 'tool_use' && totalToolCalls >= MAX_TOOL_CALLS && !warnedToolLimit) {
           warnedToolLimit = true;
           logger.warn('[CodeAny ' + session.id + '] Tool call limit reached');
+        }
+      }
+
+      // 报价门禁触发：同一池内 Agent 仍持有会话状态，强制其先调工具核实再重答
+      if (quoteGateTriggered && !quoteGateRetried && !session.abortController.signal.aborted) {
+        quoteGateRetried = true;
+        logger.info('[CodeAny ' + session.id + '] Quote gate: forcing tool verification');
+        try {
+          for await (const msg of drainQuery(sdkAgent.query(QUOTE_GATE_VERIFY_PROMPT, queryOverrides), true)) {
+            yield msg;
+          }
+          if (totalToolCalls === 0) {
+            yield { type: 'text', content: QUOTE_GATE_FALLBACK_NOTICE };
+          }
+        } catch (gateError) {
+          logger.warn('[CodeAny ' + session.id + '] Quote gate verification failed:', {
+            message: gateError instanceof Error ? gateError.message : String(gateError),
+          });
         }
       }
 
@@ -767,14 +885,8 @@ export class CodeAnyAgent extends BaseAgent {
           logger.info('[CodeAny ' + session.id + '] No final text after tool activity — forcing summary');
           const summaryPrompt = '请根据你刚才检索和获取的所有数据和信息，直接、完整地回答用户的问题。不要再调用任何工具，直接给出最终回答。';
           try {
-            for await (const message of sdkAgent.query(summaryPrompt, queryOverrides)) {
-              if (session.abortController.signal.aborted) break;
-              for (const msg of this.processMessage(message, session.id, sentTextHashes, sentToolIds)) {
-                if (msg.type === 'text' && msg.content && !isArtifactBlock(msg.content)) {
-                  sawFinalTextAfterTool = true;
-                }
-                yield msg;
-              }
+            for await (const msg of drainQuery(sdkAgent.query(summaryPrompt, queryOverrides), true)) {
+              yield msg;
             }
           } catch (retryError) {
             logger.warn('[CodeAny ' + session.id + '] Forced summary failed:', {

@@ -24,7 +24,9 @@ Sage 的 Agent 大脑（web 产品核心执行引擎）。把 `@codeany/open-age
 
 | 文件 | 职责 | 稳定度 |
 |------|------|--------|
-| index.ts | Agent 适配器主类（run / processMessage / buildSystemPrompt，单路径无 plan 阶段） | ⚠️ 核心，谨慎修改 |
+| index.ts | Agent 适配器主类（run / processMessage / buildSystemPrompt，单路径无 plan 阶段）；含报价硬门禁（无工具调用却输出代码/价格 → 拦截 + 强制核实重查） | ⚠️ 核心，谨慎修改 |
+| agent-pool.ts | Agent 实例池（TTL 默认 4h，SAGE_AGENT_TTL_MS 可覆盖）；hasAgent 供冷启动判定 | 🔧 |
+| history.ts | 池冷启动时从 Supabase 重建含 tool_use/tool_result 的结构化历史（2026-09-15 工具调用消失事故的修复；扁平文本历史会使模型跳过工具直接编数据） | 🔧 |
 | tool-output-interceptor.ts | PostToolUse hook 工厂（URL 检测 + JSON 结构检测 → summary + artifact） | 🔧 可扩展新拦截规则 |
 | persona-injector.ts | Phase 3 画像注入（从 Supabase persona_memory 拉取） | 🔒 接口稳定 |
 | active-recall.ts | Phase 4 主动召回（FTS top-2 相关历史片段） | 🔒 接口稳定 |

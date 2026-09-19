@@ -6,7 +6,11 @@ import { createLogger } from '@/shared/utils/logger';
 
 const logger = createLogger('AgentPool');
 
-const AGENT_TTL_MS = 30 * 60 * 1000;
+// TTL 默认 4 小时：金融对话用户经常中途离开几十分钟，30 分钟 TTL 曾导致
+// 池内 Agent 被静默逐出，下一轮以扁平文本历史冷启动后模型不再调用工具
+// （2026-09-15 事故）。可用 SAGE_AGENT_TTL_MS 覆盖。
+const AGENT_TTL_MS =
+  Number(process.env.SAGE_AGENT_TTL_MS) || 4 * 60 * 60 * 1000;
 const MAX_POOL_SIZE = 50;
 
 interface PoolEntry {
@@ -97,6 +101,10 @@ export async function getOrCreateAgent(
 
   logger.info('[AgentPool] Created new agent for ' + params.taskId + ' (pool size: ' + pool.size + ')');
   return { agent, isNew: true, abortController };
+}
+
+export function hasAgent(taskId: string, ownerId: string): boolean {
+  return pool.has(poolKey(ownerId, taskId));
 }
 
 export function evictAgent(taskId: string, ownerId: string): void {
