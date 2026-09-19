@@ -49,6 +49,37 @@ index 6c414d9a71617916410d5ae7a3e019202bda4e3f..e7dfc0a3b2ae299bc74fdf94ca5d035c
  }
  /**
   * Hook configuration (from settings).
+diff --git a/dist/mcp/client.js b/dist/mcp/client.js
+index dca4b1d0cd6287c090f0d3898840c191898193ab..7616356a5bf16bb8dc546cdf7e456141d90cc2e0 100644
+--- a/dist/mcp/client.js
++++ b/dist/mcp/client.js
+@@ -35,9 +35,24 @@ export async function connectMCPServer(name, config) {
+             throw new Error(`Unsupported MCP transport type: ${config.type}`);
+         }
+         const client = new Client({ name: `agent-sdk-${name}`, version: '1.0.0' }, { capabilities: {} });
+-        await client.connect(transport);
++        // Sage patch: bound connect/listTools with a timeout so a hung MCP
++        // server (TCP accepts but never responds) cannot stall agent.setupDone
++        // forever — which blocks agent.query() before any LLM request is sent
++        // (2026-09-19 minishare incident).
++        const mcpConnectTimeoutMs = Number(process.env.SAGE_MCP_CONNECT_TIMEOUT_MS) || 20000;
++        const withMcpTimeout = (p, label) => Promise.race([
++            p,
++            new Promise((_, reject) => {
++                const t = setTimeout(
++                    () => reject(new Error(`MCP ${label} timed out after ${mcpConnectTimeoutMs}ms`)),
++                    mcpConnectTimeoutMs
++                );
++                t.unref?.();
++            }),
++        ]);
++        await withMcpTimeout(client.connect(transport), `connect "${name}"`);
+         // Fetch available tools
+-        const toolList = await client.listTools();
++        const toolList = await withMcpTimeout(client.listTools(), `listTools "${name}"`);
+         const tools = (toolList.tools || []).map((mcpTool) => createMCPToolDefinition(name, mcpTool, client));
+         return {
+             name,
 diff --git a/dist/providers/openai.js b/dist/providers/openai.js
 index a137c3813dd97d09941742c68ac61d58a0593127..5bed7443ee602b636113f13e79f09a3e65d33389 100644
 --- a/dist/providers/openai.js

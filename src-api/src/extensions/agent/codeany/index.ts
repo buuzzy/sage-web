@@ -696,13 +696,21 @@ export class CodeAnyAgent extends BaseAgent {
       finalPrompt += '\n\n[Attached image file(s) saved to disk: ' + imagePaths.join(', ') + ']';
     }
 
+    const t0 = Date.now();
+    const elapsed = (label: string) => {
+      logger.info('[CodeAny ' + session.id + '] [T+' + (Date.now() - t0) + 'ms] ' + label);
+    };
+    elapsed('AGENT-PIPELINE: entering pre-setup (mcp/skills/history)');
+
     // Load MCP servers
     const userMcpServers = await loadMcpServers(options?.mcpConfig as McpConfig | undefined);
     const builtinMcpServers = this.buildBuiltinMcpServers(options?.userId, options?.accessToken);
     const allMcpServers = { ...builtinMcpServers, ...userMcpServers };
+    elapsed('AGENT-PIPELINE: mcp servers loaded (' + Object.keys(allMcpServers).length + ' servers)');
 
     // Dynamically swap in relevant skills
     await refreshSkillsForPrompt(prompt);
+    elapsed('AGENT-PIPELINE: skills refreshed');
 
     // 池冷启动判定：池内没有该会话的 Agent 且带有历史 → 上一实例被 TTL/LRU
     // 逐出（或进程重启）。此时必须用结构化历史重建，否则模型看不到任何
@@ -738,8 +746,9 @@ export class CodeAnyAgent extends BaseAgent {
       priorMessages =
         (await buildStructuredPriorMessages(taskId, ownerId)) ?? priorMessages;
     }
+    elapsed('AGENT-PIPELINE: prior messages ready (' + (priorMessages?.length || 0) + ')');
 
-    logger.info('[CodeAny ' + session.id + '] ========== AGENT START (pooled) ==========');
+    elapsed('AGENT START (pooled)');
     logger.info('[CodeAny ' + session.id + '] Model: ' + (this.config.model || '(default)'));
     logger.info('[CodeAny ' + session.id + '] Prompt: ' + finalPrompt.length + ' chars');
     logger.info('[CodeAny ' + session.id + '] priorMessages: ' + (priorMessages?.length || 0));
@@ -769,13 +778,33 @@ export class CodeAnyAgent extends BaseAgent {
         taskId,
         ownerId,
         factory: () => {
+          elapsed('getOrCreateAgent: factory invoked (creating new SDK agent)');
           const opts: any = { ...sdkOpts };
           if (priorMessages && priorMessages.length > 0) {
             opts.priorMessages = priorMessages;
           }
-          return createSdkAgent(opts);
+          const tCreate = Date.now();
+          const agent = createSdkAgent(opts);
+          // createSdkAgent is synchronous in type, but guard against a
+          // silently-hanging setup by logging how long construction took.
+          logger.info('[CodeAny ' + session.id + '] [T+' + (Date.now() - t0) + 'ms] createSdkAgent returned (' + (Date.now() - tCreate) + 'ms)');
+          return agent;
         },
       });
+      elapsed('getOrCreateAgent resolved (isNew=' + isNew + ')');
+
+      // Observe the SDK's internal setup promise. query() awaits setupDone
+      // as its very first step; if an external MCP server (e.g. minishare
+      // over SSE) hangs during connect/listTools, the whole run stalls here
+      // before any LLM request is ever sent.
+      if (sdkAgent?.setupDone && typeof sdkAgent.setupDone.then === 'function') {
+        sdkAgent.setupDone.then(
+          () => elapsed('SDK setupDone resolved (MCP connect/listTools finished)'),
+          (e: unknown) => elapsed('SDK setupDone rejected: ' + (e instanceof Error ? e.message : String(e)))
+        );
+      } else {
+        elapsed('SDK setupDone promise not found on agent instance');
+      }
 
       // For existing agents: apply this turn's overrides (abort, system prompt append)
       if (!isNew) {
@@ -802,7 +831,12 @@ export class CodeAnyAgent extends BaseAgent {
         stream: AsyncGenerator<unknown>,
         enforceGate: boolean
       ): AsyncGenerator<AgentMessage> {
+        let first = true;
         for await (const message of stream) {
+          if (first) {
+            first = false;
+            elapsed('drainQuery: first SDK message received (type=' + (message as any)?.type + ')');
+          }
           if (session.abortController.signal.aborted) break;
           for (const msg of processMsg(message, session.id, sentTextHashes, sentToolIds)) {
             if (msg.type === 'tool_use') {
@@ -850,7 +884,10 @@ export class CodeAnyAgent extends BaseAgent {
       const queryOverrides: any = {
         abortController: options?.abortController || session.abortController,
       };
-      for await (const msg of drainQuery(sdkAgent.query(finalPrompt, queryOverrides), true)) {
+      elapsed('before sdkAgent.query() call');
+      const sdkQueryStream = sdkAgent.query(finalPrompt, queryOverrides);
+      elapsed('sdkAgent.query() returned generator (lazily)');
+      for await (const msg of drainQuery(sdkQueryStream, true)) {
         yield msg;
         if (msg.type === 'tool_use' && totalToolCalls >= MAX_TOOL_CALLS && !warnedToolLimit) {
           warnedToolLimit = true;
