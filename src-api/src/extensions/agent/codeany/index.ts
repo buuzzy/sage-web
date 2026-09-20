@@ -904,8 +904,17 @@ export class CodeAnyAgent extends BaseAgent {
         }
       }
 
-      // 报价门禁触发：同一池内 Agent 仍持有会话状态，强制其先调工具核实再重答
-      if (quoteGateTriggered && !quoteGateRetried && !session.abortController.signal.aborted) {
+      // 报价门禁触发：仅当模型全程未调用任何数据工具时才强制核实重答。
+      // 注意 quoteGateTriggered 会在回合开头拦截时锁存——若此后模型已正常
+      // 调用工具并基于真实数据作答，这里不得再触发重查（2026-09-20 事故：
+      // 门禁重查指令在工具已调用的情况下仍然下发，模型被迫"你说得对，
+      // 我需要核对一下"整题重跑，用户只问了一次却看到两遍完整回答）。
+      if (
+        quoteGateTriggered &&
+        !quoteGateRetried &&
+        totalToolCalls === 0 &&
+        !session.abortController.signal.aborted
+      ) {
         quoteGateRetried = true;
         logger.info('[CodeAny ' + session.id + '] Quote gate: forcing tool verification');
         try {
