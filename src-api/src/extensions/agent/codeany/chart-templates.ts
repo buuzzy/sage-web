@@ -60,6 +60,11 @@ export function generateCandlestickHTML(
   const closeCol = findCol(data, ['收盘', 'close']);
   const volCol = findCol(data, ['成交量', 'vol']);
   const pctCol = findCol(data, ['涨跌幅', 'pct_chg']);
+  // 聚合周/月线的极值发生日（minishare 2026-09-20 起提供）：优先用于
+  // 极值标注，保证图表与正文的极值日期口径一致（同为日线极值日），
+  // 避免周线 date 列（周期截止日）与正文日线日期打架
+  const highDateCol = findCol(data, ['high_date', '最高日期']);
+  const lowDateCol = findCol(data, ['low_date', '最低日期']);
 
   // Fallback to table if OHLC columns are missing
   if (!openCol || !highCol || !lowCol || !closeCol) {
@@ -75,6 +80,8 @@ export function generateCandlestickHTML(
     c: parseNum(r[closeCol]) ?? 0,
     v: volCol ? parseNum(r[volCol]) ?? 0 : 0,
     p: pctCol ? parseNum(r[pctCol]) ?? 0 : 0,
+    hd: highDateCol ? r[highDateCol] || '' : '',
+    ld: lowDateCol ? r[lowDateCol] || '' : '',
   }));
 
   // Meta info
@@ -107,8 +114,8 @@ export function generateCandlestickHTML(
   <div class="chart-meta">
     <span>区间：${firstDate} 至 ${lastDate}</span>
     <span>最新收盘：<b>${lastClose.toFixed(2)}</b></span>
-    <span>区间最低：<b>${minLow.toFixed(2)}</b>(${minLowRow ? fmtDate(minLowRow.d) : ''})</span>
-    <span>区间最高：<b>${maxHigh.toFixed(2)}</b>(${maxHighRow ? fmtDate(maxHighRow.d) : ''})</span>
+    <span>区间最低：<b>${minLow.toFixed(2)}</b>(${minLowRow ? minLowRow.ld || fmtDate(minLowRow.d) : ''})</span>
+    <span>区间最高：<b>${maxHigh.toFixed(2)}</b>(${maxHighRow ? maxHighRow.hd || fmtDate(maxHighRow.d) : ''})</span>
   </div>
   <div id="chart-kline" style="width:100%;height:420px;"></div>
   <div class="chart-legend">
