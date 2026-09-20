@@ -234,7 +234,13 @@ export function generateLineHTML(
   if (!xCol) return generateTableHTML(data, opts);
 
   // Determine which columns to plot
-  const skipCols = new Set([xCol, '代码', 'ts_code', '股票代码']);
+  // high_date/low_date（聚合周/月线的极值发生日）是日期型辅助列，
+  // parseNum 会把 "2026-05-14" 解析成 2026 混入折线，必须排除
+  const skipCols = new Set([
+    xCol,
+    '代码', 'ts_code', '股票代码',
+    'high_date', 'low_date', '最高日期', '最低日期',
+  ]);
   let seriesCols: string[];
   if (opts.series && opts.series.length > 0) {
     // Use LLM-specified series, filtered to columns that exist
