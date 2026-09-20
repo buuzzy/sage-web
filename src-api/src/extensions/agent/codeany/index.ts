@@ -228,6 +228,15 @@ const COLD_START_HISTORY_NOTE = [
   '回答任何涉及具体股票代码、价格、涨跌幅的问题前，必须重新调用数据工具获取最新数据；禁止把历史数据当作当前数据直接复述。',
 ].join('\n');
 
+// 行情数据纪律（追加在 persona 系统提示之后，对所有会话生效）
+// 2026-09-20 事故：模型对超长 K 线窗口分段查询后仍有省略区间，凭训练记忆
+// 填入极值（碰巧对），且把补查/纠偏过程全部叙述给用户，观感差。
+const FINANCE_DATA_RULES = [
+  '[行情数据纪律]',
+  '1. 回答中的所有股票代码、价格、涨跌幅、区间最高/最低，必须来自本轮工具返回的数据。禁止使用训练记忆中的任何行情数字——记忆中的价格极可能是错的或过时的；工具结果里没有的数字，一个都不能写。',
+  '2. 当工具结果标注"已聚合/有省略/仅显示部分"时：先完成全部所需数据的获取（缩小日期范围补查），确认数据完整后再作答。补查在同一轮内静默完成，不要向用户输出"我需要核实/重新核实/您说得对"等中间过程——用户只看最终结论。',
+].join('\n');
+
 // ============================================================================
 // CodeAny Agent class
 // ============================================================================
@@ -370,7 +379,7 @@ export class CodeAnyAgent extends BaseAgent {
     // system message, ensuring the model treats it as instructions rather than
     // user input.  appendSystemPrompt appends after the SDK's built-in prompt.
     if (systemPrompt) {
-      sdkOpts.appendSystemPrompt = systemPrompt;
+      sdkOpts.appendSystemPrompt = [systemPrompt, FINANCE_DATA_RULES].join('\n\n');
     }
 
     // Set allowed tools
