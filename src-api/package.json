@@ -9,7 +9,8 @@
     "start": "pnpm bundle && node dist/bundle.cjs",
     "bundle": "node scripts/bundle.mjs",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:gate": "tsx tests/quote-gate.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

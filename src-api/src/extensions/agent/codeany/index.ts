@@ -199,39 +199,14 @@ const ALLOWED_TOOLS = [
 // 价格），避免把概念讨论里的百分比/指数点位误伤。
 // ============================================================================
 
-const QUOTE_GATE_PATTERNS: RegExp[] = [
-  /\b0\d{4}\b/, // 港股 5 位代码（0 开头）
-  /\b[036]\d{5}\b/, // A 股 6 位代码（沪 6 / 深主板 0 含 000xxx·002xxx / 深创 3）
-  /\d+(?:\.\d+)?\s*(?:HKD|USD|港元|港币|美元)/i, // 价格 + 币种
-];
-
-function matchesQuoteGate(text: string, userPrompt?: string): boolean {
-  return QUOTE_GATE_PATTERNS.some((p) => {
-    // 每次新建 global 正则，避免 lastIndex 状态残留
-    const hits = text.match(new RegExp(p.source, p.flags.includes('g') ? p.flags : p.flags + 'g'));
-    if (!hits) return false;
-    // 全部命中均为复述用户问题中的原值 → 非编造，放行。
-    // 2026-09-20 事故：金融题的开场白几乎必然回显用户提到的代码
-    // （"查询腾讯控股（00700.HK）…"），此时模型刚起步、还没调工具，
-    // 旧逻辑误判为凭记忆报价——每轮都输出"未调用数据工具"警告，
-    // 并锁存 quoteGateTriggered 触发无意义的重查。
-    if (userPrompt && hits.every((hit) => userPrompt.includes(hit))) return false;
-    return true;
-  });
-}
-
-const QUOTE_GATE_VERIFY_PROMPT = [
-  '你刚才的回答包含具体股票代码和价格数字，但本轮没有调用任何数据工具，这些数字可能不真实。请立即：',
-  '1. 调用 search_symbol（market=all）搜索用户问题中提到的标的名称，确认真实代码与上市地（用户说的市场不一定准确）；',
-  '2. 用对应行情工具（hk_daily / us_daily 等）获取真实数据；',
-  '3. 基于工具返回的真实数据重新完整回答用户的问题。若搜索不到，明确告知用户。',
-].join('\n');
-
-const QUOTE_GATE_FALLBACK_NOTICE =
-  '\n\n---\n⚠️ 注意：本次回答中的代码/价格未能通过数据工具核实，可能来自模型记忆，请谨慎对待。';
-
-const QUOTE_GATE_INTERCEPT_NOTICE =
-  '⚠️ 检测到回答包含具体股票代码/价格，但本轮未调用数据工具。为避免不实数据，我先核实数据再作答。';
+// 报价硬门禁：模式、判定与提示语统一放在 quote-gate.ts（零依赖纯函数，
+// 可回归测试 tests/quote-gate.test.ts），此处仅消费。
+import {
+  QUOTE_GATE_FALLBACK_NOTICE,
+  QUOTE_GATE_INTERCEPT_NOTICE,
+  QUOTE_GATE_VERIFY_PROMPT,
+  matchesQuoteGate,
+} from './quote-gate.js';
 
 // 池冷启动（TTL/LRU 逐出后以持久化历史重建）时注入的上下文说明
 const COLD_START_HISTORY_NOTE = [
