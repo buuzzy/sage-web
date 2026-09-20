@@ -205,8 +205,19 @@ const QUOTE_GATE_PATTERNS: RegExp[] = [
   /\d+(?:\.\d+)?\s*(?:HKD|USD|港元|港币|美元)/i, // 价格 + 币种
 ];
 
-function matchesQuoteGate(text: string): boolean {
-  return QUOTE_GATE_PATTERNS.some((p) => p.test(text));
+function matchesQuoteGate(text: string, userPrompt?: string): boolean {
+  return QUOTE_GATE_PATTERNS.some((p) => {
+    // 每次新建 global 正则，避免 lastIndex 状态残留
+    const hits = text.match(new RegExp(p.source, p.flags.includes('g') ? p.flags : p.flags + 'g'));
+    if (!hits) return false;
+    // 全部命中均为复述用户问题中的原值 → 非编造，放行。
+    // 2026-09-20 事故：金融题的开场白几乎必然回显用户提到的代码
+    // （"查询腾讯控股（00700.HK）…"），此时模型刚起步、还没调工具，
+    // 旧逻辑误判为凭记忆报价——每轮都输出"未调用数据工具"警告，
+    // 并锁存 quoteGateTriggered 触发无意义的重查。
+    if (userPrompt && hits.every((hit) => userPrompt.includes(hit))) return false;
+    return true;
+  });
 }
 
 const QUOTE_GATE_VERIFY_PROMPT = [
@@ -861,7 +872,7 @@ export class CodeAnyAgent extends BaseAgent {
                 enforceGate &&
                 !quoteGateRetried &&
                 totalToolCalls === 0 &&
-                matchesQuoteGate(msg.content)
+                matchesQuoteGate(msg.content, finalPrompt)
               ) {
                 quoteGateTriggered = true;
                 quoteGateSuppressed = true;
