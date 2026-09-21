@@ -9,7 +9,8 @@
  */
 
 import { createLogger } from '@/shared/utils/logger';
-import { parseAndCache } from './data-cache';
+import { parseAndCache, getCachedData } from './data-cache';
+import { buildCompactOutput, COMPACT_THRESHOLD } from './compact-output';
 
 const logger = createLogger('ToolOutputInterceptor');
 
@@ -142,6 +143,19 @@ export function createMinishareCanvasHooks(): Array<{
           // Parse and cache the structured data
           const dataKey = parseAndCache(output, tool);
 
+          // 紧凑模式（2026-09-21）：长序列完整行只进缓存不进模型上下文，
+          // LLM 可见正文改写为"锚点行 + 逐列统计"，防眼算幻觉并省 token。
+          let llmOutput = output;
+          if (dataKey) {
+            const dataset = getCachedData(dataKey);
+            if (dataset && dataset.rows.length >= COMPACT_THRESHOLD) {
+              llmOutput = buildCompactOutput(output, dataset, dataKey);
+              logger.info(
+                `[PostToolUse] ${toolName} compact mode: ${dataset.rows.length} rows -> anchors+stats, full data in ${dataKey}`
+              );
+            }
+          }
+
           let hint: string;
           if (dataKey) {
             logger.info(
@@ -166,7 +180,7 @@ export function createMinishareCanvasHooks(): Array<{
             hint = CANVAS_HINT_FALLBACK;
           }
 
-          return { modifiedOutput: output + hint };
+          return { modifiedOutput: llmOutput + hint };
         },
       ],
     });
