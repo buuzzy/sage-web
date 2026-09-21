@@ -6,7 +6,7 @@
  * 两次事故的全部场景，任何对 matchesQuoteGate 的改动必须先过这里。
  */
 import assert from 'node:assert/strict';
-import { matchesQuoteGate } from '../src/extensions/agent/codeany/quote-gate.js';
+import { matchesQuoteGate, QuoteGateTurn } from '../src/extensions/agent/codeany/quote-gate.js';
 
 let passed = 0;
 
@@ -93,4 +93,69 @@ check(
   false
 );
 
-console.log(`\n全部 ${passed} 个断言通过 ✅`);
+console.log(`\nmatchesQuoteGate ${passed} 个断言通过`);
+
+// ---------------------------------------------------------------------------
+// 单轮状态机 QuoteGateTurn（2026-09-21 自 index.ts 内联标志收拢）
+// ---------------------------------------------------------------------------
+
+let smPassed = 0;
+function sm(name: string, cond: boolean, detail = '') {
+  assert.ok(cond, `${name} ${detail}`);
+  smPassed++;
+  console.log(`  ✓ ${name}`);
+}
+
+console.log('── 状态机：拦截 / 吞文本 / 解除 ──');
+{
+  const t = new QuoteGateTurn();
+  sm(
+    '零工具 + 编造价格 → block',
+    t.onText('腾讯最高 683 港元。', TENCENT_Q, 0, true) === 'block'
+  );
+  sm('拦截后 triggered 锁存', t.triggered === true);
+  sm(
+    '拦截后未命中门禁的文本 → suppress',
+    t.onText('我先核实数据再作答。', TENCENT_Q, 0, true) === 'suppress'
+  );
+  sm(
+    '拦截后再次命中门禁的文本 → 仍 block',
+    t.onText('补充说明 419 港元。', TENCENT_Q, 0, true) === 'block'
+  );
+  t.onToolUse();
+  sm('tool_use 后 suppress 解除 → pass', t.onText('基于数据 683 港元。', TENCENT_Q, 1, true) === 'pass');
+}
+
+console.log('── 状态机：重查资格（防 9/20 双回答）──');
+{
+  const t = new QuoteGateTurn();
+  sm('未触发不重查', t.needsRetry(0, false) === false);
+  t.onText('腾讯最高 683 港元。', TENCENT_Q, 0, true);
+  sm('触发 + 零工具 + 未重查 → 需要重查', t.needsRetry(0, false) === true);
+  t.beginRetry();
+  sm('已重查过 → 不再重查', t.needsRetry(0, false) === false);
+}
+{
+  const t = new QuoteGateTurn();
+  t.onText('腾讯最高 683 港元。', TENCENT_Q, 0, true);
+  t.onToolUse(); // 模型此后调了工具
+  sm('触发后已有工具活动 → 不重查', t.needsRetry(1, false) === false);
+}
+{
+  const t = new QuoteGateTurn();
+  t.onText('腾讯最高 683 港元。', TENCENT_Q, 0, true);
+  sm('回合被 abort → 不重查', t.needsRetry(0, true) === false);
+}
+
+console.log('── 状态机：enforceGate=false 信任来源 ──');
+{
+  const t = new QuoteGateTurn();
+  sm(
+    '内部重查路径不拦截',
+    t.onText('腾讯最高 683 港元。', TENCENT_Q, 0, false) === 'pass'
+  );
+  sm('未触发', t.triggered === false);
+}
+
+console.log(`\nQuoteGateTurn ${smPassed} 个断言通过`);
+console.log(`\n全部通过：${passed + smPassed} 项`);

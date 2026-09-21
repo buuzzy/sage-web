@@ -203,24 +203,20 @@ const ALLOWED_TOOLS = [
 // 可回归测试 tests/quote-gate.test.ts），此处仅消费。
 import {
   QUOTE_GATE_FALLBACK_NOTICE,
-  QUOTE_GATE_INTERCEPT_NOTICE,
   QUOTE_GATE_VERIFY_PROMPT,
-  matchesQuoteGate,
+  QuoteGateTurn,
 } from './quote-gate.js';
 
-// 池冷启动（TTL/LRU 逐出后以持久化历史重建）时注入的上下文说明
-const COLD_START_HISTORY_NOTE = [
-  '[会话恢复] 本会话历史从持久化存储恢复。历史中出现的所有行情、价格、财务数据均来自当时的工具调用结果，可能已过时。',
-  '回答任何涉及具体股票代码、价格、涨跌幅的问题前，必须重新调用数据工具获取最新数据；禁止把历史数据当作当前数据直接复述。',
-].join('\n');
-
-// 行情数据纪律（追加在 persona 系统提示之后，对所有会话生效）
-// 2026-09-20 事故：模型对超长 K 线窗口分段查询后仍有省略区间，凭训练记忆
-// 填入极值（碰巧对），且把补查/纠偏过程全部叙述给用户，观感差。
-const FINANCE_DATA_RULES = [
-  '[行情数据纪律]',
-  '1. 回答中的所有股票代码、价格、涨跌幅、区间最高/最低，必须来自本轮工具返回的数据。禁止使用训练记忆中的任何行情数字——记忆中的价格极可能是错的或过时的；工具结果里没有的数字，一个都不能写。',
-  '2. 当工具结果标注"已聚合/有省略/仅显示部分"时：先完成全部所需数据的获取（缩小日期范围补查），确认数据完整后再作答。补查在同一轮内静默完成，不要向用户输出"我需要核实/重新核实/您说得对"等中间过程——用户只看最终结论。',
+// 数据纪律（2026-09-21 冗余归并）：原 FINANCE_DATA_RULES（所有会话）+
+// COLD_START_HISTORY_NOTE（仅冷启动）+ 紧凑模式头部三处防编造文案重叠，
+// 合并为一个常驻块，冷启动不再需要单独注记。覆盖的事故场景：
+// 2026-09-15 冷启动凭记忆编代码/价格；2026-09-20 分段补查后仍记忆填极值、
+// 中间过程叙述给用户；Q5 复测阶段数字退回记忆价、统计数字转述失真。
+const DATA_DISCIPLINE = [
+  '[数据纪律]',
+  '1. 回答中的所有股票代码、价格、涨跌幅、区间最高/最低，必须来自本轮工具返回的数据。工具结果里没有的数字一个都不能写；训练记忆中的行情数字一律视为过时或错误；历史会话中的行情数据来自当时的工具结果，同样禁止当作当前数据复述。',
+  '2. 服务端统计（区间统计行、逐列统计）中的数字逐字引用，禁止改写数量级；叙事中提到的具体数字必须能在锚点行或统计行中找到，找不到就说明数据不足，不得用记忆补。',
+  '3. 工具结果标注"已聚合/有省略"时，先在同一轮内静默补查完整数据再作答，不向用户输出"我需要核实/您说得对"等中间过程——用户只看最终结论。',
 ].join('\n');
 
 // ============================================================================
@@ -365,7 +361,7 @@ export class CodeAnyAgent extends BaseAgent {
     // system message, ensuring the model treats it as instructions rather than
     // user input.  appendSystemPrompt appends after the SDK's built-in prompt.
     if (systemPrompt) {
-      sdkOpts.appendSystemPrompt = [systemPrompt, FINANCE_DATA_RULES].join('\n\n');
+      sdkOpts.appendSystemPrompt = [systemPrompt, DATA_DISCIPLINE].join('\n\n');
     }
 
     // Set allowed tools
@@ -710,16 +706,14 @@ export class CodeAnyAgent extends BaseAgent {
     // 池冷启动判定：池内没有该会话的 Agent 且带有历史 → 上一实例被 TTL/LRU
     // 逐出（或进程重启）。此时必须用结构化历史重建，否则模型看不到任何
     // tool_use 结构，会跳过工具直接编数据（2026-09-15 事故）。
+    // 冷启动防编造注记已并入常驻 DATA_DISCIPLINE（2026-09-21 归并）。
     const taskId = options?.taskId || session.id;
     const ownerId = options?.userId || 'local';
     const isColdStartWithHistory =
       !!options?.conversation && options.conversation.length > 0 &&
       !hasAgent(taskId, ownerId);
 
-    let sageSystemPromptEffective = sageSystemPrompt;
-    if (isColdStartWithHistory) {
-      sageSystemPromptEffective += '\n\n' + COLD_START_HISTORY_NOTE;
-    }
+    const sageSystemPromptEffective = sageSystemPrompt;
 
     // Build SDK options for this turn
     const sdkOpts = this.buildSdkOptions(sessionCwd, options, {
@@ -813,10 +807,8 @@ export class CodeAnyAgent extends BaseAgent {
       let sawToolActivity = false;
       let sawFinalTextAfterTool = false;
       let finalResultSubtype: string | undefined;
-      // 报价硬门禁状态：本轮无工具调用却给出代码/价格时拦截文本并强制核实
-      let quoteGateTriggered = false;
-      let quoteGateRetried = false;
-      let quoteGateSuppressed = false;
+      // 报价硬门禁：单轮状态机（判定/拦截/重查资格收拢在 QuoteGateTurn）
+      const quoteGate = new QuoteGateTurn();
 
       const processMsg = this.processMessage.bind(this);
 
@@ -838,27 +830,23 @@ export class CodeAnyAgent extends BaseAgent {
               totalToolCalls++;
               sawToolActivity = true;
               sawFinalTextAfterTool = false;
-              quoteGateSuppressed = false;
+              quoteGate.onToolUse();
             } else if (msg.type === 'tool_result') {
               sawToolActivity = true;
               sawFinalTextAfterTool = false;
             } else if (msg.type === 'text' && msg.content && !isArtifactBlock(msg.content)) {
-              if (
-                enforceGate &&
-                !quoteGateRetried &&
-                totalToolCalls === 0 &&
-                matchesQuoteGate(msg.content, finalPrompt)
-              ) {
-                quoteGateTriggered = true;
-                quoteGateSuppressed = true;
+              const verdict = quoteGate.onText(msg.content, finalPrompt, totalToolCalls, enforceGate);
+              if (verdict === 'block') {
                 // 被拦截的编造文本不算"最终回答"，核实后仍无文本时
                 // forced-summary 兜底要能触发
                 sawFinalTextAfterTool = false;
-                logger.warn('[CodeAny ' + session.id + '] Quote gate: blocked text with unverified codes/prices');
-                yield { type: 'text', content: QUOTE_GATE_INTERCEPT_NOTICE };
+                // 静默拦截（2026-09-21）：拦截提示不下发前端——用户视角是
+                // "提问后稍等片刻直接看到核实过的回答"，而不是一句突兀的
+                // ⚠️ 开场白。核实失败场景由 QUOTE_GATE_FALLBACK_NOTICE 兜底。
+                logger.warn('[CodeAny ' + session.id + '] Quote gate: blocked text with unverified codes/prices (notice suppressed from stream)');
                 continue;
               }
-              if (enforceGate && quoteGateSuppressed) {
+              if (verdict === 'suppress') {
                 sawFinalTextAfterTool = false;
                 continue;
               }
@@ -891,17 +879,12 @@ export class CodeAnyAgent extends BaseAgent {
       }
 
       // 报价门禁触发：仅当模型全程未调用任何数据工具时才强制核实重答。
-      // 注意 quoteGateTriggered 会在回合开头拦截时锁存——若此后模型已正常
-      // 调用工具并基于真实数据作答，这里不得再触发重查（2026-09-20 事故：
-      // 门禁重查指令在工具已调用的情况下仍然下发，模型被迫"你说得对，
-      // 我需要核对一下"整题重跑，用户只问了一次却看到两遍完整回答）。
-      if (
-        quoteGateTriggered &&
-        !quoteGateRetried &&
-        totalToolCalls === 0 &&
-        !session.abortController.signal.aborted
-      ) {
-        quoteGateRetried = true;
+      // needsRetry 内部保证 triggered 锁存——若此后模型已正常调用工具并基于
+      // 真实数据作答，这里不得再触发重查（2026-09-20 事故：门禁重查指令在
+      // 工具已调用的情况下仍然下发，模型被迫"你说得对，我需要核对一下"
+      // 整题重跑，用户只问了一次却看到两遍完整回答）。
+      if (quoteGate.needsRetry(totalToolCalls, session.abortController.signal.aborted)) {
+        quoteGate.beginRetry();
         logger.info('[CodeAny ' + session.id + '] Quote gate: forcing tool verification');
         try {
           for await (const msg of drainQuery(sdkAgent.query(QUOTE_GATE_VERIFY_PROMPT, queryOverrides), true)) {

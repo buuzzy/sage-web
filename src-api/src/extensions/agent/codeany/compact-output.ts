@@ -181,6 +181,11 @@ export function buildCompactOutput(
     const isData = isDataRowLine(line.trim());
     // 旧截断说明（"仅显示前 N 条"）在紧凑模式下已失真，丢弃
     if (!isData && /^\.\.\. \(共/.test(line.trim())) return;
+    // MCP 侧 📊 区间统计行在紧凑模式下冗余（2026-09-21 归一）：逐列统计
+    // 已覆盖最新/最高/最低@日期且按列更全，保留会造成两处口径并存。
+    // 仅紧凑路径丢弃；短序列（未触发紧凑）仍保留 MCP 原始统计行。
+    // 注意用行首匹配——降采样声明行正文也会提到"📊 区间统计"字样。
+    if (!isData && statLines.length > 0 && line.trimStart().startsWith('... 📊 区间统计')) return;
 
     if (!isData) {
       out.push(line);
@@ -198,7 +203,7 @@ export function buildCompactOutput(
       out.push(lines[lastIdx]); // 末行锚点
       if (statLines.length > 0) {
         out.push(
-          `📈 逐列统计（系统计算，直接引用即可，无需自行扫描或补查）：`
+          `📈 逐列统计（系统计算，逐字引用即可，数量级禁止改写）：`
         );
         out.push(...statLines);
       }

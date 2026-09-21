@@ -2,8 +2,8 @@
  * 紧凑模式输出改写回归测试（2026-09-21 架构升级）
  *
  * 运行：npx tsx tests/compact-output.test.ts
- * 场景：长序列改写（锚点+逐列统计+中间行丢弃+标题/声明/📊 行保留）、
- * 短序列原样、多代码分组、文本列不输出统计、旧截断行清理。
+ * 场景：长序列改写（锚点+逐列统计+中间行丢弃+标题/声明保留、MCP 📊 行归一丢弃）、
+ * 短序列原样（📊 行保留）、多代码分组、文本列不输出统计、旧截断行清理。
  * 任何对 buildCompactOutput 的改动必须先过这里。
  */
 import assert from 'node:assert/strict';
@@ -62,11 +62,11 @@ const compactLines = compact.split('\n');
 check('触发紧凑（>=40 行）', N >= COMPACT_THRESHOLD);
 check('标题行保留', compact.includes('--- 每日基本面指标 (Total: 154) ---'));
 check('降采样声明保留', compact.includes('已自动降采样'));
-check('📊 统计行保留', compact.includes('📊 区间统计（服务端已计算'));
 check('紧凑模式声明注入', compact.includes('[紧凑模式]') && compact.includes('daily_basic_1'));
 check('首行锚点保留', compact.includes('日期:20230922'));
 check('末行锚点保留', compact.includes(`日期:${20230922 + (N - 1) * 7}`));
 check('中间行丢弃', !compact.includes('收盘:1500'), '（中间段价格不应出现）');
+check('MCP 📊 统计行紧凑下丢弃（与逐列统计归一）', !compact.includes('📊 区间统计（服务端已计算'));
 
 // 逐列统计正确性（收盘：min 在 i=rows/2 处 = 1200.00；max 在 i=0 = 2000.00）
 const closeLine = compactLines.find((l) => l.includes('收盘：'));
@@ -85,6 +85,7 @@ console.log('── 场景组 3：短序列与解析失败原样 ──');
 const short = buildFakeDailyBasic(10);
 const shortDs = parseToolOutput(short, 'daily_basic')!;
 check('短序列原样返回', buildCompactOutput(short, shortDs, 'k') === short);
+check('短序列保留 MCP 📊 统计行', short.includes('📊 区间统计（服务端已计算'));
 
 console.log('── 场景组 4：多代码分组 ──');
 const multiLines = ['--- 每日基本面指标 (Total: 80) ---'];

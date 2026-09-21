@@ -146,22 +146,32 @@ export function createMinishareCanvasHooks(): Array<{
           // 紧凑模式（2026-09-21）：长序列完整行只进缓存不进模型上下文，
           // LLM 可见正文改写为"锚点行 + 逐列统计"，防眼算幻觉并省 token。
           let llmOutput = output;
+          let compacted = false;
           if (dataKey) {
             const dataset = getCachedData(dataKey);
             if (dataset && dataset.rows.length >= COMPACT_THRESHOLD) {
               llmOutput = buildCompactOutput(output, dataset, dataKey);
+              compacted = true;
               logger.info(
                 `[PostToolUse] ${toolName} compact mode: ${dataset.rows.length} rows -> anchors+stats, full data in ${dataKey}`
               );
             }
           }
 
+          // hint 去重（2026-09-21）：紧凑模式头部已写明 data_key 与 render_chart
+          // 引用方式，追加 hint 缩为一行调用参数；短序列（未触发紧凑）保留完整版。
           let hint: string;
           if (dataKey) {
             logger.info(
               `[PostToolUse] ${toolName} parsed+cached as ${dataKey}, suggesting render_chart(${suggestedType})`
             );
-            if (suggestedType === 'line') {
+            if (compacted) {
+              hint =
+                `\n\n[系统提示] 请调用 render_chart(chart_type="${suggestedType}", data_key="${dataKey}", title="...") 渲染图表后撰写文字分析。` +
+                (suggestedType === 'line'
+                  ? `可在 series 参数中指定要绘制的指标列名（如 ["PE","PB"]）。${CHART_PARAMS_DOC}`
+                  : '');
+            } else if (suggestedType === 'line') {
               hint =
                 `\n\n[系统提示] 数据已自动结构化缓存（data_key: "${dataKey}"）。` +
                 `请调用 render_chart(chart_type="${suggestedType}", data_key="${dataKey}", title="...") 渲染图表。` +

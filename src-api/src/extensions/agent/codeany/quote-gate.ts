@@ -46,6 +46,56 @@ export const QUOTE_GATE_VERIFY_PROMPT = [
 export const QUOTE_GATE_FALLBACK_NOTICE =
   '\n\n---\n⚠️ 注意：本次回答中的代码/价格未能通过数据工具核实，可能来自模型记忆，请谨慎对待。';
 
-/** 拦截时对用户可见的提示 */
-export const QUOTE_GATE_INTERCEPT_NOTICE =
-  '⚠️ 检测到回答包含具体股票代码/价格，但本轮未调用数据工具。为避免不实数据，我先核实数据再作答。';
+// ---------------------------------------------------------------------------
+// 单轮门禁状态机（2026-09-21 自 index.ts 内联标志收拢）
+//
+// 此前 quoteGateTriggered/Retried/Suppressed 三个布尔散装在 drainQuery 闭包
+// 里，与 sawFinalTextAfterTool 等兜底标志互相咬合，9/20 双回答事故正是
+// 状态交互 bug。收拢为显式状态机后：拦截判定、suppress 解除、重查资格
+// 各有唯一入口，可独立回归测试。
+// ---------------------------------------------------------------------------
+
+export type QuoteGateVerdict = 'block' | 'suppress' | 'pass';
+
+export class QuoteGateTurn {
+  /** 本轮是否发生过拦截（回合结束后判定是否需要重查） */
+  triggered = false;
+  private retried = false;
+  private suppressed = false;
+
+  /** tool_use 消息：模型转入工具流程，解除 suppress */
+  onToolUse(): void {
+    this.suppressed = false;
+  }
+
+  /**
+   * text 消息判定：
+   *  - block：零工具调用且命中门禁 → 拦截首段文本（静默，不下发前端提示）
+   *  - suppress：拦截已发生且尚未解除 → 本轮后续文本全部吞掉（重查后由真实数据重答）
+   *  - pass：正常放行
+   */
+  onText(
+    content: string,
+    userPrompt: string | undefined,
+    totalToolCalls: number,
+    enforceGate: boolean
+  ): QuoteGateVerdict {
+    if (!enforceGate) return 'pass';
+    if (!this.retried && totalToolCalls === 0 && matchesQuoteGate(content, userPrompt)) {
+      this.triggered = true;
+      this.suppressed = true;
+      return 'block';
+    }
+    if (this.suppressed) return 'suppress';
+    return 'pass';
+  }
+
+  /** 回合结束：是否需要强制核实重查（仅全程零工具调用时，防 9/20 双回答） */
+  needsRetry(totalToolCalls: number, aborted: boolean): boolean {
+    return this.triggered && !this.retried && totalToolCalls === 0 && !aborted;
+  }
+
+  beginRetry(): void {
+    this.retried = true;
+  }
+}
