@@ -275,6 +275,14 @@ export function generateLineHTML(
 
   const titleHtml = escapeHtml(opts.title);
   const chartData = JSON.stringify({ x: xValues, series: seriesData });
+  // 实际数据区间置顶声明：标题写"近三年"而数据只有尾部 50 天时，
+  // 用户一眼可见范围不实（2026-09-21 Q3 实测的图文打架变体）
+  const firstX = xValues[0] || '';
+  const lastX = xValues[xValues.length - 1] || '';
+  const rangeMeta =
+    firstX && lastX
+      ? `<div class="chart-meta"><span>数据区间：${escapeHtml(firstX)} 至 ${escapeHtml(lastX)}（${xValues.length} 点）</span></div>`
+      : '';
   const legendItems = seriesCols
     .map(
       (s, i) =>
@@ -285,12 +293,14 @@ export function generateLineHTML(
   return `<style>
   .chart-panel { padding: 12px; }
   .chart-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+  .chart-meta { font-size: 11px; color: var(--muted-foreground); margin-bottom: 8px; }
   .chart-legend { display: flex; gap: 16px; margin-top: 8px; font-size: 11px; color: var(--muted-foreground); flex-wrap: wrap; }
   .chart-legend span { display: inline-flex; align-items: center; }
   .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 4px; border-radius: 2px; }
 </style>
 <div class="chart-panel">
   <div class="chart-title">${titleHtml}</div>
+  ${rangeMeta}
   <div id="chart-line" style="width:100%;height:400px;"></div>
   <div class="chart-legend">
     ${legendItems}
