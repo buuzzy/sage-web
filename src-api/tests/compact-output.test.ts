@@ -129,4 +129,19 @@ const noDate = noDateLines.join('\n');
 const noDateDs = parseToolOutput(noDate, 'income')!;
 check('无日期列表格原样返回', buildCompactOutput(noDate, noDateDs, 'k5') === noDate);
 
+console.log('── 场景组 8：相关资讯行在紧凑模式下保留 ──');
+// MCP 行情输出尾部附带的相关资讯段（标题含冒号/竖线也不能被当数据行丢弃）
+const withNews = buildFakeDailyBasic(N) + '\n' + [
+  '--- 相关资讯（服务端按 代码/名称 过滤，事件背景参考） ---',
+  '[XOM|埃克森美孚·近14天·2条相关]',
+  '📰 [2026-09-17 06:00:00] 美联储9月加息25个基点 (新华财经)',
+  '📰 [2026-09-18 09:00:00] 埃克森美孚宣布新的分红计划 (路透)',
+].join('\n');
+check('📰 判定为非数据行', !isDataRowLine('📰 [2026-09-17 06:00:00] 标题:含冒号 | 含竖线 (来源)'));
+const newsDs = parseToolOutput(withNews, 'us_daily')!;
+const newsCompact = buildCompactOutput(withNews, newsDs, 'k6');
+check('资讯标题行保留', newsCompact.includes('--- 相关资讯'));
+check('资讯内容行保留', newsCompact.includes('📰 [2026-09-18 09:00:00] 埃克森美孚宣布新的分红计划 (路透)'));
+check('资讯行未计入数据行数', newsCompact.includes('[紧凑模式]')); // 正常紧凑而非降级原样
+
 console.log(`\n全部通过：${passed} 项`);

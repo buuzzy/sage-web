@@ -53,6 +53,7 @@ import {
 import { createCanvasMcpServer, CANVAS_TOOL_FULL_NAME, findUnfilledPlaceholder } from './canvas-tool';
 import { createChartMcpServer, CHART_TOOL_FULL_NAME } from './chart-tool';
 import { getCachedData } from './data-cache';
+import { getMacroNewsCard } from './news-context';
 import { generateChartHTML, generateComparisonHTML } from './chart-templates';
 import { createLogger } from '@/shared/utils/logger';
 import { stripHashSuffix } from '@/shared/utils/url';
@@ -219,6 +220,7 @@ const DATA_DISCIPLINE = [
   '1. 回答中的所有股票代码、价格、涨跌幅、区间最高/最低，必须来自本轮工具返回的数据。工具结果里没有的数字一个都不能写；训练记忆中的行情数字一律视为过时或错误；历史会话中的行情数据来自当时的工具结果，同样禁止当作当前数据复述。',
   '2. 服务端统计（区间统计行、逐列统计）中的数字逐字引用，禁止改写数量级；叙事中提到的具体数字必须能在锚点行或统计行中找到，找不到就说明数据不足，不得用记忆补。',
   '3. 工具结果标注"已聚合/有省略"时，先在同一轮内静默补查完整数据再作答，不向用户输出"我需要核实/您说得对"等中间过程——用户只看最终结论。',
+  '4. 事件与日期只认资讯：系统提示的背景资讯卡与工具输出中的「相关资讯」段，是宏观政策、公司事件等时间敏感信息的唯一可信来源，叙事中的事件日期与表述逐字引用；训练记忆中的"最近发生了什么"一律视为过时，卡内与资讯中没有的事件不得编造。',
 ].join('\n');
 
 // ============================================================================
@@ -363,7 +365,14 @@ export class CodeAnyAgent extends BaseAgent {
     // system message, ensuring the model treats it as instructions rather than
     // user input.  appendSystemPrompt appends after the SDK's built-in prompt.
     if (systemPrompt) {
-      sdkOpts.appendSystemPrompt = [systemPrompt, DATA_DISCIPLINE].join('\n\n');
+      // 背景资讯卡（2026-09-22）：宏观要闻摘要常驻注入，事件日期从资讯来
+      // 不从记忆来；获取失败降级为不注入，不影响主流程。
+      const macroCard = getMacroNewsCard();
+      sdkOpts.appendSystemPrompt = [
+        macroCard || null,
+        systemPrompt,
+        DATA_DISCIPLINE,
+      ].filter(Boolean).join('\n\n');
     }
 
     // Set allowed tools

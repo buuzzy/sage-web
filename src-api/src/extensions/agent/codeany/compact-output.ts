@@ -26,6 +26,9 @@ export function isDataRowLine(trimmed: string): boolean {
   if (!trimmed) return false;
   if (trimmed.startsWith('---')) return false;
   if (trimmed.startsWith('...')) return false;
+  // 相关资讯行（2026-09-22，MCP 行情输出附带）：标题可能含冒号/竖线，
+  // 不能落入数据行判定，否则紧凑模式会把它们当数据丢弃。
+  if (trimmed.startsWith('📰')) return false;
   return trimmed.includes(':') && trimmed.includes('|');
 }
 
