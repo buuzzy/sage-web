@@ -437,7 +437,9 @@ export function generateComparisonHTML(
   });
 
   const titleHtml = escapeHtml(opts.title);
-  const subtitleHtml = opts.subtitle ? escapeHtml(opts.subtitle) : '';
+  const subtitleHtml = opts.subtitle
+    ? escapeHtml(opts.subtitle)
+    : '多标的对比：曲线为归一化指数（区间首日=100），反映涨跌幅度而非实际价格；悬停查看真实价格，或点击右上角按钮切换为实际价格显示';
   const xLabels = dates.map((d) => fmtDate(d));
   const chartData = JSON.stringify({ x: xLabels, series: chartSeries });
   const legendItems = chartSeries
@@ -469,6 +471,9 @@ export function generateComparisonHTML(
   <div class="chart-meta">
     ${metaItems}
   </div>
+  <div style="display:flex;justify-content:flex-end;margin-bottom:4px;">
+    <button id="chart-mode-toggle" style="font-size:11px;padding:2px 10px;border:1px solid var(--border, #ccc);border-radius:4px;background:transparent;color:var(--muted-foreground, #888);cursor:pointer;">查看实际价格</button>
+  </div>
   <div id="chart-compare" style="width:100%;height:400px;"></div>
   <div class="chart-legend">
     ${legendItems}
@@ -485,22 +490,30 @@ export function generateComparisonHTML(
 
   var d = ${chartData};
 
-  var series = d.series.map(function(s, i) {
-    return {
-      name: s.name,
-      type: 'line',
-      data: s.norm,
-      smooth: true,
-      symbol: 'none',
-      lineStyle: { width: 2, color: COLORS[i % COLORS.length] },
-      itemStyle: { color: COLORS[i % COLORS.length] }
-    };
-  });
+  var MODES = {
+    norm: { axisName: '指数（首日=100）' },
+    raw:  { axisName: '实际价格' }
+  };
+  var mode = 'norm';
+
+  function seriesData(m) {
+    return d.series.map(function(s, i) {
+      return {
+        name: s.name,
+        type: 'line',
+        data: m === 'raw' ? s.raw : s.norm,
+        smooth: true,
+        symbol: 'none',
+        lineStyle: { width: 2, color: COLORS[i % COLORS.length] },
+        itemStyle: { color: COLORS[i % COLORS.length] }
+      };
+    });
+  }
 
   var el = document.getElementById('chart-compare');
   var chart = echarts.init(el);
   chart.setOption({
-    grid: { left: 50, right: 30, top: 20, bottom: 50 },
+    grid: { left: 50, right: 30, top: 30, bottom: 50 },
     xAxis: {
       type: 'category',
       data: d.x,
@@ -511,6 +524,8 @@ export function generateComparisonHTML(
     },
     yAxis: {
       type: 'value',
+      name: MODES[mode].axisName,
+      nameTextStyle: { color: META, fontSize: 11, align: 'left' },
       scale: true,
       axisLabel: { color: META, fontSize: 11, formatter: function(v) { return v; } },
       splitLine: { lineStyle: { color: BORDER, type: 'dashed' } },
@@ -524,15 +539,33 @@ export function generateComparisonHTML(
         var html = '<div style="margin-bottom:4px;color:' + META + ';">' + params[0].axisValue + '</div>';
         params.forEach(function(p) {
           var s = d.series[p.dataIndex];
-          html += '<div>' + p.marker + ' ' + p.seriesName + ': <b>' + p.value + '</b>' +
-            (s ? '（原始 ' + Number(s.raw[p.dataIndex]).toLocaleString('en-US') + '）' : '') + '</div>';
+          if (!s) return;
+          if (mode === 'raw') {
+            html += '<div>' + p.marker + ' ' + p.seriesName + ': <b>' + Number(s.raw[p.dataIndex]).toLocaleString('en-US') + '</b></div>';
+          } else {
+            html += '<div>' + p.marker + ' ' + p.seriesName + ': <b>' + Number(s.raw[p.dataIndex]).toLocaleString('en-US') + '</b>' +
+              '（指数 ' + p.value + '）</div>';
+          }
         });
         return html;
       }
     },
     legend: { show: false },
-    series: series
+    series: seriesData(mode)
   });
+
+  var btn = document.getElementById('chart-mode-toggle');
+  if (btn) {
+    btn.addEventListener('click', function() {
+      mode = (mode === 'norm') ? 'raw' : 'norm';
+      chart.setOption({
+        yAxis: { name: MODES[mode].axisName },
+        series: seriesData(mode)
+      });
+      btn.textContent = (mode === 'norm') ? '查看实际价格' : '查看对比指数';
+    });
+  }
+
   new ResizeObserver(function() { chart.resize(); }).observe(el);
 })();
 </script>`;
