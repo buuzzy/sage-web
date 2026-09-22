@@ -206,6 +206,8 @@ import {
   QUOTE_GATE_VERIFY_PROMPT,
   QuoteGateTurn,
 } from './quote-gate.js';
+import { auditAnswer } from './answer-lint.js';
+import { getDatasetsSince } from './data-cache.js';
 
 // 数据纪律（2026-09-21 冗余归并）：原 FINANCE_DATA_RULES（所有会话）+
 // COLD_START_HISTORY_NOTE（仅冷启动）+ 紧凑模式头部三处防编造文案重叠，
@@ -809,6 +811,9 @@ export class CodeAnyAgent extends BaseAgent {
       let finalResultSubtype: string | undefined;
       // 报价硬门禁：单轮状态机（判定/拦截/重查资格收拢在 QuoteGateTurn）
       const quoteGate = new QuoteGateTurn();
+      // 答案侧数字审计（2026-09-22）：本轮起始时间戳 + 最终文本收集
+      const auditTurnStartTs = Date.now();
+      const turnTexts: string[] = [];
 
       const processMsg = this.processMessage.bind(this);
 
@@ -851,6 +856,7 @@ export class CodeAnyAgent extends BaseAgent {
                 continue;
               }
               sawFinalTextAfterTool = true;
+              turnTexts.push(msg.content);
             } else if (msg.type === 'result') {
               finalResultSubtype = msg.content;
             }
@@ -916,6 +922,30 @@ export class CodeAnyAgent extends BaseAgent {
             logger.warn('[CodeAny ' + session.id + '] Forced summary failed:', {
               message: retryError instanceof Error ? retryError.message : String(retryError),
             });
+          }
+        }
+      }
+
+      // 答案侧数字审计（v1 warn 模式，2026-09-22）：把最终文本中的价格/
+      // 大数与本轮 data-cache 数据集容差比对，失配只记日志——先观察误报
+      // 率，可控后再启用拦截重答。与报价门禁互为镜像：门禁管"没调工具
+      // 就报数"，这里管"报出来的数对不对"。
+      if (turnTexts.length > 0) {
+        const turnDatasets = getDatasetsSince(auditTurnStartTs);
+        if (turnDatasets.length > 0) {
+          const mismatches = auditAnswer(turnTexts.join('\n'), finalPrompt, turnDatasets);
+          if (mismatches.length > 0) {
+            logger.warn(
+              '[CodeAny ' + session.id + '] Answer audit: ' + mismatches.length + ' unverified number(s)',
+              {
+                mismatches: mismatches.map((mm) => ({
+                  raw: mm.raw,
+                  nearest: mm.nearest,
+                  deviation: mm.deviation === null ? null : Number(mm.deviation.toFixed(4)),
+                  snippet: mm.snippet,
+                })),
+              }
+            );
           }
         }
       }

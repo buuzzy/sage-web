@@ -16,6 +16,7 @@
  */
 
 import { parseNum, findCol, ParsedDataset } from './data-cache';
+import { buildFactCard, FACT_CARD_HEADER } from './fact-card';
 
 /** 数据行数达到该阈值才触发紧凑模式，短序列保持全量（叙事价值高、成本低）。 */
 export const COMPACT_THRESHOLD = 40;
@@ -175,6 +176,8 @@ export function buildCompactOutput(
     }
   }
 
+  const factLines = buildFactCard(dataset);
+
   const out: string[] = [];
   let anchorEmitted = false;
   lines.forEach((line, i) => {
@@ -206,6 +209,11 @@ export function buildCompactOutput(
           `📈 逐列统计（系统计算，逐字引用即可，数量级禁止改写）：`
         );
         out.push(...statLines);
+      }
+      // 事实卡（2026-09-22）：派生指标服务端算好注入，模型只引用不眼算
+      if (factLines.length > 0) {
+        out.push(FACT_CARD_HEADER);
+        out.push(...factLines);
       }
     }
     // 中间与末尾数据行全部丢弃

@@ -80,6 +80,21 @@ export function getCachedData(key: string): ParsedDataset | undefined {
   return entry.data;
 }
 
+/**
+ * All cached datasets created at or after the given timestamp.
+ * 用于答案侧数字审计（answer-lint）：一个 agent 回合开始时取时间戳，
+ * 回合结束后取本轮产生的数据集作为"数字真值宇宙"。并发安全——按
+ * 条目时间戳过滤，不依赖全局可变状态。
+ */
+export function getDatasetsSince(sinceTs: number): ParsedDataset[] {
+  evictExpired();
+  const out: ParsedDataset[] = [];
+  for (const v of cache.values()) {
+    if (v.ts >= sinceTs) out.push(v.data);
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Parser
 // ---------------------------------------------------------------------------
