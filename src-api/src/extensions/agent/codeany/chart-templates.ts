@@ -552,7 +552,8 @@ export function generateComparisonHTML(
       formatter: function(params) {
         var html = '<div style="margin-bottom:4px;color:' + META + ';">' + params[0].axisValue + '</div>';
         params.forEach(function(p) {
-          var s = d.series[p.dataIndex];
+          // p.seriesIndex = 第几条曲线；p.dataIndex = 该曲线上第几个数据点，两者不可混用
+          var s = d.series[p.seriesIndex];
           if (!s) return;
           if (mode === 'raw') {
             html += '<div>' + p.marker + ' ' + p.seriesName + ': <b>' + Number(s.raw[p.dataIndex]).toLocaleString('en-US') + '</b></div>';
