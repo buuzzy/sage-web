@@ -19,7 +19,13 @@ export const CURATED_SKILLS: SkillLabel[] = [
   {
     id: 'market-quote',
     name: '行情数据',
-    description: 'A股日K、周K、月K线行情，开盘、收盘、最高、最低与成交量数据',
+    description:
+      'A股、港股、美股的日K、周K、月K行情，全球主要指数走势，包含开收盘、最高最低与成交量',
+  },
+  {
+    id: 'charts',
+    name: '行情图表',
+    description: '自动生成K线图与多标的走势对比图，可切换查看实际价格与涨跌对比',
   },
   {
     id: 'valuation',
@@ -29,7 +35,7 @@ export const CURATED_SKILLS: SkillLabel[] = [
   {
     id: 'financials',
     name: '财务报表',
-    description: '利润表、资产负债表、现金流量表完整数据与财务指标分析',
+    description: 'A股、港股、美股的利润表、资产负债表、现金流量表与财务指标分析',
   },
   {
     id: 'forecast-dividend',
@@ -49,7 +55,7 @@ export const CURATED_SKILLS: SkillLabel[] = [
   {
     id: 'news',
     name: '财经新闻',
-    description: '实时新闻快讯、重大财经新闻与新闻联播文字稿',
+    description: '实时新闻快讯与重大财经新闻，自动汇总近期宏观要闻和个股相关报道',
   },
   {
     id: 'research',
@@ -59,7 +65,7 @@ export const CURATED_SKILLS: SkillLabel[] = [
   {
     id: 'announcements',
     name: '公司公告',
-    description: '上市公司最新公告、年报季报与重大事项披露',
+    description: 'A股、港股公司公告与股份回购，美股 SEC 官方文件披露',
   },
   {
     id: 'irm-qa',
