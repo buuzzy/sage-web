@@ -36,8 +36,9 @@ function fmtDateLong(d: string): string {
 }
 
 function fmtVol(v: number): string {
-  if (v >= 10000) return `${(v / 10000).toFixed(0)}万手`;
-  return `${v.toFixed(0)}手`;
+  // 行情源成交量单位为「股」（1 手 = 100 股），这里统一按股展示
+  if (v >= 10000) return `${(v / 10000).toFixed(0)}万股`;
+  return `${v.toFixed(0)}股`;
 }
 
 interface ChartOpts {
@@ -95,6 +96,21 @@ export function generateCandlestickHTML(
 
   const chartData = JSON.stringify(rows);
 
+  // 中国行情惯例：涨红跌绿。不取 --chart-* 分类色板（那是图表系列配色，
+  // 与涨跌语义无关，且兜底值是美股习惯的绿涨红跌，对中文用户是反的）
+  const UP_COLOR = '#e0343c';
+  const DN_COLOR = '#00a86b';
+  // 均线只在数据足够时才展示，避免图例出现画不出来的 MA10/MA20
+  const MA_DEFS = [
+    { n: 5, color: '#5b8ff9' },
+    { n: 10, color: '#ff9800' },
+    { n: 20, color: '#7e57c2' },
+  ].filter((m) => rows.length >= m.n);
+  const maLegendItems = MA_DEFS.map(
+    (m) =>
+      `    <span><span class="swatch" style="background:${m.color};"></span>MA${m.n}</span>\n`
+  ).join('');
+
   const titleHtml = escapeHtml(opts.title);
   const subtitleHtml = opts.subtitle ? escapeHtml(opts.subtitle) : '';
 
@@ -119,20 +135,22 @@ export function generateCandlestickHTML(
   </div>
   <div id="chart-kline" style="width:100%;height:420px;"></div>
   <div class="chart-legend">
-    <span><span class="swatch" style="background:#26a69a;"></span>MA5</span>
-    <span><span class="swatch" style="background:#ff9800;"></span>MA10</span>
-    <span><span class="swatch" style="background:#7e57c2;"></span>MA20</span>
-  </div>
+    <span><span class="swatch" style="background:${UP_COLOR};"></span>上涨</span>
+    <span><span class="swatch" style="background:${DN_COLOR};"></span>下跌</span>
+${maLegendItems}  </div>
 </div>
 <script>
 (function() {
-  var css = getComputedStyle(document.documentElement);
-  var C_UP = css.getPropertyValue('--chart-2').trim() || '#26a69a';
-  var C_DN = css.getPropertyValue('--chart-5').trim() || '#ef5350';
-  var FG = css.getPropertyValue('--foreground').trim();
-  var META = css.getPropertyValue('--muted-foreground').trim();
-  var BORDER = css.getPropertyValue('--border').trim();
-  var BG = css.getPropertyValue('--background').trim();
+  function css_get(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+  var FG = css_get('--foreground');
+  var META = css_get('--muted-foreground');
+  var BORDER = css_get('--border');
+  var BG = css_get('--background');
+  var C_UP = '${UP_COLOR}';
+  var C_DN = '${DN_COLOR}';
+  var MA_DEFS = ${JSON.stringify(MA_DEFS)};
 
   var raw = ${chartData};
 
@@ -154,9 +172,10 @@ export function generateCandlestickHTML(
     return out;
   }
   var closes = raw.map(function(r) { return r.c; });
-  var ma5 = ma(closes, 5);
-  var ma10 = ma(closes, 10);
-  var ma20 = ma(closes, 20);
+  var maSeries = MA_DEFS.map(function(m, idx) {
+    return { type: 'line', data: ma(closes, m.n), smooth: true, xAxisIndex: 0, yAxisIndex: 0,
+      lineStyle: { width: 1, color: MA_DEFS[idx].color }, symbol: 'none' };
+  });
 
   var el = document.getElementById('chart-kline');
   var chart = echarts.init(el);
@@ -193,7 +212,7 @@ export function generateCandlestickHTML(
       formatter: function(p) {
         var i = p[0].dataIndex;
         var r = raw[i];
-        var fmtV = r.v >= 10000 ? (r.v / 10000).toFixed(0) + '万手' : r.v.toFixed(0) + '手';
+        var fmtV = r.v >= 10000 ? (r.v / 10000).toFixed(0) + '万股' : r.v.toFixed(0) + '股';
         return '<b>' + r.d + '</b><br/>'
           + '开 ' + r.o.toFixed(2) + '  高 ' + r.h.toFixed(2) + '  低 ' + r.l.toFixed(2) + '  收 <b>' + r.c.toFixed(2) + '</b><br/>'
           + '涨跌幅 ' + r.p + '%  量 ' + fmtV;
@@ -201,15 +220,10 @@ export function generateCandlestickHTML(
     },
     series: [
       { type: 'candlestick', data: ohlc, xAxisIndex: 0, yAxisIndex: 0,
-        itemStyle: { color: C_UP, color0: C_DN, borderColor: C_UP, borderColor0: C_DN } },
-      { type: 'line', data: ma5, smooth: true, xAxisIndex: 0, yAxisIndex: 0,
-        lineStyle: { width: 1, color: '#26a69a' }, symbol: 'none' },
-      { type: 'line', data: ma10, smooth: true, xAxisIndex: 0, yAxisIndex: 0,
-        lineStyle: { width: 1, color: '#ff9800' }, symbol: 'none' },
-      { type: 'line', data: ma20, smooth: true, xAxisIndex: 0, yAxisIndex: 0,
-        lineStyle: { width: 1, color: '#7e57c2' }, symbol: 'none' },
+        itemStyle: { color: C_UP, color0: C_DN, borderColor: C_UP, borderColor0: C_DN } }
+    ].concat(maSeries).concat([
       { type: 'bar', data: vols, xAxisIndex: 1, yAxisIndex: 1 }
-    ]
+    ])
   });
   new ResizeObserver(function() { chart.resize(); }).observe(el);
 })();
